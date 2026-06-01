@@ -1,0 +1,19 @@
+{
+  "name": "Врач",
+  "short_name": "Врач",
+  "description": "Приложение врача медицинской системы",
+  "start_url": "/app-2-doctor",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f7f5",
+  "theme_color": "#116a5b",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/doctor-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

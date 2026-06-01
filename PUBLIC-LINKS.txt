@@ -1,0 +1,6 @@
+﻿Public web server: https://doctor.e-clinic-control.ru/
+App #1 Admin: https://admin.e-clinic-control.ru/
+App #2 Doctor: https://doctor.e-clinic-control.ru/
+App #3 Patient survey: https://survey.e-clinic-control.ru/
+App #4 Doctor knowledge: https://training.e-clinic-control.ru/
+App #5 Nurse knowledge: https://nurse.e-clinic-control.ru/

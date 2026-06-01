@@ -1,0 +1,19 @@
+{
+  "name": "Администратор",
+  "short_name": "Админ",
+  "description": "Приложение администратора медицинской системы",
+  "start_url": "/app-1-admin-panel",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f7f5",
+  "theme_color": "#116a5b",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/admin-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

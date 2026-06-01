@@ -1,0 +1,1932 @@
+{
+  "admins": [
+    {
+      "id": "admin-main",
+      "name": "Главный администратор",
+      "username": "admin",
+      "role": "owner",
+      "passwordHash": "f0d5def806188b684e78b326d1c2e653:0e7ed5790761877c2a222a1a408f457dc667df143e1dd31afe326ccfc2c833ec",
+      "createdAt": "2026-05-14T20:46:03.093Z"
+    },
+    {
+      "id": "admin-view-1",
+      "name": "Администратор 2",
+      "username": "admin2",
+      "role": "observer",
+      "passwordHash": "7aa6219fce3e28de7de64822e9abb89f:25212bdb814a0a77fbbe88d822560c116ae91fb3767231f10dd1ab4f20837ba4",
+      "createdAt": "2026-05-14T20:46:03.093Z"
+    },
+    {
+      "id": "admin-view-2",
+      "name": "Администратор 3",
+      "username": "admin3",
+      "role": "observer",
+      "passwordHash": "5eca264f80070f40758f5f513d178a10:6964d269d9470bc67f909cedda233530caaf72ca26df81d94f0fea5eff95b95b",
+      "createdAt": "2026-05-14T20:46:03.093Z"
+    }
+  ],
+  "doctors": [
+    {
+      "id": "2ca6e3c3-e712-414b-8df9-599d2e394aab",
+      "fullName": "Бахтибеков Мансур Табрезович",
+      "login": "Bakhtibekov",
+      "accessKeyHash": "f43e7c176840fdaf32c8e9d42b28e6f5:3abdfd2b55547c5061c4d1e01dd119dd7697bd8896764c1985a9b520fd25f97a",
+      "passport": ".",
+      "clinic": "Поликлиника №1",
+      "specialty": "Эндокринолог",
+      "experienceYears": 5,
+      "createdAt": "2026-05-18T16:58:03.683Z"
+    }
+  ],
+  "nurseSurveys": [
+    {
+      "id": "053cbff0-b2f4-4e24-8b3b-d1d686443852",
+      "patient": {
+        "lastName": "Пулатова",
+        "firstName": "Замира",
+        "middleName": "Каримовна",
+        "birthDate": "1968-05-18",
+        "phone": "900000009",
+        "address": "Фирдавси район",
+        "clinic": "Поликлиника №1",
+        "sex": "female"
+      },
+      "measurements": {
+        "age": 58,
+        "height": 160,
+        "bmi": 35,
+        "systolic": 140,
+        "diastolic": 90,
+        "arm": 22,
+        "waist": 108,
+        "rabitoWaist": 108,
+        "calf": 39,
+        "rabitoWeight": 75.4
+      },
+      "answers": {
+        "lastName": "Пулатова",
+        "firstName": "Замира",
+        "middleName": "Каримовна",
+        "birthDate": "1968-05-18",
+        "sex": "female",
+        "age": "58",
+        "phone": "900000009",
+        "address": "Фирдавси район",
+        "clinic": "Поликлиника №1",
+        "height": "160",
+        "bmi": "35",
+        "waist": "108",
+        "activity": "yes",
+        "vegetables": "yes",
+        "bpMeds": "yes",
+        "highGlucose": "no",
+        "familyDiabetes": "first",
+        "smoker": "no",
+        "systolic": "140",
+        "diastolic": "90",
+        "arm": "22",
+        "rabitoWaist": "108",
+        "calf": "39"
+      },
+      "findrisc": {
+        "score": 17,
+        "level": "Высокий",
+        "highRisk": true
+      },
+      "score2": {
+        "percent": 4,
+        "level": "Низкий",
+        "highRisk": false,
+        "note": "Упрощенная оценка без холестерина, не заменяет клиническую шкалу SCORE2."
+      },
+      "needsDoctor": true,
+      "createdAt": "2026-05-18T17:02:21.870Z"
+    },
+    {
+      "id": "8ce753b9-0770-4db1-8901-c20b4351fea8",
+      "patient": {
+        "lastName": "Саидова ",
+        "firstName": "Зоя",
+        "middleName": "",
+        "birthDate": "1999-05-20",
+        "phone": "",
+        "address": "",
+        "clinic": "Поликлиника №1",
+        "sex": "female"
+      },
+      "measurements": {
+        "age": 27,
+        "height": 162,
+        "bmi": 7,
+        "systolic": 120,
+        "diastolic": 95,
+        "arm": 25,
+        "waist": 89,
+        "rabitoWaist": 89,
+        "calf": 42,
+        "rabitoWeight": 70.9
+      },
+      "answers": {
+        "lastName": "Саидова ",
+        "firstName": "Зоя",
+        "middleName": "",
+        "birthDate": "1999-05-20",
+        "sex": "female",
+        "age": "27",
+        "phone": "",
+        "address": "",
+        "clinic": "Поликлиника №1",
+        "height": "162",
+        "bmi": "7",
+        "waist": "89",
+        "activity": "yes",
+        "vegetables": "yes",
+        "bpMeds": "no",
+        "highGlucose": "no",
+        "familyDiabetes": "first",
+        "smoker": "no",
+        "systolic": "120",
+        "diastolic": "95",
+        "arm": "25",
+        "rabitoWaist": "89",
+        "calf": "42"
+      },
+      "findrisc": {
+        "score": 9,
+        "level": "Слегка повышенный",
+        "highRisk": false
+      },
+      "score2": {
+        "percent": 1,
+        "level": "Низкий",
+        "highRisk": false,
+        "note": "Упрощенная оценка без холестерина, не заменяет клиническую шкалу SCORE2."
+      },
+      "needsDoctor": false,
+      "createdAt": "2026-05-20T18:46:48.745Z"
+    },
+    {
+      "id": "ee45d557-26fc-4839-99ed-15d34691878e",
+      "patient": {
+        "lastName": "Абдуллаева ",
+        "firstName": "Марифат",
+        "middleName": "",
+        "birthDate": "1955-04-15",
+        "phone": "+992939332150",
+        "address": "Нусратулло М. 76/1 кв 84",
+        "clinic": "Поликлиника №1",
+        "sex": "female"
+      },
+      "measurements": {
+        "age": 71,
+        "height": 158,
+        "bmi": 26,
+        "systolic": 140,
+        "diastolic": 90,
+        "arm": 30,
+        "waist": 90,
+        "rabitoWaist": 90,
+        "calf": 40,
+        "rabitoWeight": 71.8
+      },
+      "answers": {
+        "lastName": "Абдуллаева ",
+        "firstName": "Марифат",
+        "middleName": "",
+        "birthDate": "1955-04-15",
+        "sex": "female",
+        "age": "71",
+        "phone": "+992939332150",
+        "address": "Нусратулло М. 76/1 кв 84",
+        "clinic": "Поликлиника №1",
+        "height": "158",
+        "bmi": "26",
+        "waist": "90",
+        "activity": "no",
+        "vegetables": "yes",
+        "bpMeds": "yes",
+        "highGlucose": "yes",
+        "familyDiabetes": "second",
+        "smoker": "no",
+        "systolic": "140",
+        "diastolic": "90",
+        "arm": "30",
+        "rabitoWaist": "90",
+        "calf": "40"
+      },
+      "findrisc": {
+        "score": 21,
+        "level": "Очень высокий",
+        "highRisk": true
+      },
+      "score2": {
+        "percent": 12,
+        "level": "Высокий",
+        "highRisk": true,
+        "note": "Упрощенная оценка без холестерина, не заменяет клиническую шкалу SCORE2."
+      },
+      "needsDoctor": true,
+      "createdAt": "2026-05-26T07:19:44.486Z"
+    }
+  ],
+  "doctorVisits": [
+    {
+      "id": "e1bf844e-2c4d-422f-a2d4-c5949e1b8166",
+      "surveyId": "053cbff0-b2f4-4e24-8b3b-d1d686443852",
+      "doctorId": "2ca6e3c3-e712-414b-8df9-599d2e394aab",
+      "weight": 85,
+      "height": 178,
+      "bmi": 26.8,
+      "glucose": null,
+      "systolic": 130,
+      "diastolic": 90,
+      "referrals": [
+        "Эндокринолог"
+      ],
+      "treatmentPlan": "",
+      "diabetesDrugs": [
+        "Метформин 1000 мг 2 раза в день",
+        "Ситаглиптин 100 мг"
+      ],
+      "hypertensionDrugs": [],
+      "createdAt": "2026-05-18T17:42:44.583Z"
+    }
+  ],
+  "sessions": {
+    "f9ea040d-d2ad-4582-8edc-679e0da0a08c": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-14T20:58:30.091Z"
+    },
+    "83196cd6-e36f-4b60-b108-fae63194ab7e": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-14T21:07:22.722Z"
+    },
+    "9a9fc59e-81d8-406f-bdca-afe46a609bb9": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-18T16:56:32.646Z"
+    },
+    "a68fc131-3014-4c4a-a616-6eee88eea4f2": {
+      "userType": "doctor",
+      "userId": "2ca6e3c3-e712-414b-8df9-599d2e394aab",
+      "createdAt": "2026-05-18T16:58:37.992Z"
+    },
+    "69f75a57-c71f-44e6-9ff4-c3e684dc8d72": {
+      "userType": "doctor",
+      "userId": "2ca6e3c3-e712-414b-8df9-599d2e394aab",
+      "createdAt": "2026-05-18T17:33:20.351Z"
+    },
+    "5a484ed7-3623-42e7-845c-0d877b6ce1e8": {
+      "userType": "doctor",
+      "userId": "2ca6e3c3-e712-414b-8df9-599d2e394aab",
+      "createdAt": "2026-05-18T17:40:17.904Z"
+    },
+    "25ab130d-99dc-4590-8880-9dccb9255a4a": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-18T17:45:54.408Z"
+    },
+    "b3d0471d-48f2-4c74-a6b3-0c8ef2b6971c": {
+      "userType": "doctor",
+      "userId": "2ca6e3c3-e712-414b-8df9-599d2e394aab",
+      "createdAt": "2026-05-20T18:25:19.923Z"
+    },
+    "c2e5fa42-c23e-49b8-b538-570ffd57e27e": {
+      "userType": "doctor",
+      "userId": "2ca6e3c3-e712-414b-8df9-599d2e394aab",
+      "createdAt": "2026-05-22T21:46:18.491Z"
+    },
+    "d8f1099b-2639-4502-9401-1b5dc5193fd2": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-22T21:47:11.247Z"
+    },
+    "8f4b2442-8cb9-4897-ab8e-7564b627b811": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-22T21:53:59.599Z"
+    },
+    "63d8c4fe-605c-47ed-86e2-d7dc5bc4d056": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-22T21:54:27.038Z"
+    },
+    "8c622317-2888-4273-9e6b-929d19082055": {
+      "userType": "doctor",
+      "userId": "2ca6e3c3-e712-414b-8df9-599d2e394aab",
+      "createdAt": "2026-05-23T07:31:20.656Z"
+    },
+    "90dd9d05-81d6-4fde-a95e-bb42df295880": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-23T19:22:33.707Z"
+    },
+    "0fc641d1-136f-4bff-beed-8da0a8ed3aea": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-23T19:31:27.641Z"
+    },
+    "14987ba4-d7a0-4e2b-a072-4c381a4bab80": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-23T19:53:39.105Z"
+    },
+    "ed13c50d-0578-44b4-aa30-76fecf5baf84": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-23T20:05:26.207Z"
+    },
+    "396f2b06-4ff1-48d3-9a9b-ad31fbf79c33": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-23T20:17:42.458Z"
+    },
+    "de19d4b9-cd77-4dc4-80a7-f46fe8e51ffb": {
+      "userType": "doctor",
+      "userId": "2ca6e3c3-e712-414b-8df9-599d2e394aab",
+      "createdAt": "2026-05-23T20:18:32.589Z"
+    },
+    "4b52616c-e5e0-44e0-82a1-37e50ca28cf2": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-23T20:40:21.626Z"
+    },
+    "cac2ba9b-2878-4b04-b2db-f4890084f7f1": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-24T09:44:13.271Z"
+    },
+    "2f091a57-4c5d-4f19-ac26-75966057bbed": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-24T10:06:49.666Z"
+    },
+    "58c84a8f-3280-4eb2-81a3-ebdb8d88d0f1": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-24T11:22:56.821Z"
+    },
+    "70551ff2-e347-4ab5-af13-5fe6a9ded226": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-24T17:48:04.803Z"
+    },
+    "23ad8417-a70b-4b11-a218-60a4c0281461": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-24T17:58:39.940Z"
+    },
+    "3721a6bc-41f2-4db7-a6d3-c5f79c1c9e59": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-24T18:06:29.286Z"
+    },
+    "0d8b2558-7a3d-4c61-bfaa-22165ff84c5a": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-24T18:07:20.182Z"
+    },
+    "6b326ce6-7435-43b3-88ab-c036f69e1b9b": {
+      "userType": "doctor",
+      "userId": "2ca6e3c3-e712-414b-8df9-599d2e394aab",
+      "createdAt": "2026-05-25T03:58:12.465Z"
+    },
+    "c0328996-d972-40f0-a72d-16562e4c75e0": {
+      "userType": "doctor",
+      "userId": "2ca6e3c3-e712-414b-8df9-599d2e394aab",
+      "createdAt": "2026-05-25T08:47:17.750Z"
+    },
+    "d156ce81-050e-4d10-bac4-dee0241d98b0": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-25T08:48:21.940Z"
+    },
+    "b345e8e4-da38-42ed-b7b1-19230f06f14c": {
+      "userType": "doctor",
+      "userId": "2ca6e3c3-e712-414b-8df9-599d2e394aab",
+      "createdAt": "2026-05-26T07:21:36.497Z"
+    },
+    "bdaba44e-3e66-4660-8407-5f3958e4f05b": {
+      "userType": "admin",
+      "userId": "admin-main",
+      "createdAt": "2026-05-26T07:49:56.499Z"
+    }
+  },
+  "settings": {
+    "createdAt": "2026-05-14T20:46:03.093Z"
+  },
+  "trainingParticipants": [
+    {
+      "id": "be13ee6d-ce95-4f44-bad2-343907a638b7",
+      "fullName": "Бахтибеков Мансур Табрезович",
+      "clinic": "Поликлиника №1",
+      "specialty": "Эндокринолог",
+      "phone": "+992501231823",
+      "createdAt": "2026-05-23T19:49:21.104Z",
+      "preQuestionIds": [
+        4,
+        15,
+        8,
+        17,
+        2,
+        18,
+        3,
+        7,
+        20,
+        5
+      ],
+      "preCompletedAt": "2026-05-23T19:49:55.762Z"
+    },
+    {
+      "id": "39360a46-49bf-42f9-929f-fe615e292ce6",
+      "fullName": "фывфыва фыва фывафыва",
+      "clinic": "Поликлиника №1",
+      "specialty": "Эндокринолог",
+      "phone": "+992554212222",
+      "createdAt": "2026-05-24T11:11:56.299Z",
+      "preQuestionIds": [
+        17,
+        3,
+        13,
+        8,
+        12,
+        4,
+        9,
+        10,
+        14,
+        7
+      ],
+      "preCompletedAt": "2026-05-24T11:16:25.986Z"
+    }
+  ],
+  "trainingAttempts": [
+    {
+      "id": "fbad0485-57cf-4335-9388-ccd3bf557190",
+      "participantId": "be13ee6d-ce95-4f44-bad2-343907a638b7",
+      "type": "pre",
+      "questionIds": [
+        4,
+        15,
+        8,
+        17,
+        2,
+        18,
+        3,
+        7,
+        20,
+        5
+      ],
+      "answers": {
+        "2": "A",
+        "3": "A",
+        "4": "A",
+        "5": "A",
+        "7": "A",
+        "8": "A",
+        "15": "A",
+        "17": "A",
+        "18": "A",
+        "20": "A"
+      },
+      "correct": 0,
+      "total": 10,
+      "percent": 0,
+      "details": [
+        {
+          "questionId": 4,
+          "selected": "A",
+          "correctAnswer": "B",
+          "isCorrect": false
+        },
+        {
+          "questionId": 15,
+          "selected": "A",
+          "correctAnswer": "B",
+          "isCorrect": false
+        },
+        {
+          "questionId": 8,
+          "selected": "A",
+          "correctAnswer": "B",
+          "isCorrect": false
+        },
+        {
+          "questionId": 17,
+          "selected": "A",
+          "correctAnswer": "B",
+          "isCorrect": false
+        },
+        {
+          "questionId": 2,
+          "selected": "A",
+          "correctAnswer": "C",
+          "isCorrect": false
+        },
+        {
+          "questionId": 18,
+          "selected": "A",
+          "correctAnswer": "B",
+          "isCorrect": false
+        },
+        {
+          "questionId": 3,
+          "selected": "A",
+          "correctAnswer": "B",
+          "isCorrect": false
+        },
+        {
+          "questionId": 7,
+          "selected": "A",
+          "correctAnswer": "C",
+          "isCorrect": false
+        },
+        {
+          "questionId": 20,
+          "selected": "A",
+          "correctAnswer": "B",
+          "isCorrect": false
+        },
+        {
+          "questionId": 5,
+          "selected": "A",
+          "correctAnswer": "D",
+          "isCorrect": false
+        }
+      ],
+      "createdAt": "2026-05-23T19:49:55.762Z"
+    },
+    {
+      "id": "39091f3f-24ad-4ff2-82b1-b13092e5b074",
+      "participantId": "39360a46-49bf-42f9-929f-fe615e292ce6",
+      "type": "pre",
+      "instrument": "Инструмент 2",
+      "title": "Тест до обучения для оценки исходного уровня знаний",
+      "questionIds": [
+        17,
+        3,
+        13,
+        8,
+        12,
+        4,
+        9,
+        10,
+        14,
+        7
+      ],
+      "answers": {
+        "3": "A",
+        "4": "D",
+        "7": "A",
+        "8": "A",
+        "9": "D",
+        "10": "A",
+        "12": "A",
+        "13": "A",
+        "14": "A",
+        "17": "A"
+      },
+      "correct": 0,
+      "total": 10,
+      "percent": 0,
+      "details": [
+        {
+          "questionId": 17,
+          "questionText": "При подозрении на впервые выявленный СД2 врач должен:",
+          "options": {
+            "A": "Игнорировать результат при отсутствии жалоб",
+            "B": "Подтвердить диагноз лабораторно и оценить сопутствующие риски",
+            "C": "Назначить антибиотики",
+            "D": "Отменить все лекарства от АГ"
+          },
+          "selected": "A",
+          "selectedText": "Игнорировать результат при отсутствии жалоб",
+          "correctAnswer": "B",
+          "correctText": "Подтвердить диагноз лабораторно и оценить сопутствующие риски",
+          "isCorrect": false
+        },
+        {
+          "questionId": 3,
+          "questionText": "FINDRISC применяется для:",
+          "options": {
+            "A": "Диагностики диабетической нефропатии",
+            "B": "Оценки риска развития СД2",
+            "C": "Подбора дозы инсулина",
+            "D": "Диагностики тиреотоксикоза"
+          },
+          "selected": "A",
+          "selectedText": "Диагностики диабетической нефропатии",
+          "correctAnswer": "B",
+          "correctText": "Оценки риска развития СД2",
+          "isCorrect": false
+        },
+        {
+          "questionId": 13,
+          "questionText": "Немедикаментозная тактика при СД2 и АГ включает:",
+          "options": {
+            "A": "Отмену физической активности",
+            "B": "Контроль массы тела, питание, физическую активность, ограничение соли, отказ от курения",
+            "C": "Только постельный режим",
+            "D": "Исключение всех углеводов без оценки состояния"
+          },
+          "selected": "A",
+          "selectedText": "Отмену физической активности",
+          "correctAnswer": "B",
+          "correctText": "Контроль массы тела, питание, физическую активность, ограничение соли, отказ от курения",
+          "isCorrect": false
+        },
+        {
+          "questionId": 8,
+          "questionText": "Предиабет важен для семейного врача, потому что:",
+          "options": {
+            "A": "Не требует наблюдения",
+            "B": "Является стадией повышенного риска СД2 и сердечно-сосудистых осложнений",
+            "C": "Всегда требует немедленного инсулина",
+            "D": "Не связан с ожирением"
+          },
+          "selected": "A",
+          "selectedText": "Не требует наблюдения",
+          "correctAnswer": "B",
+          "correctText": "Является стадией повышенного риска СД2 и сердечно-сосудистых осложнений",
+          "isCorrect": false
+        },
+        {
+          "questionId": 12,
+          "questionText": "Индивидуальный план ведения пациента должен включать:",
+          "options": {
+            "A": "Только диагноз",
+            "B": "Цели, лечение, мониторинг, сроки контроля, маршрутизацию",
+            "C": "Только список лекарств",
+            "D": "Только рекомендацию соблюдать диету"
+          },
+          "selected": "A",
+          "selectedText": "Только диагноз",
+          "correctAnswer": "B",
+          "correctText": "Цели, лечение, мониторинг, сроки контроля, маршрутизацию",
+          "isCorrect": false
+        },
+        {
+          "questionId": 4,
+          "questionText": "При высоком риске по FINDRISC врач ПМСП должен:",
+          "options": {
+            "A": "Сразу назначить инсулин",
+            "B": "Направить на лабораторное подтверждение нарушений углеводного обмена и провести профилактическое консультирование",
+            "C": "Ничего не делать без жалоб",
+            "D": "Повторить FINDRISC через 5 лет"
+          },
+          "selected": "D",
+          "selectedText": "Повторить FINDRISC через 5 лет",
+          "correctAnswer": "B",
+          "correctText": "Направить на лабораторное подтверждение нарушений углеводного обмена и провести профилактическое консультирование",
+          "isCorrect": false
+        },
+        {
+          "questionId": 9,
+          "questionText": "К микрососудистым осложнениям СД относятся:",
+          "options": {
+            "A": "Ретинопатия, нефропатия, нейропатия",
+            "B": "Инфаркт миокарда и инсульт",
+            "C": "Только ожирение",
+            "D": "Только артериальная гипертензия"
+          },
+          "selected": "D",
+          "selectedText": "Только артериальная гипертензия",
+          "correctAnswer": "A",
+          "correctText": "Ретинопатия, нефропатия, нейропатия",
+          "isCorrect": false
+        },
+        {
+          "questionId": 10,
+          "questionText": "К макрососудистым осложнениям СД относятся:",
+          "options": {
+            "A": "Катаракта и анемия",
+            "B": "Инфаркт миокарда, инсульт, поражение периферических артерий",
+            "C": "Только нейропатия",
+            "D": "Только гипогликемия"
+          },
+          "selected": "A",
+          "selectedText": "Катаракта и анемия",
+          "correctAnswer": "B",
+          "correctText": "Инфаркт миокарда, инсульт, поражение периферических артерий",
+          "isCorrect": false
+        },
+        {
+          "questionId": 14,
+          "questionText": "Срочного направления требует:",
+          "options": {
+            "A": "Стабильное АД 130/80 без жалоб",
+            "B": "Симптомы гипертонического криза/острого поражения органов-мишеней",
+            "C": "FINDRISC 7 баллов без жалоб",
+            "D": "Плановый контроль HbA1c"
+          },
+          "selected": "A",
+          "selectedText": "Стабильное АД 130/80 без жалоб",
+          "correctAnswer": "B",
+          "correctText": "Симптомы гипертонического криза/острого поражения органов-мишеней",
+          "isCorrect": false
+        },
+        {
+          "questionId": 7,
+          "questionText": "Офисное АД, требующее подтверждения диагноза АГ при повторных измерениях:",
+          "options": {
+            "A": ">=120/80 мм рт.ст.",
+            "B": ">=130/80 мм рт.ст.",
+            "C": ">=140/90 мм рт.ст.",
+            "D": ">=160/100 мм рт.ст. только при жалобах"
+          },
+          "selected": "A",
+          "selectedText": ">=120/80 мм рт.ст.",
+          "correctAnswer": "C",
+          "correctText": ">=140/90 мм рт.ст.",
+          "isCorrect": false
+        }
+      ],
+      "createdAt": "2026-05-24T11:16:25.986Z"
+    },
+    {
+      "id": "15b86b2f-71ae-41bf-b7dd-468802abef05",
+      "participantId": "39360a46-49bf-42f9-929f-fe615e292ce6",
+      "type": "task",
+      "taskId": "findrisc-new",
+      "title": "Практическая задача по FINDRISC",
+      "instrument": "Тест 1",
+      "maxScore": 9,
+      "answers": {
+        "age": "1",
+        "bmi": "3",
+        "waist": "2",
+        "activity": "2",
+        "vegetables": "2",
+        "bpTherapy": "2",
+        "highGlucose": "1",
+        "family": "2",
+        "risk": "Высокий риск"
+      },
+      "correct": 4,
+      "total": 9,
+      "percent": 44,
+      "details": [
+        {
+          "label": "Возраст, 52 года",
+          "selected": "1",
+          "correctAnswer": "3",
+          "isCorrect": false
+        },
+        {
+          "label": "ИМТ 31 кг/м2",
+          "selected": "3",
+          "correctAnswer": "3",
+          "isCorrect": true
+        },
+        {
+          "label": "Окружность талии 104 см, мужчина",
+          "selected": "2",
+          "correctAnswer": "4",
+          "isCorrect": false
+        },
+        {
+          "label": "Физическая активность <30 мин/день",
+          "selected": "2",
+          "correctAnswer": "2",
+          "isCorrect": true
+        },
+        {
+          "label": "Овощи/фрукты не ежедневно",
+          "selected": "2",
+          "correctAnswer": "0",
+          "isCorrect": false
+        },
+        {
+          "label": "Антигипертензивная терапия: да",
+          "selected": "2",
+          "correctAnswer": "2",
+          "isCorrect": true
+        },
+        {
+          "label": "Повышение глюкозы ранее: нет",
+          "selected": "1",
+          "correctAnswer": "0",
+          "isCorrect": false
+        },
+        {
+          "label": "Семейный анамнез СД: мать с СД2",
+          "selected": "2",
+          "correctAnswer": "5",
+          "isCorrect": false
+        },
+        {
+          "label": "ИТОГО: категория риска",
+          "selected": "Высокий риск",
+          "correctAnswer": "Высокий риск",
+          "isCorrect": true
+        }
+      ],
+      "manualScore": null,
+      "trainerComment": "",
+      "createdAt": "2026-05-24T11:17:35.862Z"
+    },
+    {
+      "id": "e8904f79-c372-4373-9684-148a7e58768c",
+      "participantId": "39360a46-49bf-42f9-929f-fe615e292ce6",
+      "type": "task",
+      "taskId": "diagnostics-new",
+      "title": "Диагностические мини-задачи: СД2, предиабет и АГ",
+      "instrument": "Тест 2",
+      "maxScore": 5,
+      "answers": {
+        "case0": "Сахарный диабет 2 типа",
+        "case1": "Сахарный диабет 2 типа",
+        "case2": "Сахарный диабет 2 типа",
+        "case3": "Сахарный диабет 2 типа",
+        "case4": "Сахарный диабет 2 типа"
+      },
+      "correct": 2,
+      "total": 5,
+      "percent": 40,
+      "details": [
+        {
+          "label": "Женщина 48 лет, ИМТ 32. Глюкоза плазмы натощак 7,2 ммоль/л при повторном анализе. Жалоб нет.",
+          "selected": "Сахарный диабет 2 типа",
+          "correctAnswer": "Сахарный диабет 2 типа",
+          "isCorrect": true
+        },
+        {
+          "label": "Мужчина 55 лет. Глюкоза натощак 6,4 ммоль/л, HbA1c 6,0%.",
+          "selected": "Сахарный диабет 2 типа",
+          "correctAnswer": "Нарушенная гликемия натощак",
+          "isCorrect": false
+        },
+        {
+          "label": "Женщина 61 год. HbA1c 6,8%, АД на приеме 152/94 мм рт.ст., повторно 148/92.",
+          "selected": "Сахарный диабет 2 типа",
+          "correctAnswer": "Сахарный диабет 2 типа",
+          "isCorrect": true
+        },
+        {
+          "label": "Мужчина 45 лет. Разовое АД 145/90 после стресса, повторных измерений нет.",
+          "selected": "Сахарный диабет 2 типа",
+          "correctAnswer": "Повышение артериального давления",
+          "isCorrect": false
+        },
+        {
+          "label": "Женщина 58 лет, жажда, полиурия. Случайная глюкоза 12,4 ммоль/л.",
+          "selected": "Сахарный диабет 2 типа",
+          "correctAnswer": "Повышение артериального давления",
+          "isCorrect": false
+        }
+      ],
+      "manualScore": null,
+      "trainerComment": "",
+      "createdAt": "2026-05-24T11:17:36.204Z"
+    },
+    {
+      "id": "add816ab-5a96-4823-89e5-846fb1830288",
+      "participantId": "39360a46-49bf-42f9-929f-fe615e292ce6",
+      "type": "task",
+      "taskId": "plan-new",
+      "title": "Клиническая задача и индивидуальный план ведения пациента",
+      "instrument": "Тест 3",
+      "maxScore": 10,
+      "answers": {
+        "q0": "A",
+        "q1": "B",
+        "q2": "E",
+        "q3": "E",
+        "q4": "E",
+        "q5": "B",
+        "q6": "B",
+        "q7": "B",
+        "q8": "A",
+        "q9": "B"
+      },
+      "correct": 5,
+      "total": 10,
+      "percent": 50,
+      "details": [
+        {
+          "label": "Основной диагноз и сопутствующие состояния",
+          "selected": "A",
+          "selectedText": "Сахарный диабет 2 типа, ожирение",
+          "correctAnswer": "B",
+          "correctText": "Сахарный диабет 2 типа, впервые выявленный, декомпенсированный. Ожирение 1 степени (абдоминальное). Артериальная гипертензия 2 степени.",
+          "isCorrect": false
+        },
+        {
+          "label": "Факторы риска и уровень кардиометаболического риска",
+          "selected": "B",
+          "selectedText": "Очень высокий кардиометаболический риск (СД2 + АГ + ожирение + курение + возраст)",
+          "correctAnswer": "B",
+          "correctText": "Очень высокий кардиометаболический риск (СД2 + АГ + ожирение + курение + возраст)",
+          "isCorrect": true
+        },
+        {
+          "label": "Индивидуальные цели лечения",
+          "selected": "E",
+          "selectedText": "Нет четких целей на старте",
+          "correctAnswer": "B",
+          "correctText": "HbA1c < 7,0%, АД < 130/80 мм рт.ст., снижение веса >= 5-10%",
+          "isCorrect": false
+        },
+        {
+          "label": "Немедикаментозные рекомендации",
+          "selected": "E",
+          "selectedText": "Ничего не назначать до эндокринолога",
+          "correctAnswer": "B",
+          "correctText": "Снижение массы тела, низкоуглеводная диета, увеличение физической активности до 150 мин/нед, полный отказ от курения",
+          "isCorrect": false
+        },
+        {
+          "label": "Медикаментозная тактика по СД2",
+          "selected": "E",
+          "selectedText": "SGLT2-ингибитор в качестве монотерапии",
+          "correctAnswer": "B",
+          "correctText": "Метформин (начать с 500 мг 2 раза в день, титровать до 2000 мг/сут)",
+          "isCorrect": false
+        },
+        {
+          "label": "Медикаментозная тактика по АГ",
+          "selected": "B",
+          "selectedText": "Ингибитор АПФ (периндоприл) или БРА + амлодипин (комбинированная терапия)",
+          "correctAnswer": "B",
+          "correctText": "Ингибитор АПФ (периндоприл) или БРА + амлодипин (комбинированная терапия)",
+          "isCorrect": true
+        },
+        {
+          "label": "Мониторинг гликемии, АД, массы тела",
+          "selected": "B",
+          "selectedText": "Самоконтроль глюкозы 2-3 раза в неделю, АД ежедневно, вес 1 раз в неделю. Контроль в ПМСП через 2 недели",
+          "correctAnswer": "B",
+          "correctText": "Самоконтроль глюкозы 2-3 раза в неделю, АД ежедневно, вес 1 раз в неделю. Контроль в ПМСП через 2 недели",
+          "isCorrect": true
+        },
+        {
+          "label": "Скрининг осложнений СД",
+          "selected": "B",
+          "selectedText": "Осмотр глазного дна (офтальмолог), ACR, eGFR, оценка стоп и неврологический статус - в ближайшее время",
+          "correctAnswer": "B",
+          "correctText": "Осмотр глазного дна (офтальмолог), ACR, eGFR, оценка стоп и неврологический статус - в ближайшее время",
+          "isCorrect": true
+        },
+        {
+          "label": "Сроки повторного визита",
+          "selected": "A",
+          "selectedText": "Через 1 месяц",
+          "correctAnswer": "B",
+          "correctText": "Через 10-14 дней",
+          "isCorrect": false
+        },
+        {
+          "label": "Показания к направлению к специалисту",
+          "selected": "B",
+          "selectedText": "Эндокринолог - в течение 7-14 дней, офтальмолог - в течение 1 месяца, кардиолог - по показаниям",
+          "correctAnswer": "B",
+          "correctText": "Эндокринолог - в течение 7-14 дней, офтальмолог - в течение 1 месяца, кардиолог - по показаниям",
+          "isCorrect": true
+        }
+      ],
+      "manualScore": null,
+      "trainerComment": "",
+      "createdAt": "2026-05-24T11:17:36.727Z"
+    },
+    {
+      "id": "9f4cc027-230a-4403-84cd-1b3daa11ca5b",
+      "participantId": "39360a46-49bf-42f9-929f-fe615e292ce6",
+      "type": "task",
+      "taskId": "routing-new",
+      "title": "Маршрутизация пациента",
+      "instrument": "Тест 4",
+      "maxScore": 12,
+      "answers": {
+        "case0": {
+          "specialist": "кардиолог",
+          "urgency": "экстренно"
+        },
+        "case1": {
+          "specialist": "кардиолог",
+          "urgency": "экстренно"
+        },
+        "case2": {
+          "specialist": "кардиолог",
+          "urgency": "экстренно"
+        },
+        "case3": {
+          "specialist": "кардиолог",
+          "urgency": "экстренно"
+        },
+        "case4": {
+          "specialist": "кардиолог",
+          "urgency": "экстренно"
+        },
+        "case5": {
+          "specialist": "кардиолог",
+          "urgency": "экстренно"
+        }
+      },
+      "correct": 4,
+      "total": 12,
+      "percent": 33,
+      "details": [
+        {
+          "label": "АД 185/115 мм рт.ст. + боль в груди/одышка/неврологические симптомы",
+          "selected": "кардиолог, экстренно",
+          "correctAnswer": "кардиолог, экстренно",
+          "isCorrect": true
+        },
+        {
+          "label": "Впервые выявленный СД2 без кетоза, стабильное состояние, HbA1c 7,8%",
+          "selected": "кардиолог, экстренно",
+          "correctAnswer": "эндокринолог, неотложно",
+          "isCorrect": false
+        },
+        {
+          "label": "СД2 + язва стопы/признаки инфекции стопы",
+          "selected": "кардиолог, экстренно",
+          "correctAnswer": "хирург, экстренно",
+          "isCorrect": false
+        },
+        {
+          "label": "СД2 + снижение функции почек или выраженная альбуминурия по доступным данным",
+          "selected": "кардиолог, экстренно",
+          "correctAnswer": "нефролог, неотложно",
+          "isCorrect": false
+        },
+        {
+          "label": "АГ 150/95 мм рт.ст. повторно, без признаков острого поражения органов-мишеней",
+          "selected": "кардиолог, экстренно",
+          "correctAnswer": "кардиолог, неотложно",
+          "isCorrect": false
+        },
+        {
+          "label": "Высокий FINDRISC, но глюкоза натощак пока не определялась",
+          "selected": "кардиолог, экстренно",
+          "correctAnswer": "эндокринолог, неотложно",
+          "isCorrect": false
+        }
+      ],
+      "manualScore": null,
+      "trainerComment": "",
+      "createdAt": "2026-05-24T11:17:37.005Z"
+    },
+    {
+      "id": "679dd7a5-3f3e-4a5e-a2c1-85be70b4ec68",
+      "participantId": "39360a46-49bf-42f9-929f-fe615e292ce6",
+      "type": "task",
+      "taskId": "clinical-case-new",
+      "title": "Комплексный клинический случай для оценки принятия решений",
+      "instrument": "Тест 5",
+      "maxScore": 8,
+      "answers": {
+        "q0": "B",
+        "q1": "E",
+        "q2": "C",
+        "q3": "E",
+        "q4": "E",
+        "q5": "E",
+        "q6": "B",
+        "q7": "B"
+      },
+      "correct": 3,
+      "total": 8,
+      "percent": 38,
+      "details": [
+        {
+          "label": "Предварительный клинический диагноз",
+          "selected": "B",
+          "selectedText": "Сахарный диабет 2 типа, впервые выявленный",
+          "correctAnswer": "B",
+          "correctText": "Сахарный диабет 2 типа, впервые выявленный",
+          "isCorrect": true
+        },
+        {
+          "label": "Основные факторы риска у данного пациента",
+          "selected": "E",
+          "selectedText": "Только артериальная гипертензия",
+          "correctAnswer": "B",
+          "correctText": "Ожирение, абдоминальное ожирение, АГ, курение, возраст, отягощенная наследственность",
+          "isCorrect": false
+        },
+        {
+          "label": "Какие показатели необходимо дополнительно оценить в первую очередь?",
+          "selected": "C",
+          "selectedText": "Только УЗИ органов брюшной полости",
+          "correctAnswer": "B",
+          "correctText": "eGFR, ACR (альбумин/креатинин), липидный профиль, осмотр глазного дна, ЛПИ",
+          "isCorrect": false
+        },
+        {
+          "label": "Первичный план лечения и профилактики",
+          "selected": "E",
+          "selectedText": "Метформин + гликлазид",
+          "correctAnswer": "B",
+          "correctText": "Метформин + изменение образа жизни + ИАПФ/БРА + амлодипин + статин + отказ от курения",
+          "isCorrect": false
+        },
+        {
+          "label": "План мониторинга в ПМСП",
+          "selected": "E",
+          "selectedText": "Только контроль HbA1c 1 раз в год",
+          "correctAnswer": "B",
+          "correctText": "Контроль АД, глюкозы, веса каждые 2 недели первые 1-2 месяца, затем 1 раз в 3 месяца",
+          "isCorrect": false
+        },
+        {
+          "label": "Скрининг осложнений сахарного диабета",
+          "selected": "E",
+          "selectedText": "Только допплерография сосудов шеи",
+          "correctAnswer": "B",
+          "correctText": "Офтальмолог, ACR + eGFR, оценка стоп и неврологический статус, ЭКГ/ЭхоКГ",
+          "isCorrect": false
+        },
+        {
+          "label": "Маршрутизация и показания к специалистам",
+          "selected": "B",
+          "selectedText": "Эндокринолог - в течение 7-10 дней; кардиолог - в течение 14 дней; офтальмолог - в течение 2 недель",
+          "correctAnswer": "B",
+          "correctText": "Эндокринолог - в течение 7-10 дней; кардиолог - в течение 14 дней; офтальмолог - в течение 2 недель",
+          "isCorrect": true
+        },
+        {
+          "label": "Как лучше объяснить пациенту дальнейшие шаги",
+          "selected": "B",
+          "selectedText": "У вас выявился сахарный диабет 2 типа. Сейчас важно быстро нормализовать сахар и давление, чтобы не развились осложнения на глаза, почки и ноги. Начнем с таблеток, диеты и отказа от курения. Нужно пройти обследование у специалистов в ближайшие 2 недели",
+          "correctAnswer": "B",
+          "correctText": "У вас выявился сахарный диабет 2 типа. Сейчас важно быстро нормализовать сахар и давление, чтобы не развились осложнения на глаза, почки и ноги. Начнем с таблеток, диеты и отказа от курения. Нужно пройти обследование у специалистов в ближайшие 2 недели",
+          "isCorrect": true
+        }
+      ],
+      "manualScore": null,
+      "trainerComment": "",
+      "createdAt": "2026-05-24T11:17:37.286Z"
+    },
+    {
+      "id": "cd250b0c-67ab-45e5-93b9-c346bb9dbc70",
+      "participantId": "be13ee6d-ce95-4f44-bad2-343907a638b7",
+      "type": "task",
+      "taskId": "findrisc-new",
+      "title": "Практическая задача по FINDRISC",
+      "instrument": "Тест 1",
+      "maxScore": 9,
+      "answers": {
+        "age": "3",
+        "bmi": "3",
+        "waist": "2",
+        "activity": "1",
+        "vegetables": "2",
+        "bpTherapy": "2",
+        "highGlucose": "3",
+        "family": "2",
+        "risk": "Высокий риск"
+      },
+      "correct": 4,
+      "total": 9,
+      "percent": 44,
+      "details": [
+        {
+          "label": "Возраст, 52 года",
+          "selected": "3",
+          "correctAnswer": "3",
+          "isCorrect": true
+        },
+        {
+          "label": "ИМТ 31 кг/м2",
+          "selected": "3",
+          "correctAnswer": "3",
+          "isCorrect": true
+        },
+        {
+          "label": "Окружность талии 104 см, мужчина",
+          "selected": "2",
+          "correctAnswer": "4",
+          "isCorrect": false
+        },
+        {
+          "label": "Физическая активность <30 мин/день",
+          "selected": "1",
+          "correctAnswer": "2",
+          "isCorrect": false
+        },
+        {
+          "label": "Овощи/фрукты не ежедневно",
+          "selected": "2",
+          "correctAnswer": "0",
+          "isCorrect": false
+        },
+        {
+          "label": "Антигипертензивная терапия: да",
+          "selected": "2",
+          "correctAnswer": "2",
+          "isCorrect": true
+        },
+        {
+          "label": "Повышение глюкозы ранее: нет",
+          "selected": "3",
+          "correctAnswer": "0",
+          "isCorrect": false
+        },
+        {
+          "label": "Семейный анамнез СД: мать с СД2",
+          "selected": "2",
+          "correctAnswer": "5",
+          "isCorrect": false
+        },
+        {
+          "label": "ИТОГО: категория риска",
+          "selected": "Высокий риск",
+          "correctAnswer": "Высокий риск",
+          "isCorrect": true
+        }
+      ],
+      "manualScore": null,
+      "trainerComment": "",
+      "createdAt": "2026-05-24T11:26:15.284Z"
+    },
+    {
+      "id": "54fe1f68-74ae-46da-9408-2dc169193ce8",
+      "participantId": "be13ee6d-ce95-4f44-bad2-343907a638b7",
+      "type": "task",
+      "taskId": "diagnostics-new",
+      "title": "Диагностические мини-задачи: СД2, предиабет и АГ",
+      "instrument": "Тест 2",
+      "maxScore": 5,
+      "answers": {
+        "case0": "Сахарный диабет 2 типа",
+        "case1": "Сахарный диабет 2 типа",
+        "case2": "Сахарный диабет 2 типа",
+        "case3": "Сахарный диабет 2 типа",
+        "case4": "Сахарный диабет 2 типа"
+      },
+      "correct": 2,
+      "total": 5,
+      "percent": 40,
+      "details": [
+        {
+          "label": "Женщина 48 лет, ИМТ 32. Глюкоза плазмы натощак 7,2 ммоль/л при повторном анализе. Жалоб нет.",
+          "selected": "Сахарный диабет 2 типа",
+          "correctAnswer": "Сахарный диабет 2 типа",
+          "isCorrect": true
+        },
+        {
+          "label": "Мужчина 55 лет. Глюкоза натощак 6,4 ммоль/л, HbA1c 6,0%.",
+          "selected": "Сахарный диабет 2 типа",
+          "correctAnswer": "Нарушенная гликемия натощак",
+          "isCorrect": false
+        },
+        {
+          "label": "Женщина 61 год. HbA1c 6,8%, АД на приеме 152/94 мм рт.ст., повторно 148/92.",
+          "selected": "Сахарный диабет 2 типа",
+          "correctAnswer": "Сахарный диабет 2 типа",
+          "isCorrect": true
+        },
+        {
+          "label": "Мужчина 45 лет. Разовое АД 145/90 после стресса, повторных измерений нет.",
+          "selected": "Сахарный диабет 2 типа",
+          "correctAnswer": "Повышение артериального давления",
+          "isCorrect": false
+        },
+        {
+          "label": "Женщина 58 лет, жажда, полиурия. Случайная глюкоза 12,4 ммоль/л.",
+          "selected": "Сахарный диабет 2 типа",
+          "correctAnswer": "Повышение артериального давления",
+          "isCorrect": false
+        }
+      ],
+      "manualScore": null,
+      "trainerComment": "",
+      "createdAt": "2026-05-24T11:26:15.488Z"
+    },
+    {
+      "id": "e92d300f-5295-44b4-9dc8-f30e576d0135",
+      "participantId": "be13ee6d-ce95-4f44-bad2-343907a638b7",
+      "type": "task",
+      "taskId": "plan-new",
+      "title": "Клиническая задача и индивидуальный план ведения пациента",
+      "instrument": "Тест 3",
+      "maxScore": 10,
+      "answers": {
+        "q0": "D",
+        "q1": "A",
+        "q2": "A",
+        "q3": "A",
+        "q4": "B",
+        "q5": "B",
+        "q6": "D",
+        "q7": "A",
+        "q8": "E",
+        "q9": "B"
+      },
+      "correct": 3,
+      "total": 10,
+      "percent": 30,
+      "details": [
+        {
+          "label": "Основной диагноз и сопутствующие состояния",
+          "selected": "D",
+          "selectedText": "Сахарный диабет 2 типа, артериальная гипертензия",
+          "correctAnswer": "B",
+          "correctText": "Сахарный диабет 2 типа, впервые выявленный, декомпенсированный. Ожирение 1 степени (абдоминальное). Артериальная гипертензия 2 степени.",
+          "isCorrect": false
+        },
+        {
+          "label": "Факторы риска и уровень кардиометаболического риска",
+          "selected": "A",
+          "selectedText": "Средний риск",
+          "correctAnswer": "B",
+          "correctText": "Очень высокий кардиометаболический риск (СД2 + АГ + ожирение + курение + возраст)",
+          "isCorrect": false
+        },
+        {
+          "label": "Индивидуальные цели лечения",
+          "selected": "A",
+          "selectedText": "HbA1c < 8,0%, АД < 140/90",
+          "correctAnswer": "B",
+          "correctText": "HbA1c < 7,0%, АД < 130/80 мм рт.ст., снижение веса >= 5-10%",
+          "isCorrect": false
+        },
+        {
+          "label": "Немедикаментозные рекомендации",
+          "selected": "A",
+          "selectedText": "Только отказ от курения",
+          "correctAnswer": "B",
+          "correctText": "Снижение массы тела, низкоуглеводная диета, увеличение физической активности до 150 мин/нед, полный отказ от курения",
+          "isCorrect": false
+        },
+        {
+          "label": "Медикаментозная тактика по СД2",
+          "selected": "B",
+          "selectedText": "Метформин (начать с 500 мг 2 раза в день, титровать до 2000 мг/сут)",
+          "correctAnswer": "B",
+          "correctText": "Метформин (начать с 500 мг 2 раза в день, титровать до 2000 мг/сут)",
+          "isCorrect": true
+        },
+        {
+          "label": "Медикаментозная тактика по АГ",
+          "selected": "B",
+          "selectedText": "Ингибитор АПФ (периндоприл) или БРА + амлодипин (комбинированная терапия)",
+          "correctAnswer": "B",
+          "correctText": "Ингибитор АПФ (периндоприл) или БРА + амлодипин (комбинированная терапия)",
+          "isCorrect": true
+        },
+        {
+          "label": "Мониторинг гликемии, АД, массы тела",
+          "selected": "D",
+          "selectedText": "Контроль только на приеме",
+          "correctAnswer": "B",
+          "correctText": "Самоконтроль глюкозы 2-3 раза в неделю, АД ежедневно, вес 1 раз в неделю. Контроль в ПМСП через 2 недели",
+          "isCorrect": false
+        },
+        {
+          "label": "Скрининг осложнений СД",
+          "selected": "A",
+          "selectedText": "Только через год",
+          "correctAnswer": "B",
+          "correctText": "Осмотр глазного дна (офтальмолог), ACR, eGFR, оценка стоп и неврологический статус - в ближайшее время",
+          "isCorrect": false
+        },
+        {
+          "label": "Сроки повторного визита",
+          "selected": "E",
+          "selectedText": "Только после консультации эндокринолога",
+          "correctAnswer": "B",
+          "correctText": "Через 10-14 дней",
+          "isCorrect": false
+        },
+        {
+          "label": "Показания к направлению к специалисту",
+          "selected": "B",
+          "selectedText": "Эндокринолог - в течение 7-14 дней, офтальмолог - в течение 1 месяца, кардиолог - по показаниям",
+          "correctAnswer": "B",
+          "correctText": "Эндокринолог - в течение 7-14 дней, офтальмолог - в течение 1 месяца, кардиолог - по показаниям",
+          "isCorrect": true
+        }
+      ],
+      "manualScore": null,
+      "trainerComment": "",
+      "createdAt": "2026-05-24T11:26:15.696Z"
+    },
+    {
+      "id": "ef53ebce-c96c-4810-8b73-7ff35cc58ea7",
+      "participantId": "be13ee6d-ce95-4f44-bad2-343907a638b7",
+      "type": "task",
+      "taskId": "routing-new",
+      "title": "Маршрутизация пациента",
+      "instrument": "Тест 4",
+      "maxScore": 12,
+      "answers": {
+        "case0": {
+          "specialist": "кардиолог",
+          "urgency": "экстренно"
+        },
+        "case1": {
+          "specialist": "кардиолог",
+          "urgency": "экстренно"
+        },
+        "case2": {
+          "specialist": "кардиолог",
+          "urgency": "экстренно"
+        },
+        "case3": {
+          "specialist": "кардиолог",
+          "urgency": "экстренно"
+        },
+        "case4": {
+          "specialist": "кардиолог",
+          "urgency": "экстренно"
+        },
+        "case5": {
+          "specialist": "кардиолог",
+          "urgency": "экстренно"
+        }
+      },
+      "correct": 4,
+      "total": 12,
+      "percent": 33,
+      "details": [
+        {
+          "label": "АД 185/115 мм рт.ст. + боль в груди/одышка/неврологические симптомы",
+          "selected": "кардиолог, экстренно",
+          "correctAnswer": "кардиолог, экстренно",
+          "isCorrect": true
+        },
+        {
+          "label": "Впервые выявленный СД2 без кетоза, стабильное состояние, HbA1c 7,8%",
+          "selected": "кардиолог, экстренно",
+          "correctAnswer": "эндокринолог, неотложно",
+          "isCorrect": false
+        },
+        {
+          "label": "СД2 + язва стопы/признаки инфекции стопы",
+          "selected": "кардиолог, экстренно",
+          "correctAnswer": "хирург, экстренно",
+          "isCorrect": false
+        },
+        {
+          "label": "СД2 + снижение функции почек или выраженная альбуминурия по доступным данным",
+          "selected": "кардиолог, экстренно",
+          "correctAnswer": "нефролог, неотложно",
+          "isCorrect": false
+        },
+        {
+          "label": "АГ 150/95 мм рт.ст. повторно, без признаков острого поражения органов-мишеней",
+          "selected": "кардиолог, экстренно",
+          "correctAnswer": "кардиолог, неотложно",
+          "isCorrect": false
+        },
+        {
+          "label": "Высокий FINDRISC, но глюкоза натощак пока не определялась",
+          "selected": "кардиолог, экстренно",
+          "correctAnswer": "эндокринолог, неотложно",
+          "isCorrect": false
+        }
+      ],
+      "manualScore": null,
+      "trainerComment": "",
+      "createdAt": "2026-05-24T11:26:15.917Z"
+    },
+    {
+      "id": "65db676f-89e4-415d-8828-94fda772f73b",
+      "participantId": "be13ee6d-ce95-4f44-bad2-343907a638b7",
+      "type": "task",
+      "taskId": "clinical-case-new",
+      "title": "Комплексный клинический случай для оценки принятия решений",
+      "instrument": "Тест 5",
+      "maxScore": 8,
+      "answers": {
+        "q0": "A",
+        "q1": "A",
+        "q2": "A",
+        "q3": "C",
+        "q4": "D",
+        "q5": "E",
+        "q6": "A",
+        "q7": "A"
+      },
+      "correct": 0,
+      "total": 8,
+      "percent": 0,
+      "details": [
+        {
+          "label": "Предварительный клинический диагноз",
+          "selected": "A",
+          "selectedText": "Нарушение гликемии натощак",
+          "correctAnswer": "B",
+          "correctText": "Сахарный диабет 2 типа, впервые выявленный",
+          "isCorrect": false
+        },
+        {
+          "label": "Основные факторы риска у данного пациента",
+          "selected": "A",
+          "selectedText": "Только возраст и курение",
+          "correctAnswer": "B",
+          "correctText": "Ожирение, абдоминальное ожирение, АГ, курение, возраст, отягощенная наследственность",
+          "isCorrect": false
+        },
+        {
+          "label": "Какие показатели необходимо дополнительно оценить в первую очередь?",
+          "selected": "A",
+          "selectedText": "Только общий анализ крови",
+          "correctAnswer": "B",
+          "correctText": "eGFR, ACR (альбумин/креатинин), липидный профиль, осмотр глазного дна, ЛПИ",
+          "isCorrect": false
+        },
+        {
+          "label": "Первичный план лечения и профилактики",
+          "selected": "C",
+          "selectedText": "Инсулин короткого действия",
+          "correctAnswer": "B",
+          "correctText": "Метформин + изменение образа жизни + ИАПФ/БРА + амлодипин + статин + отказ от курения",
+          "isCorrect": false
+        },
+        {
+          "label": "План мониторинга в ПМСП",
+          "selected": "D",
+          "selectedText": "Еженедельный контроль",
+          "correctAnswer": "B",
+          "correctText": "Контроль АД, глюкозы, веса каждые 2 недели первые 1-2 месяца, затем 1 раз в 3 месяца",
+          "isCorrect": false
+        },
+        {
+          "label": "Скрининг осложнений сахарного диабета",
+          "selected": "E",
+          "selectedText": "Только допплерография сосудов шеи",
+          "correctAnswer": "B",
+          "correctText": "Офтальмолог, ACR + eGFR, оценка стоп и неврологический статус, ЭКГ/ЭхоКГ",
+          "isCorrect": false
+        },
+        {
+          "label": "Маршрутизация и показания к специалистам",
+          "selected": "A",
+          "selectedText": "Наблюдение только терапевтом",
+          "correctAnswer": "B",
+          "correctText": "Эндокринолог - в течение 7-10 дней; кардиолог - в течение 14 дней; офтальмолог - в течение 2 недель",
+          "isCorrect": false
+        },
+        {
+          "label": "Как лучше объяснить пациенту дальнейшие шаги",
+          "selected": "A",
+          "selectedText": "У вас диабет, будете колоть инсулин",
+          "correctAnswer": "B",
+          "correctText": "У вас выявился сахарный диабет 2 типа. Сейчас важно быстро нормализовать сахар и давление, чтобы не развились осложнения на глаза, почки и ноги. Начнем с таблеток, диеты и отказа от курения. Нужно пройти обследование у специалистов в ближайшие 2 недели",
+          "isCorrect": false
+        }
+      ],
+      "manualScore": null,
+      "trainerComment": "",
+      "createdAt": "2026-05-24T11:26:16.124Z"
+    }
+  ],
+  "nurseTrainingParticipants": [
+    {
+      "id": "dc849eee-a90f-4812-ae08-63217b16cddf",
+      "fullName": "щшшг глшршгр",
+      "clinic": "Поликлиника №1",
+      "position": "Медсестра",
+      "phone": "+992883331096",
+      "createdAt": "2026-05-24T18:01:56.916Z",
+      "preCompletedAt": "2026-05-24T18:02:22.886Z",
+      "postCompletedAt": "2026-05-24T18:02:46.775Z"
+    }
+  ],
+  "nurseTrainingAttempts": [
+    {
+      "id": "7351287c-1416-4bb7-9358-e7346accc8a3",
+      "participantId": "dc849eee-a90f-4812-ae08-63217b16cddf",
+      "type": "pre",
+      "title": "Тест до обучения",
+      "answers": {
+        "1": "A",
+        "2": "A",
+        "3": "B",
+        "4": "C",
+        "5": "A",
+        "6": "B",
+        "7": "A",
+        "8": "A",
+        "9": "B",
+        "10": "A"
+      },
+      "correct": 4,
+      "total": 10,
+      "percent": 40,
+      "passed": false,
+      "details": [
+        {
+          "questionId": 1,
+          "questionText": "Почему СД2 и АГ часто называют «тихими» заболеваниями?",
+          "options": {
+            "A": "Всегда протекают с болью",
+            "B": "Могут долго не давать жалоб",
+            "C": "Не требуют контроля"
+          },
+          "selected": "A",
+          "selectedText": "Всегда протекают с болью",
+          "correctAnswer": "B",
+          "correctText": "Могут долго не давать жалоб",
+          "isCorrect": false
+        },
+        {
+          "questionId": 2,
+          "questionText": "Что является первым действием медсестры у пациента 50 лет с ожирением и АД 148/92?",
+          "options": {
+            "A": "Назначить таблетки",
+            "B": "Измерить повторно/оценить риск/направить к врачу",
+            "C": "Ничего не делать"
+          },
+          "selected": "A",
+          "selectedText": "Назначить таблетки",
+          "correctAnswer": "B",
+          "correctText": "Измерить повторно/оценить риск/направить к врачу",
+          "isCorrect": false
+        },
+        {
+          "questionId": 3,
+          "questionText": "Какое значение АД соответствует АГ 1 степени?",
+          "options": {
+            "A": "120/80",
+            "B": "130/85",
+            "C": "140-159 и/или 90-99 мм рт. ст."
+          },
+          "selected": "B",
+          "selectedText": "130/85",
+          "correctAnswer": "C",
+          "correctText": "140-159 и/или 90-99 мм рт. ст.",
+          "isCorrect": false
+        },
+        {
+          "questionId": 4,
+          "questionText": "FINDRISK используется для:",
+          "options": {
+            "A": "Постановки диагноза СД",
+            "B": "Оценки риска и отбора на лабораторный этап",
+            "C": "Подбора дозы метформина"
+          },
+          "selected": "C",
+          "selectedText": "Подбора дозы метформина",
+          "correctAnswer": "B",
+          "correctText": "Оценки риска и отбора на лабораторный этап",
+          "isCorrect": false
+        },
+        {
+          "questionId": 5,
+          "questionText": "Что нужно сделать перед измерением АД?",
+          "options": {
+            "A": "Дать пациенту отдохнуть 5 минут",
+            "B": "Измерять сразу после подъема по лестнице",
+            "C": "Попросить говорить во время измерения"
+          },
+          "selected": "A",
+          "selectedText": "Дать пациенту отдохнуть 5 минут",
+          "correctAnswer": "A",
+          "correctText": "Дать пациенту отдохнуть 5 минут",
+          "isCorrect": true
+        },
+        {
+          "questionId": 6,
+          "questionText": "Диагноз диабета ставится:",
+          "options": {
+            "A": "По жалобам",
+            "B": "Только по лабораторным критериям и подтверждению врачом",
+            "C": "По внешнему виду пациента"
+          },
+          "selected": "B",
+          "selectedText": "Только по лабораторным критериям и подтверждению врачом",
+          "correctAnswer": "B",
+          "correctText": "Только по лабораторным критериям и подтверждению врачом",
+          "isCorrect": true
+        },
+        {
+          "questionId": 7,
+          "questionText": "При АД 210/120 и боли за грудиной медсестра должна:",
+          "options": {
+            "A": "Записать на плановый прием",
+            "B": "Срочно организовать помощь/маршрутизацию",
+            "C": "Дать совет пить воду"
+          },
+          "selected": "A",
+          "selectedText": "Записать на плановый прием",
+          "correctAnswer": "B",
+          "correctText": "Срочно организовать помощь/маршрутизацию",
+          "isCorrect": false
+        },
+        {
+          "questionId": 8,
+          "questionText": "К чему относится окружность талии?",
+          "options": {
+            "A": "К оценке абдоминального ожирения",
+            "B": "К диагностике анемии",
+            "C": "К оценке зрения"
+          },
+          "selected": "A",
+          "selectedText": "К оценке абдоминального ожирения",
+          "correctAnswer": "A",
+          "correctText": "К оценке абдоминального ожирения",
+          "isCorrect": true
+        },
+        {
+          "questionId": 9,
+          "questionText": "Что помогает повысить приверженность лечению?",
+          "options": {
+            "A": "Обвинять пациента",
+            "B": "Простой письменный план и уважительный разговор",
+            "C": "Отменить контроль"
+          },
+          "selected": "B",
+          "selectedText": "Простой письменный план и уважительный разговор",
+          "correctAnswer": "B",
+          "correctText": "Простой письменный план и уважительный разговор",
+          "isCorrect": true
+        },
+        {
+          "questionId": 10,
+          "questionText": "Что должна фиксировать медсестра в регистре скрининга?",
+          "options": {
+            "A": "Только имя",
+            "B": "Дату, АД, ИМТ/талию, FINDRISK/глюкозу, направление и дату возврата",
+            "C": "Ничего"
+          },
+          "selected": "A",
+          "selectedText": "Только имя",
+          "correctAnswer": "B",
+          "correctText": "Дату, АД, ИМТ/талию, FINDRISK/глюкозу, направление и дату возврата",
+          "isCorrect": false
+        }
+      ],
+      "createdAt": "2026-05-24T18:02:22.886Z"
+    },
+    {
+      "id": "bc9f7cdb-72fc-41a3-83fc-e434f9e6e2ac",
+      "participantId": "dc849eee-a90f-4812-ae08-63217b16cddf",
+      "type": "post",
+      "title": "Тест после обучения",
+      "answers": {
+        "1": "B",
+        "2": "B",
+        "3": "B",
+        "4": "B",
+        "5": "B",
+        "6": "B",
+        "7": "B",
+        "8": "B",
+        "9": "B",
+        "10": "B"
+      },
+      "correct": 10,
+      "total": 10,
+      "percent": 100,
+      "passed": true,
+      "details": [
+        {
+          "questionId": 1,
+          "questionText": "Назовите 4 основных фактора риска СД2/АГ, которые должна активно выявлять медсестра.",
+          "options": {
+            "A": "Только курение и питание",
+            "B": "Возраст, ИМТ/окружность талии, семейный анамнез по СД2, повышенное АД",
+            "C": "Только уровень холестерина и гемоглобин",
+            "D": "Только физическая активность и стресс"
+          },
+          "selected": "B",
+          "selectedText": "Возраст, ИМТ/окружность талии, семейный анамнез по СД2, повышенное АД",
+          "correctAnswer": "B",
+          "correctText": "Возраст, ИМТ/окружность талии, семейный анамнез по СД2, повышенное АД",
+          "isCorrect": true
+        },
+        {
+          "questionId": 2,
+          "questionText": "Что такое FINDRISK?",
+          "options": {
+            "A": "Метод постановки окончательного диагноза СД2",
+            "B": "Инструмент (анкета) для оценки риска развития СД2 в ближайшие 10 лет",
+            "C": "Шкала для расчета дозы инсулина",
+            "D": "Метод определения стадии артериальной гипертензии"
+          },
+          "selected": "B",
+          "selectedText": "Инструмент (анкета) для оценки риска развития СД2 в ближайшие 10 лет",
+          "correctAnswer": "B",
+          "correctText": "Инструмент (анкета) для оценки риска развития СД2 в ближайшие 10 лет",
+          "isCorrect": true
+        },
+        {
+          "questionId": 3,
+          "questionText": "Назовите 3 важных правила правильного измерения артериального давления.",
+          "options": {
+            "A": "Измерять сразу после ходьбы, манжета любого размера, пациент может разговаривать",
+            "B": "Пациент отдыхает 5 минут, рука на уровне сердца, манжета соответствует размеру руки",
+            "C": "Измерять только на обеих руках одновременно, ноги скрещены",
+            "D": "Измерять сразу после приема пищи"
+          },
+          "selected": "B",
+          "selectedText": "Пациент отдыхает 5 минут, рука на уровне сердца, манжета соответствует размеру руки",
+          "correctAnswer": "B",
+          "correctText": "Пациент отдыхает 5 минут, рука на уровне сердца, манжета соответствует размеру руки",
+          "isCorrect": true
+        },
+        {
+          "questionId": 4,
+          "questionText": "При каком уровне офисного АД начинается диапазон артериальной гипертензии?",
+          "options": {
+            "A": ">=130/80 мм рт. ст.",
+            "B": ">=140 и/или >=90 мм рт. ст. (при подтверждении)",
+            "C": ">=160/100 мм рт. ст.",
+            "D": ">=120/80 мм рт. ст."
+          },
+          "selected": "B",
+          "selectedText": ">=140 и/или >=90 мм рт. ст. (при подтверждении)",
+          "correctAnswer": "B",
+          "correctText": ">=140 и/или >=90 мм рт. ст. (при подтверждении)",
+          "isCorrect": true
+        },
+        {
+          "questionId": 5,
+          "questionText": "Какой порог глюкозы плазмы натощак соответствует диабетическому диапазону?",
+          "options": {
+            "A": ">=5,6 ммоль/л",
+            "B": ">=7,0 ммоль/л (при подтверждении на повторном анализе)",
+            "C": ">=6,1 ммоль/л",
+            "D": ">=8,5 ммоль/л"
+          },
+          "selected": "B",
+          "selectedText": ">=7,0 ммоль/л (при подтверждении на повторном анализе)",
+          "correctAnswer": "B",
+          "correctText": ">=7,0 ммоль/л (при подтверждении на повторном анализе)",
+          "isCorrect": true
+        },
+        {
+          "questionId": 6,
+          "questionText": "Что должна сделать медсестра при выявлении АД 210/120 мм рт.ст. и боли за грудиной?",
+          "options": {
+            "A": "Записать пациента на плановый прием через неделю",
+            "B": "Организовать срочную маршрутизацию (вызвать врача или скорую помощь)",
+            "C": "Посоветовать пациенту выпить воды и отдохнуть",
+            "D": "Измерить АД еще раз через час"
+          },
+          "selected": "B",
+          "selectedText": "Организовать срочную маршрутизацию (вызвать врача или скорую помощь)",
+          "correctAnswer": "B",
+          "correctText": "Организовать срочную маршрутизацию (вызвать врача или скорую помощь)",
+          "isCorrect": true
+        },
+        {
+          "questionId": 7,
+          "questionText": "Почему медсестра не должна самостоятельно отменять препарат пациенту?",
+          "options": {
+            "A": "Потому что препараты дорогие",
+            "B": "Назначение и отмена терапии — зона ответственности врача",
+            "C": "Потому что пациенту всегда нужно продолжать лечение",
+            "D": "Потому что отмена препаратов запрещена законом"
+          },
+          "selected": "B",
+          "selectedText": "Назначение и отмена терапии — зона ответственности врача",
+          "correctAnswer": "B",
+          "correctText": "Назначение и отмена терапии — зона ответственности врача",
+          "isCorrect": true
+        },
+        {
+          "questionId": 8,
+          "questionText": "Какие 3 важных пункта обязательно должны быть в направлении к врачу?",
+          "options": {
+            "A": "Только ФИО и дата рождения",
+            "B": "Причина направления, объективные данные (АД, глюкоза, ИМТ, ОТ), дата возврата",
+            "C": "Только жалобы пациента",
+            "D": "Только список всех принимаемых лекарств"
+          },
+          "selected": "B",
+          "selectedText": "Причина направления, объективные данные (АД, глюкоза, ИМТ, ОТ), дата возврата",
+          "correctAnswer": "B",
+          "correctText": "Причина направления, объективные данные (АД, глюкоза, ИМТ, ОТ), дата возврата",
+          "isCorrect": true
+        },
+        {
+          "questionId": 9,
+          "questionText": "Как лучше спросить пациента о пропусках приема лекарств (без обвинения)?",
+          "options": {
+            "A": "Почему вы не принимаете таблетки как положено?",
+            "B": "Многие пациенты иногда пропускают таблетки. Как часто это бывает у вас?",
+            "C": "Вы вообще пьете то, что назначили?",
+            "D": "Вы понимаете, что без таблеток будет плохо?"
+          },
+          "selected": "B",
+          "selectedText": "Многие пациенты иногда пропускают таблетки. Как часто это бывает у вас?",
+          "correctAnswer": "B",
+          "correctText": "Многие пациенты иногда пропускают таблетки. Как часто это бывает у вас?",
+          "isCorrect": true
+        },
+        {
+          "questionId": 10,
+          "questionText": "Что означает термин «непрерывность наблюдения» в работе медсестры?",
+          "options": {
+            "A": "Пациент наблюдается только у узких специалистов",
+            "B": "Пациент не теряется после направления: есть контроль выполнения, дата возврата и фиксация результатов",
+            "C": "Наблюдение пациента только 1 раз в год",
+            "D": "Непрерывный прием всех назначенных препаратов"
+          },
+          "selected": "B",
+          "selectedText": "Пациент не теряется после направления: есть контроль выполнения, дата возврата и фиксация результатов",
+          "correctAnswer": "B",
+          "correctText": "Пациент не теряется после направления: есть контроль выполнения, дата возврата и фиксация результатов",
+          "isCorrect": true
+        }
+      ],
+      "createdAt": "2026-05-24T18:02:46.775Z"
+    }
+  ]
+}
