@@ -718,6 +718,7 @@ function renderNurseSurvey() {
           ${input("Окружность плеча, см", "arm", true, "number")}
           ${input("Окружность живота/талия, см", "rabitoWaist", false, "number")}
           ${input("Окружность голени, см", "calf", true, "number")}
+          <div class="form-row"><label>Расчётный вес Rabito, кг</label><input name="rabitoWeightPreview" inputmode="decimal" readonly /></div>
         </section>
         <button>Отправить анкету</button>
         <div id="surveyResult"></div>
@@ -725,6 +726,7 @@ function renderNurseSurvey() {
     </main>
   `);
   const form = document.querySelector("#surveyForm");
+  bindNurseSurveyCalculations(form);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(form));
@@ -742,6 +744,27 @@ function renderNurseSurvey() {
       alert(error.message);
     }
   });
+}
+
+function bindNurseSurveyCalculations(form) {
+  const numericValue = (name) => Number(String(form.elements[name]?.value || "").replace(",", "."));
+  const calculate = () => {
+    const arm = numericValue("arm");
+    const waist = numericValue("rabitoWaist") || numericValue("waist");
+    const calf = numericValue("calf");
+    const sexCoef = form.elements.sex.value === "male" ? 1 : 2;
+    const rabitoWeight = arm > 0 && waist > 0 && calf > 0
+      ? 0.5759 * arm + 0.5263 * waist + 1.2452 * calf - 4.8689 * sexCoef - 32.9241
+      : 0;
+    form.elements.rabitoWeightPreview.value = rabitoWeight > 0 ? rabitoWeight.toFixed(1) : "";
+
+    const heightM = numericValue("height") / 100;
+    form.elements.bmi.value = rabitoWeight > 0 && heightM > 0 ? (rabitoWeight / (heightM * heightM)).toFixed(1) : "";
+  };
+  ["height", "waist", "arm", "rabitoWaist", "calf"].forEach((name) => {
+    form.elements[name].addEventListener("input", calculate);
+  });
+  form.elements.sex.addEventListener("change", calculate);
 }
 
 async function loadTrainingPretest() {
