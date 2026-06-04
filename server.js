@@ -458,7 +458,7 @@ function requestBaseUrl(req) {
 function calculateFindrisc(input) {
   const age = Number(input.age || 0);
   const bmi = Number(input.bmi || 0);
-  const waist = Number(input.waist || 0);
+  const waist = Number(input.rabitoWaist || input.waist || 0);
   const sex = input.sex;
   let score = 0;
   if (age >= 45 && age <= 54) score += 2;
@@ -887,7 +887,7 @@ async function handleApi(req, res, url) {
         systolic: Number(body.systolic || 0),
         diastolic: Number(body.diastolic || 0),
         arm: Number(body.arm || 0),
-        waist: Number(body.waist || 0),
+        waist: Number(body.rabitoWaist || body.waist || 0),
         rabitoWaist: Number(body.rabitoWaist || body.waist || 0),
         calf: Number(body.calf || 0),
         rabitoWeight

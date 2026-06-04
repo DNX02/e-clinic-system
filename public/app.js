@@ -700,7 +700,6 @@ function renderNurseSurvey() {
         <section class="grid two">
           ${input("Рост, см", "height", true, "number")}
           ${input("ИМТ", "bmi", true, "number")}
-          ${input("Окружность талии, см", "waist", true, "number")}
           ${select("Физическая активность 30 минут в день", "activity", [["yes", "Да"], ["no", "Нет"]])}
           ${select("Овощи/фрукты ежедневно", "vegetables", [["yes", "Да"], ["no", "Нет"]])}
           ${select("Принимал препараты от давления", "bpMeds", [["no", "Нет"], ["yes", "Да"]])}
@@ -716,7 +715,7 @@ function renderNurseSurvey() {
         <h3>Формула Rabito</h3>
         <section class="grid three">
           ${input("Окружность плеча, см", "arm", true, "number")}
-          ${input("Окружность живота/талия, см", "rabitoWaist", false, "number")}
+          ${input("Окружность живота/талия, см", "rabitoWaist", true, "number")}
           ${input("Окружность голени, см", "calf", true, "number")}
           <div class="form-row"><label>Расчётный вес Rabito, кг</label><input name="rabitoWeightPreview" inputmode="decimal" readonly /></div>
         </section>
@@ -750,7 +749,7 @@ function bindNurseSurveyCalculations(form) {
   const numericValue = (name) => Number(String(form.elements[name]?.value || "").replace(",", "."));
   const calculate = () => {
     const arm = numericValue("arm");
-    const waist = numericValue("rabitoWaist") || numericValue("waist");
+    const waist = numericValue("rabitoWaist");
     const calf = numericValue("calf");
     const sexCoef = form.elements.sex.value === "male" ? 1 : 2;
     const rabitoWeight = arm > 0 && waist > 0 && calf > 0
@@ -761,7 +760,7 @@ function bindNurseSurveyCalculations(form) {
     const heightM = numericValue("height") / 100;
     form.elements.bmi.value = rabitoWeight > 0 && heightM > 0 ? (rabitoWeight / (heightM * heightM)).toFixed(1) : "";
   };
-  ["height", "waist", "arm", "rabitoWaist", "calf"].forEach((name) => {
+  ["height", "arm", "rabitoWaist", "calf"].forEach((name) => {
     form.elements[name].addEventListener("input", calculate);
   });
   form.elements.sex.addEventListener("change", calculate);
