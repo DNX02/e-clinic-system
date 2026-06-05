@@ -26,10 +26,8 @@ const clinicSortKey = (value = "") => {
   const number = text.match(/\d+/)?.[0];
   return number ? String(number).padStart(4, "0") : text.toLowerCase();
 };
-const clinicOptions = Array.from({ length: 10 }, (_, index) => {
-  const number = index + 1;
-  return [`Поликлиника №${number}`, `Поликлиника №${number}`];
-});
+const clinicNumbers = [1, 2, 4, 7, 9, 10, 11, 12, 14, 15];
+const clinicOptions = clinicNumbers.map((number) => [`Поликлиника №${number}`, `Поликлиника №${number}`]);
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {});
@@ -688,7 +686,7 @@ function renderNurseSurvey() {
           ${input("Отчество", "middleName")}
           ${input("Дата рождения", "birthDate", true, "date")}
           ${select("Пол", "sex", [["female", "Женский"], ["male", "Мужской"]])}
-          ${input("Возраст", "age", true, "number")}
+          <div class="form-row"><label>Возраст</label><input name="age" inputmode="numeric" required readonly /></div>
           ${input("Телефон", "phone")}
           ${input("Адрес", "address")}
         </section>
@@ -726,6 +724,7 @@ function renderNurseSurvey() {
   `);
   const form = document.querySelector("#surveyForm");
   bindNurseSurveyCalculations(form);
+  bindBirthDateAge(form);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(form));
@@ -743,6 +742,24 @@ function renderNurseSurvey() {
       alert(error.message);
     }
   });
+}
+
+function bindBirthDateAge(form) {
+  const calculateAge = () => {
+    const value = form.elements.birthDate.value;
+    if (!value) {
+      form.elements.age.value = "";
+      return;
+    }
+    const birthDate = new Date(`${value}T00:00:00`);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) age -= 1;
+    form.elements.age.value = age >= 0 && age < 130 ? String(age) : "";
+  };
+  form.elements.birthDate.addEventListener("input", calculateAge);
+  calculateAge();
 }
 
 function bindNurseSurveyCalculations(form) {
