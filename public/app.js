@@ -1,5 +1,6 @@
 const app = document.querySelector("#app");
 let state = { me: null, admin: null, doctor: null, tab: "stats", selectedSurvey: null, lastDoctorKey: null, surveyClinicFilter: "all" };
+let offlineSurveyOnlineListenerBound = false;
 const ADMIN_APP_PATH = "/app-1-admin-panel";
 const DOCTOR_APP_PATH = "/app-2-doctor";
 const SURVEY_APP_PATH = "/app-3-patient-survey";
@@ -21,6 +22,7 @@ const money = (value) => Number(value || 0).toLocaleString("ru-RU");
 const fullName = (p) => [p?.lastName, p?.firstName, p?.middleName].filter(Boolean).join(" ");
 const escapeHtml = (value = "") => String(value).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[ch]);
 const surveyClinic = (survey) => survey.patient?.clinic || survey.clinic || "Без поликлиники";
+const OFFLINE_SURVEY_QUEUE_KEY = "medical-offline-nurse-surveys";
 const clinicSortKey = (value = "") => {
   const text = String(value);
   const number = text.match(/\d+/)?.[0];
@@ -717,7 +719,11 @@ function renderNurseSurvey() {
           ${input("Окружность голени, см", "calf", true, "number")}
           <div class="form-row"><label>Расчётный вес Rabito, кг</label><input name="rabitoWeightPreview" inputmode="decimal" readonly /></div>
         </section>
-        <button>Отправить анкету</button>
+        <div class="actions">
+          <button type="submit">Отправить анкету</button>
+          <button type="button" class="secondary" id="syncSurveysButton">Синхронизировать</button>
+        </div>
+        <div class="muted" id="syncSurveysStatus"></div>
         <div id="surveyResult"></div>
       </form>
     </main>
@@ -725,23 +731,105 @@ function renderNurseSurvey() {
   const form = document.querySelector("#surveyForm");
   bindNurseSurveyCalculations(form);
   bindBirthDateAge(form);
+  bindOfflineSurveySync(form);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(form));
     try {
-      const { survey } = await api("/api/nurse-surveys", { method: "POST", body: JSON.stringify(data) });
+      const { survey } = await sendNurseSurvey(data);
+      showSurveySubmitted(survey);
+      form.reset();
+      updateOfflineSurveyStatus();
+    } catch (error) {
+      saveOfflineSurvey(data);
       document.querySelector("#surveyResult").innerHTML = html`
-        <div class="notice ${survey.needsDoctor ? "danger" : "ok"}">
-          FINDRISC: ${survey.findrisc.score} (${survey.findrisc.level}). SCORE2-lite: ${survey.score2.percent}% (${survey.score2.level}).
-          Расчётный вес Rabito: ${survey.measurements.rabitoWeight || "-"} кг.
-          ${survey.needsDoctor ? "<strong>Повышенный риск: направить к врачу.</strong>" : "Повышенный риск не выявлен."}
+        <div class="notice warn">
+          Интернет недоступен или сервер не ответил. Анкета сохранена на этом устройстве и будет отправлена через кнопку синхронизации.
         </div>
       `;
       form.reset();
-    } catch (error) {
-      alert(error.message);
+      updateOfflineSurveyStatus();
     }
   });
+}
+
+function offlineSurveyQueue() {
+  try {
+    const queue = JSON.parse(localStorage.getItem(OFFLINE_SURVEY_QUEUE_KEY) || "[]");
+    return Array.isArray(queue) ? queue : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeOfflineSurveyQueue(queue) {
+  localStorage.setItem(OFFLINE_SURVEY_QUEUE_KEY, JSON.stringify(queue));
+}
+
+function saveOfflineSurvey(data) {
+  const queue = offlineSurveyQueue();
+  queue.push({ id: crypto.randomUUID(), savedAt: new Date().toISOString(), data });
+  writeOfflineSurveyQueue(queue);
+}
+
+async function sendNurseSurvey(data) {
+  return api("/api/nurse-surveys", { method: "POST", body: JSON.stringify(data) });
+}
+
+function showSurveySubmitted(survey) {
+  document.querySelector("#surveyResult").innerHTML = html`
+    <div class="notice ${survey.needsDoctor ? "danger" : "ok"}">
+      FINDRISC: ${survey.findrisc.score} (${survey.findrisc.level}). SCORE2-lite: ${survey.score2.percent}% (${survey.score2.level}).
+      Расчётный вес Rabito: ${survey.measurements.rabitoWeight || "-"} кг.
+      ${survey.needsDoctor ? "<strong>Повышенный риск: направить к врачу.</strong>" : "Повышенный риск не выявлен."}
+    </div>
+  `;
+}
+
+function updateOfflineSurveyStatus() {
+  const status = document.querySelector("#syncSurveysStatus");
+  const button = document.querySelector("#syncSurveysButton");
+  if (!status || !button) return;
+  const count = offlineSurveyQueue().length;
+  status.textContent = count ? `Ожидают синхронизации: ${count}` : "Все анкеты отправлены.";
+  button.disabled = count === 0;
+}
+
+function bindOfflineSurveySync() {
+  const button = document.querySelector("#syncSurveysButton");
+  button.addEventListener("click", syncOfflineSurveys);
+  if (!offlineSurveyOnlineListenerBound) {
+    window.addEventListener("online", syncOfflineSurveys);
+    offlineSurveyOnlineListenerBound = true;
+  }
+  updateOfflineSurveyStatus();
+}
+
+async function syncOfflineSurveys() {
+  const button = document.querySelector("#syncSurveysButton");
+  const result = document.querySelector("#surveyResult");
+  let queue = offlineSurveyQueue();
+  if (!queue.length) {
+    updateOfflineSurveyStatus();
+    return;
+  }
+  if (button) button.disabled = true;
+  const remaining = [];
+  let sent = 0;
+  for (const item of queue) {
+    try {
+      await sendNurseSurvey(item.data);
+      sent += 1;
+    } catch {
+      remaining.push(item);
+    }
+  }
+  writeOfflineSurveyQueue(remaining);
+  updateOfflineSurveyStatus();
+  if (!result) return;
+  result.innerHTML = remaining.length
+    ? `<div class="notice warn">Отправлено: ${sent}. Осталось без синхронизации: ${remaining.length}. Попробуйте еще раз, когда интернет будет стабильным.</div>`
+    : `<div class="notice ok">Синхронизация завершена. Отправлено анкет: ${sent}.</div>`;
 }
 
 function bindBirthDateAge(form) {
