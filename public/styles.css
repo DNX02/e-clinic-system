@@ -295,6 +295,24 @@ th {
   min-height: auto;
 }
 
+.recommendation-panel {
+  background: #f7faf8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: none;
+  line-height: 1.45;
+  padding: 12px;
+}
+
+.recommendation-panel.visible {
+  display: block;
+}
+
+.recommendation-panel ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
 .training-list {
   display: grid;
   gap: 10px;

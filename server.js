@@ -936,6 +936,10 @@ async function handleApi(req, res, url) {
       treatmentPlan: body.treatmentPlan || "",
       diabetesDrugs: body.diabetesDrugs || [],
       hypertensionDrugs: body.hypertensionDrugs || [],
+      lifestyleRecommendations: {
+        diabetesDiet: Array.isArray(body.lifestyleRecommendations) && body.lifestyleRecommendations.includes("diabetesDiet"),
+        physicalActivity: Array.isArray(body.lifestyleRecommendations) && body.lifestyleRecommendations.includes("physicalActivity")
+      },
       createdAt: new Date().toISOString()
     };
     db.doctorVisits.push(visit);

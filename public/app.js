@@ -30,6 +30,20 @@ const clinicSortKey = (value = "") => {
 };
 const clinicNumbers = [1, 2, 4, 7, 9, 10, 11, 12, 14, 15];
 const clinicOptions = clinicNumbers.map((number) => [`Поликлиника №${number}`, `Поликлиника №${number}`]);
+const lifestyleRecommendations = {
+  diabetesDiet: [
+    "Основа питания: овощи, фрукты, бобовые, цельные злаки и нежирные источники белка.",
+    "Ограничить свободные сахара, сладкие напитки и продукты с добавленным сахаром.",
+    "Снизить насыщенные жиры и исключать трансжиры; выбирать растительные масла, рыбу и орехи по переносимости.",
+    "Ограничить соль: для большинства взрослых цель - менее 5 г соли в сутки; контролировать размер порций и регулярность приемов пищи."
+  ],
+  physicalActivity: [
+    "Не менее 150-300 минут умеренной аэробной активности в неделю или 75-150 минут интенсивной активности, если нет противопоказаний.",
+    "Добавить упражнения для укрепления мышц 2 и более дней в неделю.",
+    "Меньше сидеть: чаще вставать, ходить, использовать лестницу, постепенно увеличивать нагрузку.",
+    "При осложнениях диабета, сердечно-сосудистых симптомах или высоком риске нагрузку подбирать индивидуально."
+  ]
+};
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {});
@@ -560,6 +574,7 @@ function renderVisitsAdmin() {
       <td>${escapeHtml(surveys[visit.surveyId] || "Пациент")}</td>
       <td>ИМТ ${visit.bmi || "-"} / АД ${visit.systolic}/${visit.diastolic} / сахар ${visit.glucose || "-"}</td>
       <td>${(visit.referrals || []).join(", ") || "-"}</td>
+      <td>${doctorLifestyleSummary(visit.lifestyleRecommendations)}</td>
       <td>${escapeHtml((visit.diabetesDrugs || []).join("; "))}</td>
       <td>${escapeHtml((visit.hypertensionDrugs || []).join("; "))}</td>
       <td>${new Date(visit.createdAt).toLocaleString("ru-RU")}</td>
@@ -570,12 +585,19 @@ function renderVisitsAdmin() {
       <h2>Действия врачей</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Врач</th><th>Пациент</th><th>ИМТ / АД</th><th>Направление</th><th>СД 2</th><th>АГ</th><th>Дата</th></tr></thead>
-          <tbody>${rows || "<tr><td colspan='7'>Пока нет записей</td></tr>"}</tbody>
+          <thead><tr><th>Врач</th><th>Пациент</th><th>ИМТ / АД</th><th>Направление</th><th>Рекомендации</th><th>СД 2</th><th>АГ</th><th>Дата</th></tr></thead>
+          <tbody>${rows || "<tr><td colspan='8'>Пока нет записей</td></tr>"}</tbody>
         </table>
       </div>
     </section>
   `;
+}
+
+function doctorLifestyleSummary(recommendations = {}) {
+  const items = [];
+  if (recommendations.diabetesDiet) items.push("Диета");
+  if (recommendations.physicalActivity) items.push("Физическая активность");
+  return items.length ? items.join(", ") : "-";
 }
 
 function renderQrAdmin() {
@@ -1489,14 +1511,27 @@ function doctorVisitForm(survey) {
       <div class="checkbox-list">${state.doctor.dictionaries.diabetesDrugs.map((item) => check("diabetesDrugs", item)).join("")}</div>
       <h3>Препараты для артериальной гипертензии</h3>
       <div class="checkbox-list">${state.doctor.dictionaries.hypertensionDrugs.map((item) => check("hypertensionDrugs", item)).join("")}</div>
+      <h3>Рекомендации пациенту</h3>
+      <div class="checkbox-list lifestyle-list">
+        ${check("lifestyleRecommendations", "Диета при сахарном диабете", "diabetesDiet")}
+        <div class="recommendation-panel" data-recommendation="diabetesDiet">
+          <strong>Диета при сахарном диабете</strong>
+          <ul>${lifestyleRecommendations.diabetesDiet.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+        </div>
+        ${check("lifestyleRecommendations", "Специальные физические упражнения", "physicalActivity")}
+        <div class="recommendation-panel" data-recommendation="physicalActivity">
+          <strong>Физическая активность</strong>
+          <ul>${lifestyleRecommendations.physicalActivity.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+        </div>
+      </div>
       <button>Сохранить осмотр</button>
       <div id="visitResult"></div>
     </form>
   `;
 }
 
-function check(name, value) {
-  return `<label><input type="checkbox" name="${name}" value="${escapeHtml(value)}" /> ${escapeHtml(value)}</label>`;
+function check(name, value, optionValue = value) {
+  return `<label><input type="checkbox" name="${name}" value="${escapeHtml(optionValue)}" /> ${escapeHtml(value)}</label>`;
 }
 
 function bindDoctorVisit() {
@@ -1510,19 +1545,33 @@ function bindDoctorVisit() {
   };
   form.elements.weight.addEventListener("input", calculateBmi);
   form.elements.height.addEventListener("input", calculateBmi);
+  form.querySelectorAll('input[name="lifestyleRecommendations"]').forEach((input) => {
+    input.addEventListener("change", updateLifestyleRecommendationPanels);
+  });
+  updateLifestyleRecommendationPanels();
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(form));
     data.referrals = new FormData(form).getAll("referrals");
     data.diabetesDrugs = new FormData(form).getAll("diabetesDrugs");
     data.hypertensionDrugs = new FormData(form).getAll("hypertensionDrugs");
+    data.lifestyleRecommendations = new FormData(form).getAll("lifestyleRecommendations");
     try {
       await api("/api/doctor/visits", { method: "POST", body: JSON.stringify(data) });
       document.querySelector("#visitResult").innerHTML = '<div class="notice ok">Осмотр сохранён и отправлен администратору.</div>';
       form.reset();
+      updateLifestyleRecommendationPanels();
     } catch (error) {
       alert(error.message);
     }
+  });
+}
+
+function updateLifestyleRecommendationPanels() {
+  document.querySelectorAll(".recommendation-panel").forEach((panel) => {
+    const key = panel.dataset.recommendation;
+    const checked = document.querySelector(`input[name="lifestyleRecommendations"][value="${key}"]`)?.checked;
+    panel.classList.toggle("visible", Boolean(checked));
   });
 }
 
