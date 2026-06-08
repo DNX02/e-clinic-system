@@ -29,7 +29,7 @@ const clinicSortKey = (value = "") => {
   const number = text.match(/\d+/)?.[0];
   return number ? String(number).padStart(4, "0") : text.toLowerCase();
 };
-const clinicNumbers = [1, 2, 4, 7, 9, 10, 11, 12, 14, 15];
+const clinicNumbers = Array.from({ length: 15 }, (_, index) => index + 1);
 const clinicOptions = clinicNumbers.map((number) => [`Поликлиника №${number}`, `Поликлиника №${number}`]);
 const lifestyleRecommendations = {
   diabetesDiet: [
