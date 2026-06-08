@@ -1,5 +1,18 @@
 const app = document.querySelector("#app");
-let state = { me: null, admin: null, doctor: null, tab: "stats", selectedSurvey: null, lastDoctorKey: null, surveyClinicFilter: "all" };
+const initialState = () => ({
+  me: null,
+  admin: null,
+  doctor: null,
+  tab: "stats",
+  selectedSurvey: null,
+  lastDoctorKey: null,
+  surveyClinicFilter: "all",
+  trainingClinicFilter: "all",
+  trainingDateFilter: "",
+  nurseTrainingClinicFilter: "all",
+  nurseTrainingDateFilter: ""
+});
+let state = initialState();
 let offlineSurveyOnlineListenerBound = false;
 const ADMIN_APP_PATH = "/app-1-admin-panel";
 const DOCTOR_APP_PATH = "/app-2-doctor";
@@ -466,7 +479,7 @@ document.addEventListener("click", async (event) => {
   if (!action) return;
   if (action === "logout") {
     await api("/api/logout", { method: "POST", body: "{}" });
-    state = { me: null, admin: null, doctor: null, tab: "stats", selectedSurvey: null, lastDoctorKey: null, surveyClinicFilter: "all" };
+    state = initialState();
     window.location.href = "/";
   }
   if (action === "admin-tab") {
@@ -673,8 +686,12 @@ function renderTrainingAdmin() {
     (acc[attempt.participantId] ||= []).push(attempt);
     return acc;
   }, {});
-  const rows = (state.admin.trainingParticipants || []).map((participant) => {
+  const participants = (state.admin.trainingParticipants || []).filter((participant) =>
+    trainingParticipantMatchesFilters(participant, attemptsByParticipant[participant.id] || [], "training")
+  );
+  const rows = participants.map((participant) => {
     const attempts = attemptsByParticipant[participant.id] || [];
+    const visibleAttempts = filterAttemptsByDate(attempts, state.trainingDateFilter);
     const pre = attempts.find((attempt) => attempt.type === "pre");
     const tasks = attempts.filter((attempt) => attempt.type === "task");
     const postSummary = postTrainingSummary(tasks);
@@ -687,7 +704,7 @@ function renderTrainingAdmin() {
         <td>${postSummary.label}</td>
         <td><button class="danger" data-action="delete-training-participant" data-id="${participant.id}" ${state.admin.canEdit ? "" : "disabled"}>Удалить</button></td>
       </tr>
-      ${attempts.length ? `<tr><td colspan="6">${trainingParticipantAdminDetails(attempts)}</td></tr>` : ""}
+      ${visibleAttempts.length ? `<tr><td colspan="6">${trainingParticipantAdminDetails(visibleAttempts)}</td></tr>` : ""}
     `;
   }).join("");
   return html`
@@ -703,6 +720,8 @@ function renderTrainingAdmin() {
       </form>
       <section class="panel">
         <h2>Результаты обучения</h2>
+        ${adminTrainingFilters("training")}
+        <div class="muted">Показано участников: ${participants.length} из ${(state.admin.trainingParticipants || []).length}</div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>ФИО</th><th>Поликлиника</th><th>Специальность</th><th>До обучения</th><th>Тесты после обучения</th><th></th></tr></thead>
@@ -712,6 +731,46 @@ function renderTrainingAdmin() {
       </section>
     </section>
   `;
+}
+
+function adminTrainingFilters(kind) {
+  const clinicValue = kind === "training" ? state.trainingClinicFilter : state.nurseTrainingClinicFilter;
+  const dateValue = kind === "training" ? state.trainingDateFilter : state.nurseTrainingDateFilter;
+  return html`
+    <div class="filter-bar">
+      <div class="form-row">
+        <label>Поликлиника</label>
+        <select id="${kind}ClinicFilter">
+          <option value="all"${clinicValue === "all" ? " selected" : ""}>Все поликлиники</option>
+          ${clinicOptions.map(([value, text]) => `<option value="${escapeHtml(value)}"${clinicValue === value ? " selected" : ""}>${escapeHtml(text)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Дата сдачи теста</label>
+        <input id="${kind}DateFilter" type="date" value="${escapeHtml(dateValue)}" />
+      </div>
+    </div>
+  `;
+}
+
+function attemptDate(attempt) {
+  return attempt?.createdAt ? new Date(attempt.createdAt).toISOString().slice(0, 10) : "";
+}
+
+function attemptDateLabel(attempt) {
+  return attempt?.createdAt ? new Date(attempt.createdAt).toLocaleString("ru-RU") : "дата не указана";
+}
+
+function filterAttemptsByDate(attempts, date) {
+  return date ? attempts.filter((attempt) => attemptDate(attempt) === date) : attempts;
+}
+
+function trainingParticipantMatchesFilters(participant, attempts, kind) {
+  const clinicFilter = kind === "training" ? state.trainingClinicFilter : state.nurseTrainingClinicFilter;
+  const dateFilter = kind === "training" ? state.trainingDateFilter : state.nurseTrainingDateFilter;
+  const clinicMatches = clinicFilter === "all" || participant.clinic === clinicFilter;
+  const dateMatches = !dateFilter || attempts.some((attempt) => attemptDate(attempt) === dateFilter);
+  return clinicMatches && dateMatches;
 }
 
 function trainingParticipantAdminDetails(attempts) {
@@ -751,7 +810,7 @@ function trainingAttemptDetails(attempt, title = "Тест") {
   }).join("");
   return html`
     <details class="answer-details">
-      <summary>${title}: показать ответы врача (${attempt.correct}/${attempt.total}, ${attempt.percent}%)</summary>
+      <summary>${title}: ${attemptDateLabel(attempt)} - показать ответы врача (${attempt.correct}/${attempt.total}, ${attempt.percent}%)</summary>
       <div class="table-wrap">
         <table>
           <thead><tr><th>№</th><th>Вопрос</th><th>Ответ врача</th><th>Правильный ответ</th><th>Оценка</th></tr></thead>
@@ -772,7 +831,7 @@ function trainingTaskAdminDetails(attempt) {
   }).join("");
   return html`
     <details class="answer-details">
-      <summary>${escapeHtml(attempt.instrument || "")}: ${escapeHtml(attempt.title || "")} - ${attempt.correct ?? 0}/${attempt.total || attempt.maxScore} (${attempt.percent || 0}%)</summary>
+      <summary>${escapeHtml(attempt.instrument || "")}: ${escapeHtml(attempt.title || "")} - ${attemptDateLabel(attempt)} - ${attempt.correct ?? 0}/${attempt.total || attempt.maxScore} (${attempt.percent || 0}%)</summary>
       <div class="notice warn">
         <strong>Критерии:</strong>
         <ul>${criteria}</ul>
@@ -798,8 +857,12 @@ function renderNurseTrainingAdmin() {
     (acc[attempt.participantId] ||= []).push(attempt);
     return acc;
   }, {});
-  const rows = (state.admin.nurseTrainingParticipants || []).map((participant) => {
+  const participants = (state.admin.nurseTrainingParticipants || []).filter((participant) =>
+    trainingParticipantMatchesFilters(participant, attemptsByParticipant[participant.id] || [], "nurseTraining")
+  );
+  const rows = participants.map((participant) => {
     const attempts = attemptsByParticipant[participant.id] || [];
+    const visibleAttempts = filterAttemptsByDate(attempts, state.nurseTrainingDateFilter);
     const pre = attempts.find((attempt) => attempt.type === "pre");
     const post = attempts.find((attempt) => attempt.type === "post");
     return html`
@@ -811,7 +874,7 @@ function renderNurseTrainingAdmin() {
         <td>${post ? `${post.percent}% ${post.passed ? '<span class="pill ok">Пройден</span>' : '<span class="pill danger">Не пройден</span>'}` : "<span class='pill warn'>Не сдан</span>"}</td>
         <td><button class="danger" data-action="delete-nurse-training-participant" data-id="${participant.id}" ${state.admin.canEdit ? "" : "disabled"}>Удалить</button></td>
       </tr>
-      ${attempts.length ? `<tr><td colspan="6">${nurseTrainingAttemptDetails(attempts)}</td></tr>` : ""}
+      ${visibleAttempts.length ? `<tr><td colspan="6">${nurseTrainingAttemptDetails(visibleAttempts)}</td></tr>` : ""}
     `;
   }).join("");
   return html`
@@ -826,6 +889,8 @@ function renderNurseTrainingAdmin() {
       </form>
       <section class="panel">
         <h2>Результаты №5</h2>
+        ${adminTrainingFilters("nurseTraining")}
+        <div class="muted">Показано участников: ${participants.length} из ${(state.admin.nurseTrainingParticipants || []).length}</div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>ФИО</th><th>Поликлиника</th><th>Должность</th><th>До обучения</th><th>После обучения</th><th></th></tr></thead>
@@ -849,7 +914,7 @@ function nurseTrainingAttemptDetails(attempts) {
     `).join("");
     return html`
       <details class="answer-details">
-        <summary>${escapeHtml(attempt.title)}: ${attempt.correct}/${attempt.total} (${attempt.percent}%) ${attempt.type === "post" ? (attempt.passed ? "Пройден" : "Не пройден") : ""}</summary>
+        <summary>${escapeHtml(attempt.title)}: ${attemptDateLabel(attempt)} - ${attempt.correct}/${attempt.total} (${attempt.percent}%) ${attempt.type === "post" ? (attempt.passed ? "Пройден" : "Не пройден") : ""}</summary>
         <div class="table-wrap"><table><thead><tr><th>Вопрос</th><th>Ответ</th><th>Правильный ответ</th><th>Оценка</th></tr></thead><tbody>${rows}</tbody></table></div>
       </details>
     `;
@@ -1023,6 +1088,7 @@ function renderQrAdmin() {
 }
 
 function bindAdminForms() {
+  bindAdminTrainingFilters();
   const form = document.querySelector("#doctorForm");
   if (form) form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -1074,6 +1140,29 @@ function bindAdminForms() {
         alert(error.message);
       }
     });
+  });
+}
+
+function bindAdminTrainingFilters() {
+  const trainingClinic = document.querySelector("#trainingClinicFilter");
+  const trainingDate = document.querySelector("#trainingDateFilter");
+  const nurseClinic = document.querySelector("#nurseTrainingClinicFilter");
+  const nurseDate = document.querySelector("#nurseTrainingDateFilter");
+  trainingClinic?.addEventListener("change", (event) => {
+    state.trainingClinicFilter = event.target.value;
+    renderAdmin();
+  });
+  trainingDate?.addEventListener("change", (event) => {
+    state.trainingDateFilter = event.target.value;
+    renderAdmin();
+  });
+  nurseClinic?.addEventListener("change", (event) => {
+    state.nurseTrainingClinicFilter = event.target.value;
+    renderAdmin();
+  });
+  nurseDate?.addEventListener("change", (event) => {
+    state.nurseTrainingDateFilter = event.target.value;
+    renderAdmin();
   });
 }
 
