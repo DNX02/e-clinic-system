@@ -9,8 +9,10 @@ const initialState = () => ({
   surveyClinicFilter: "all",
   trainingClinicFilter: "all",
   trainingDateFilter: "",
+  trainingRegistrationDateFilter: "",
   nurseTrainingClinicFilter: "all",
-  nurseTrainingDateFilter: ""
+  nurseTrainingDateFilter: "",
+  nurseTrainingRegistrationDateFilter: ""
 });
 let state = initialState();
 let offlineSurveyOnlineListenerBound = false;
@@ -722,6 +724,7 @@ function renderTrainingAdmin() {
         <h2>Результаты обучения</h2>
         ${adminTrainingFilters("training")}
         <div class="muted">Показано участников: ${participants.length} из ${(state.admin.trainingParticipants || []).length}</div>
+        ${trainingRegistrationSummary(participants, "врачей")}
         <div class="table-wrap">
           <table>
             <thead><tr><th>ФИО</th><th>Поликлиника</th><th>Специальность</th><th>До обучения</th><th>Тесты после обучения</th><th></th></tr></thead>
@@ -736,8 +739,9 @@ function renderTrainingAdmin() {
 function adminTrainingFilters(kind) {
   const clinicValue = kind === "training" ? state.trainingClinicFilter : state.nurseTrainingClinicFilter;
   const dateValue = kind === "training" ? state.trainingDateFilter : state.nurseTrainingDateFilter;
+  const registrationDateValue = kind === "training" ? state.trainingRegistrationDateFilter : state.nurseTrainingRegistrationDateFilter;
   return html`
-    <div class="filter-bar">
+    <div class="grid three" style="margin-bottom:14px">
       <div class="form-row">
         <label>Поликлиника</label>
         <select id="${kind}ClinicFilter">
@@ -748,6 +752,10 @@ function adminTrainingFilters(kind) {
       <div class="form-row">
         <label>Дата сдачи теста</label>
         <input id="${kind}DateFilter" type="date" value="${escapeHtml(dateValue)}" />
+      </div>
+      <div class="form-row">
+        <label>Дата регистрации</label>
+        <input id="${kind}RegistrationDateFilter" type="date" value="${escapeHtml(registrationDateValue)}" />
       </div>
     </div>
   `;
@@ -761,6 +769,14 @@ function attemptDateLabel(attempt) {
   return attempt?.createdAt ? new Date(attempt.createdAt).toLocaleString("ru-RU") : "дата не указана";
 }
 
+function participantRegistrationDate(participant) {
+  return participant?.createdAt ? new Date(participant.createdAt).toISOString().slice(0, 10) : "";
+}
+
+function participantRegistrationDateLabel(date) {
+  return date ? new Date(`${date}T00:00:00`).toLocaleDateString("ru-RU") : "Дата не указана";
+}
+
 function filterAttemptsByDate(attempts, date) {
   return date ? attempts.filter((attempt) => attemptDate(attempt) === date) : attempts;
 }
@@ -768,9 +784,43 @@ function filterAttemptsByDate(attempts, date) {
 function trainingParticipantMatchesFilters(participant, attempts, kind) {
   const clinicFilter = kind === "training" ? state.trainingClinicFilter : state.nurseTrainingClinicFilter;
   const dateFilter = kind === "training" ? state.trainingDateFilter : state.nurseTrainingDateFilter;
+  const registrationDateFilter = kind === "training" ? state.trainingRegistrationDateFilter : state.nurseTrainingRegistrationDateFilter;
   const clinicMatches = clinicFilter === "all" || participant.clinic === clinicFilter;
   const dateMatches = !dateFilter || attempts.some((attempt) => attemptDate(attempt) === dateFilter);
-  return clinicMatches && dateMatches;
+  const registrationDateMatches = !registrationDateFilter || participantRegistrationDate(participant) === registrationDateFilter;
+  return clinicMatches && dateMatches && registrationDateMatches;
+}
+
+function countBy(items, keyFn) {
+  return items.reduce((acc, item) => {
+    const key = keyFn(item) || "Не указано";
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+function summaryRows(data, formatKey = (key) => key) {
+  return Object.entries(data)
+    .sort(([a], [b]) => clinicSortKey(a).localeCompare(clinicSortKey(b), "ru"))
+    .map(([key, count]) => `<tr><td>${escapeHtml(formatKey(key))}</td><td>${count}</td></tr>`)
+    .join("");
+}
+
+function trainingRegistrationSummary(participants, noun) {
+  const byDate = countBy(participants, participantRegistrationDate);
+  const byClinic = countBy(participants, (participant) => participant.clinic || "Не указано");
+  return html`
+    <section class="grid two" style="margin:14px 0">
+      <div class="card">
+        <h3>Зарегистрировано по дням</h3>
+        <div class="table-wrap"><table><tbody>${summaryRows(byDate, participantRegistrationDateLabel) || `<tr><td>Нет ${noun}</td><td>0</td></tr>`}</tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Участники по поликлиникам</h3>
+        <div class="table-wrap"><table><tbody>${summaryRows(byClinic) || `<tr><td>Нет ${noun}</td><td>0</td></tr>`}</tbody></table></div>
+      </div>
+    </section>
+  `;
 }
 
 function trainingParticipantAdminDetails(attempts) {
@@ -891,6 +941,7 @@ function renderNurseTrainingAdmin() {
         <h2>Результаты №5</h2>
         ${adminTrainingFilters("nurseTraining")}
         <div class="muted">Показано участников: ${participants.length} из ${(state.admin.nurseTrainingParticipants || []).length}</div>
+        ${trainingRegistrationSummary(participants, "медсестер")}
         <div class="table-wrap">
           <table>
             <thead><tr><th>ФИО</th><th>Поликлиника</th><th>Должность</th><th>До обучения</th><th>После обучения</th><th></th></tr></thead>
@@ -1146,8 +1197,10 @@ function bindAdminForms() {
 function bindAdminTrainingFilters() {
   const trainingClinic = document.querySelector("#trainingClinicFilter");
   const trainingDate = document.querySelector("#trainingDateFilter");
+  const trainingRegistrationDate = document.querySelector("#trainingRegistrationDateFilter");
   const nurseClinic = document.querySelector("#nurseTrainingClinicFilter");
   const nurseDate = document.querySelector("#nurseTrainingDateFilter");
+  const nurseRegistrationDate = document.querySelector("#nurseTrainingRegistrationDateFilter");
   trainingClinic?.addEventListener("change", (event) => {
     state.trainingClinicFilter = event.target.value;
     renderAdmin();
@@ -1156,12 +1209,20 @@ function bindAdminTrainingFilters() {
     state.trainingDateFilter = event.target.value;
     renderAdmin();
   });
+  trainingRegistrationDate?.addEventListener("change", (event) => {
+    state.trainingRegistrationDateFilter = event.target.value;
+    renderAdmin();
+  });
   nurseClinic?.addEventListener("change", (event) => {
     state.nurseTrainingClinicFilter = event.target.value;
     renderAdmin();
   });
   nurseDate?.addEventListener("change", (event) => {
     state.nurseTrainingDateFilter = event.target.value;
+    renderAdmin();
+  });
+  nurseRegistrationDate?.addEventListener("change", (event) => {
+    state.nurseTrainingRegistrationDateFilter = event.target.value;
     renderAdmin();
   });
 }

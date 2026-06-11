@@ -512,6 +512,7 @@ function publicParticipant(participant) {
     fullName: participant.fullName,
     clinic: participant.clinic,
     specialty: participant.specialty,
+    createdAt: participant.createdAt || null,
     preCompletedAt: participant.preCompletedAt || null,
     postCompletedAt: participant.postCompletedAt || null
   };
@@ -594,6 +595,7 @@ function publicNurseParticipant(participant) {
     fullName: participant.fullName,
     clinic: participant.clinic,
     position: participant.position || "",
+    createdAt: participant.createdAt || null,
     preCompletedAt: participant.preCompletedAt || null,
     postCompletedAt: participant.postCompletedAt || null
   };
