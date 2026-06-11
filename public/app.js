@@ -7,10 +7,10 @@ const initialState = () => ({
   selectedSurvey: null,
   lastDoctorKey: null,
   surveyClinicFilter: "all",
-  trainingClinicFilter: "all",
+  trainingClinicFilter: ["all"],
   trainingDateFilter: "",
   trainingRegistrationDateFilter: "",
-  nurseTrainingClinicFilter: "all",
+  nurseTrainingClinicFilter: ["all"],
   nurseTrainingDateFilter: "",
   nurseTrainingRegistrationDateFilter: ""
 });
@@ -740,14 +740,16 @@ function adminTrainingFilters(kind) {
   const clinicValue = kind === "training" ? state.trainingClinicFilter : state.nurseTrainingClinicFilter;
   const dateValue = kind === "training" ? state.trainingDateFilter : state.nurseTrainingDateFilter;
   const registrationDateValue = kind === "training" ? state.trainingRegistrationDateFilter : state.nurseTrainingRegistrationDateFilter;
+  const selectedClinics = Array.isArray(clinicValue) ? clinicValue : [clinicValue || "all"];
   return html`
     <div class="grid three" style="margin-bottom:14px">
       <div class="form-row">
         <label>Поликлиника</label>
-        <select id="${kind}ClinicFilter">
-          <option value="all"${clinicValue === "all" ? " selected" : ""}>Все поликлиники</option>
-          ${clinicOptions.map(([value, text]) => `<option value="${escapeHtml(value)}"${clinicValue === value ? " selected" : ""}>${escapeHtml(text)}</option>`).join("")}
+        <select id="${kind}ClinicFilter" multiple size="6">
+          <option value="all"${selectedClinics.includes("all") ? " selected" : ""}>Все поликлиники</option>
+          ${clinicOptions.map(([value, text]) => `<option value="${escapeHtml(value)}"${selectedClinics.includes(value) ? " selected" : ""}>${escapeHtml(text)}</option>`).join("")}
         </select>
+        <div class="muted">Можно выбрать несколько: удерживайте Ctrl и нажимайте нужные поликлиники.</div>
       </div>
       <div class="form-row">
         <label>Дата сдачи теста</label>
@@ -785,7 +787,8 @@ function trainingParticipantMatchesFilters(participant, attempts, kind) {
   const clinicFilter = kind === "training" ? state.trainingClinicFilter : state.nurseTrainingClinicFilter;
   const dateFilter = kind === "training" ? state.trainingDateFilter : state.nurseTrainingDateFilter;
   const registrationDateFilter = kind === "training" ? state.trainingRegistrationDateFilter : state.nurseTrainingRegistrationDateFilter;
-  const clinicMatches = clinicFilter === "all" || participant.clinic === clinicFilter;
+  const selectedClinics = Array.isArray(clinicFilter) ? clinicFilter : [clinicFilter || "all"];
+  const clinicMatches = selectedClinics.length === 0 || selectedClinics.includes("all") || selectedClinics.includes(participant.clinic);
   const dateMatches = !dateFilter || attempts.some((attempt) => attemptDate(attempt) === dateFilter);
   const registrationDateMatches = !registrationDateFilter || participantRegistrationDate(participant) === registrationDateFilter;
   return clinicMatches && dateMatches && registrationDateMatches;
@@ -1201,8 +1204,10 @@ function bindAdminTrainingFilters() {
   const nurseClinic = document.querySelector("#nurseTrainingClinicFilter");
   const nurseDate = document.querySelector("#nurseTrainingDateFilter");
   const nurseRegistrationDate = document.querySelector("#nurseTrainingRegistrationDateFilter");
+  const selectedFilterValues = (select) => Array.from(select.selectedOptions).map((option) => option.value);
   trainingClinic?.addEventListener("change", (event) => {
-    state.trainingClinicFilter = event.target.value;
+    const values = selectedFilterValues(event.target);
+    state.trainingClinicFilter = values.includes("all") || values.length === 0 ? ["all"] : values;
     renderAdmin();
   });
   trainingDate?.addEventListener("change", (event) => {
@@ -1214,7 +1219,8 @@ function bindAdminTrainingFilters() {
     renderAdmin();
   });
   nurseClinic?.addEventListener("change", (event) => {
-    state.nurseTrainingClinicFilter = event.target.value;
+    const values = selectedFilterValues(event.target);
+    state.nurseTrainingClinicFilter = values.includes("all") || values.length === 0 ? ["all"] : values;
     renderAdmin();
   });
   nurseDate?.addEventListener("change", (event) => {
