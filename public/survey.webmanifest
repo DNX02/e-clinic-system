@@ -1,0 +1,19 @@
+{
+  "name": "Опросник",
+  "short_name": "Опросник",
+  "description": "Опросник медсестры для заполнения анкет пациентов",
+  "start_url": "/app-3-patient-survey",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f7f5",
+  "theme_color": "#116a5b",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/survey-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

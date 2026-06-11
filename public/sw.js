@@ -1,4 +1,4 @@
-const CACHE_NAME = "medical-mobile-v27";
+const CACHE_NAME = "medical-mobile-v28";
 const SHELL = [
   "/app-1-admin-panel",
   "/app-2-doctor",
@@ -8,11 +8,13 @@ const SHELL = [
   "/training.html",
   "/nurse-training.html",
   "/styles.css",
-  "/app.js?v=20260612c",
+  "/app.js?v=20260612d",
   "/admin.webmanifest",
   "/doctor.webmanifest",
+  "/survey.webmanifest",
   "/icons/admin-icon.svg",
-  "/icons/doctor-icon.svg"
+  "/icons/doctor-icon.svg",
+  "/icons/survey-icon.svg"
 ];
 
 self.addEventListener("install", (event) => {
