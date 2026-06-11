@@ -506,6 +506,20 @@ function calculateScore2Lite(input) {
   return { percent, level, highRisk: percent >= 10, note: "Упрощенная оценка без холестерина, не заменяет клиническую шкалу SCORE2." };
 }
 
+function referralReasons(input, findrisc, score2) {
+  const reasons = [];
+  const systolic = Number(input.systolic || 0);
+  const score2Factors = [];
+  if (Number(input.age || 0) >= 50) score2Factors.push("возраст");
+  if (input.sex === "male") score2Factors.push("мужской пол");
+  if (input.smoker === "yes") score2Factors.push("курение");
+  if (systolic >= 140) score2Factors.push("повышенное САД");
+  if (findrisc.highRisk) reasons.push(`FINDRISC: ${findrisc.score} баллов (${findrisc.level})`);
+  if (score2.highRisk) reasons.push(`Сердечно-сосудистый риск: ${score2.percent}% (${score2.level})${score2Factors.length ? `; факторы: ${score2Factors.join(", ")}` : ""}`);
+  if (systolic >= 140) reasons.push(`Систолическое АД: ${systolic} мм рт.ст.`);
+  return reasons;
+}
+
 function publicParticipant(participant) {
   return {
     id: participant.id,
@@ -870,6 +884,7 @@ async function handleApi(req, res, url) {
     const findrisc = calculateFindrisc(body);
     const rabitoWeight = calculateRabito(body);
     const score2 = calculateScore2Lite(body);
+    const reasons = referralReasons(body, findrisc, score2);
     const survey = {
       id: crypto.randomUUID(),
       patient: {
@@ -897,7 +912,8 @@ async function handleApi(req, res, url) {
       answers: body,
       findrisc,
       score2,
-      needsDoctor: findrisc.highRisk || score2.highRisk || Number(body.systolic || 0) >= 140,
+      referralReasons: reasons,
+      needsDoctor: reasons.length > 0,
       createdAt: new Date().toISOString()
     };
     db.nurseSurveys.push(survey);

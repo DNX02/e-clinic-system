@@ -674,7 +674,7 @@ function renderStatsAdmin() {
       <div class="card metric">№5 после обучения прошли<strong>${money(state.admin.nurseTrainingStats?.postPassed || 0)}</strong></div>
       <div class="card metric">Нужно к врачу<strong>${money(s.needsDoctor)} / ${s.needsDoctorPercent}%</strong></div>
       <div class="card metric">FINDRISC повышен<strong>${money(s.highFindrisc)} / ${s.highFindriscPercent}%</strong></div>
-      <div class="card metric">SCORE2-lite высок<strong>${money(s.highScore2)} / ${s.highScore2Percent}%</strong></div>
+      <div class="card metric">Сердечно-сосудистый риск высок<strong>${money(s.highScore2)} / ${s.highScore2Percent}%</strong></div>
     </section>
     <section class="grid two" style="margin-top:16px">
       ${drugStats("Препараты СД 2 типа", state.admin.drugStats.diabetesDrugCounts)}
@@ -1039,7 +1039,7 @@ function renderSurveyTable(surveys) {
       <td>${survey.findrisc.score} - ${survey.findrisc.level}</td>
       <td>${survey.score2.percent}% - ${survey.score2.level}</td>
       <td>${survey.measurements.rabitoWeight || "-"} кг</td>
-      <td>${survey.needsDoctor ? '<span class="pill danger">К врачу</span>' : '<span class="pill ok">Обычный риск</span>'}</td>
+      <td>${survey.needsDoctor ? `<span class="pill danger">К врачу</span><div class="muted">${escapeHtml(referralReasonText(survey))}</div>` : '<span class="pill ok">Обычный риск</span>'}</td>
       <td>${new Date(survey.createdAt).toLocaleString("ru-RU")}</td>
     </tr>
   `).join("");
@@ -1055,12 +1055,16 @@ function renderSurveyTable(surveys) {
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Пациент</th><th>Дата рождения</th><th>АД</th><th>FINDRISC</th><th>SCORE2-lite</th><th>Rabito</th><th>Статус</th><th>Дата</th></tr></thead>
+          <thead><tr><th>Пациент</th><th>Дата рождения</th><th>АД</th><th>FINDRISC</th><th>Сердечно-сосудистый риск</th><th>Rabito</th><th>Статус</th><th>Дата</th></tr></thead>
           <tbody>${rows || "<tr><td colspan='8'>Пока нет анкет</td></tr>"}</tbody>
         </table>
       </div>
     </section>
   `;
+}
+
+function referralReasonText(survey) {
+  return (survey.referralReasons || []).join("; ") || "Повышенный риск";
 }
 
 function renderVisitsAdmin() {
@@ -1334,11 +1338,12 @@ async function sendNurseSurvey(data) {
 }
 
 function showSurveySubmitted(survey) {
+  const reasons = ((survey.referralReasons || []).length ? survey.referralReasons : ["Повышенный риск"]).map((reason) => `<li>${escapeHtml(reason)}</li>`).join("");
   document.querySelector("#surveyResult").innerHTML = html`
     <div class="notice ${survey.needsDoctor ? "danger" : "ok"}">
-      FINDRISC: ${survey.findrisc.score} (${survey.findrisc.level}). SCORE2-lite: ${survey.score2.percent}% (${survey.score2.level}).
+      FINDRISC: ${survey.findrisc.score} (${survey.findrisc.level}). Сердечно-сосудистый риск: ${survey.score2.percent}% (${survey.score2.level}).
       Расчётный вес Rabito: ${survey.measurements.rabitoWeight || "-"} кг.
-      ${survey.needsDoctor ? "<strong>Повышенный риск: направить к врачу.</strong>" : "Повышенный риск не выявлен."}
+      ${survey.needsDoctor ? `<strong>Направить к врачу.</strong><div>Причина:</div><ul>${reasons}</ul>` : "Повышенный риск не выявлен."}
     </div>
   `;
 }
