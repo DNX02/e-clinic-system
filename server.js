@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,9 @@ const DOCTOR_APP_PATH = "/app-2-doctor";
 const SURVEY_APP_PATH = "/app-3-patient-survey";
 const TRAINING_APP_PATH = "/app-4-doctor-knowledge";
 const NURSE_TRAINING_APP_PATH = "/app-5-nurse-knowledge";
+let dbCache = null;
+let dbLoadPromise = null;
+let dbWritePromise = Promise.resolve();
 
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -368,20 +371,37 @@ function verifyPassword(password, stored) {
 
 async function readDb() {
   await ensureDb();
-  const db = JSON.parse(await readFile(dbPath, "utf8"));
-  let changed = false;
-  for (const key of ["trainingParticipants", "trainingAttempts", "nurseTrainingParticipants", "nurseTrainingAttempts"]) {
-    if (!Array.isArray(db[key])) {
-      db[key] = [];
-      changed = true;
-    }
+  if (dbCache) return dbCache;
+  if (!dbLoadPromise) {
+    dbLoadPromise = (async () => {
+      const db = JSON.parse(await readFile(dbPath, "utf8"));
+      let changed = false;
+      for (const key of ["trainingParticipants", "trainingAttempts", "nurseTrainingParticipants", "nurseTrainingAttempts"]) {
+        if (!Array.isArray(db[key])) {
+          db[key] = [];
+          changed = true;
+        }
+      }
+      dbCache = db;
+      if (changed) await writeDb(db);
+      return dbCache;
+    })().finally(() => {
+      dbLoadPromise = null;
+    });
   }
-  if (changed) await writeDb(db);
-  return db;
+  return dbLoadPromise;
 }
 
 async function writeDb(db) {
-  await writeFile(dbPath, JSON.stringify(db, null, 2), "utf8");
+  dbCache = db;
+  const body = JSON.stringify(db, null, 2);
+  const tmpPath = `${dbPath}.${process.pid}.${Date.now()}.tmp`;
+  const writeTask = dbWritePromise.catch(() => {}).then(async () => {
+    await writeFile(tmpPath, body, "utf8");
+    await rename(tmpPath, dbPath);
+  });
+  dbWritePromise = writeTask;
+  await writeTask;
 }
 
 function send(res, status, payload, headers = {}) {
