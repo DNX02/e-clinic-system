@@ -39,6 +39,9 @@ const escapeHtml = (value = "") => String(value).replace(/[&<>"']/g, (ch) => ({ 
 const surveyClinic = (survey) => survey.patient?.clinic || survey.clinic || "Без поликлиники";
 const OFFLINE_SURVEY_QUEUE_KEY = "medical-offline-nurse-surveys";
 const TEST_LANGUAGE_KEY = "medical-training-language";
+const SURVEY_LANGUAGE_KEY = "medical-survey-language";
+let nurseTrainingLanguagePromptShown = false;
+let surveyLanguagePromptShown = false;
 const clinicSortKey = (value = "") => {
   const text = String(value);
   const number = text.match(/\d+/)?.[0];
@@ -61,6 +64,89 @@ const lifestyleRecommendations = {
   ]
 };
 const TAJIK_TEXT = {
+  "Русский": "Русӣ",
+  "Тоҷикӣ": "Тоҷикӣ",
+  "Язык": "Забон",
+  "Выберите язык": "Забонро интихоб кунед",
+  "Продолжить": "Идома додан",
+  "Опросник медсестры": "Пурсишномаи ҳамшира",
+  "Паспортная часть": "Қисми шиносномавӣ",
+  "Фамилия": "Насаб",
+  "Имя": "Ном",
+  "Отчество": "Номи падар",
+  "Дата рождения": "Санаи таваллуд",
+  "Пол": "Ҷинс",
+  "Женский": "Зан",
+  "Мужской": "Мард",
+  "Возраст": "Синну сол",
+  "Телефон": "Телефон",
+  "Адрес": "Суроға",
+  "Поликлиника пациента": "Поликлиникаи бемор",
+  "Рост, см": "Қад, см",
+  "ИМТ": "ИМТ",
+  "Физическая активность 30 минут в день": "Фаъолияти ҷисмонӣ 30 дақиқа дар рӯз",
+  "Да": "Ҳа",
+  "Нет": "Не",
+  "Овощи/фрукты ежедневно": "Сабзавот/мева ҳар рӯз",
+  "Принимал препараты от давления": "Доруҳои фишорро қабул мекард",
+  "Когда-либо был высокий сахар": "Ягон вақт қанди баланд дошт",
+  "Диабет у родственников": "Диабет дар хешовандон",
+  "Да, 2 линия": "Ҳа, хешовандони дараҷаи 2",
+  "Да, 1 линия": "Ҳа, хешовандони дараҷаи 1",
+  "Курение": "Тамокукашӣ",
+  "Систолическое АД": "Фишори систоликӣ",
+  "Диастолическое АД": "Фишори диастоликӣ",
+  "Сердечно-сосудистый риск": "Хавфи дилу раг",
+  "Формула Rabito": "Формулаи Rabito",
+  "Окружность плеча, см": "Даври бозу, см",
+  "Окружность живота/талия, см": "Даври шикам/миён, см",
+  "Окружность голени, см": "Даври соқ, см",
+  "Расчётный вес Rabito, кг": "Вазни ҳисобии Rabito, кг",
+  "Отправить анкету": "Фиристодани анкета",
+  "Синхронизировать": "Ҳамоҳангсозӣ",
+  "Интернет недоступен или сервер не ответил. Анкета сохранена на этом устройстве и будет отправлена через кнопку синхронизации.": "Интернет дастрас нест ё сервер ҷавоб надод. Анкета дар ин дастгоҳ нигоҳ дошта шуд ва тавассути тугмаи ҳамоҳангсозӣ фиристода мешавад.",
+  "Повышенный риск": "Хавфи баланд",
+  "Слегка повышенный": "Каме баланд",
+  "Низкий": "Паст",
+  "Умеренный": "Миёна",
+  "Высокий": "Баланд",
+  "Очень высокий": "Хеле баланд",
+  "баллов": "хол",
+  "факторы": "омилҳо",
+  "возраст": "синну сол",
+  "мужской пол": "ҷинси мард",
+  "курение": "тамокукашӣ",
+  "повышенное САД": "фишори систоликии баланд",
+  "Систолическое АД": "Фишори систоликӣ",
+  "мм рт.ст.": "мм сут. сим.",
+  "Направить к врачу.": "Ба духтур равона карда шавад.",
+  "Причина": "Сабаб",
+  "Повышенный риск не выявлен.": "Хавфи баланд муайян нашуд.",
+  "Ожидают синхронизации": "Интизори ҳамоҳангсозӣ",
+  "Все анкеты отправлены.": "Ҳама анкетаҳо фиристода шуданд.",
+  "Отправлено": "Фиристода шуд",
+  "Осталось без синхронизации": "Бе ҳамоҳангсозӣ боқӣ монд",
+  "Попробуйте еще раз, когда интернет будет стабильным.": "Вақте интернет устувор мешавад, боз кӯшиш кунед.",
+  "Синхронизация завершена. Отправлено анкет": "Ҳамоҳангсозӣ анҷом ёфт. Анкетаҳои фиристодашуда",
+  "№5 Тесты медсестер": "№5 Тестҳои ҳамшираҳо",
+  "Найдите свое имя. Сначала пройдите тест до обучения, после семинара - тест после обучения. Порог 70% действует только для теста после обучения.": "Ному насаби худро ёбед. Аввал тестро пеш аз омӯзиш супоред, баъди семинар тестро баъди омӯзиш супоред. Ҳадди 70% танҳо барои тест баъди омӯзиш амал мекунад.",
+  "Введите фамилию или имя": "Насаб ё номро ворид кунед",
+  "Администратор еще не зарегистрировал медсестер.": "Маъмур ҳоло ҳамшираҳоро сабт накардааст.",
+  "Участник не найден": "Иштирокчӣ ёфт нашуд",
+  "Медсестра": "Ҳамшира",
+  "До обучения": "Пеш аз омӯзиш",
+  "После обучения": "Баъди омӯзиш",
+  "не сдан": "супорида нашудааст",
+  "Открыть": "Кушодан",
+  "К списку": "Ба рӯйхат",
+  "Пройден": "Супорида шуд",
+  "Не пройден": "Супорида нашуд",
+  "Этот тест уже сдан": "Ин тест аллакай супорида шудааст",
+  "Для прохождения нужно набрать 70% или больше.": "Барои гузаштан 70% ё бештар гирифтан лозим аст.",
+  "Порог прохождения для теста до обучения не применяется.": "Барои тести пеш аз омӯзиш ҳадди гузариш истифода намешавад.",
+  "Ваш результат": "Натиҷаи шумо",
+  "Тест пройден.": "Тест супорида шуд.",
+  "Тест не пройден. Нужно 70% и выше.": "Тест супорида нашуд. 70% ва бештар лозим аст.",
   "Выберите правильный вариант": "Ҷавоби дурустро интихоб кунед",
   "Тест до обучения": "Тест пеш аз омӯзиш",
   "Тест после обучения": "Тест баъди омӯзиш",
@@ -419,14 +505,36 @@ function translateTestText(value) {
   return TAJIK_TEXT[value] || value;
 }
 
+function surveyLanguage() {
+  return localStorage.getItem(SURVEY_LANGUAGE_KEY) || "ru";
+}
+
+function translateSurveyText(value) {
+  if (surveyLanguage() !== "tg") return value;
+  return TAJIK_TEXT[value] || value;
+}
+
 function languageControl() {
   const lang = testLanguage();
   return html`
     <div class="form-row language-control">
-      <label>Забон / Язык</label>
+      <label>${escapeHtml(translateTestText("Язык"))}</label>
       <select id="testLanguage">
-        <option value="ru"${lang === "ru" ? " selected" : ""}>Русский</option>
-        <option value="tg"${lang === "tg" ? " selected" : ""}>Тоҷикӣ</option>
+        <option value="ru"${lang === "ru" ? " selected" : ""}>${escapeHtml(translateTestText("Русский"))}</option>
+        <option value="tg"${lang === "tg" ? " selected" : ""}>${escapeHtml(translateTestText("Тоҷикӣ"))}</option>
+      </select>
+    </div>
+  `;
+}
+
+function surveyLanguageControl() {
+  const lang = surveyLanguage();
+  return html`
+    <div class="form-row language-control">
+      <label>${escapeHtml(translateSurveyText("Язык"))}</label>
+      <select id="surveyLanguage">
+        <option value="ru"${lang === "ru" ? " selected" : ""}>${escapeHtml(translateSurveyText("Русский"))}</option>
+        <option value="tg"${lang === "tg" ? " selected" : ""}>${escapeHtml(translateSurveyText("Тоҷикӣ"))}</option>
       </select>
     </div>
   `;
@@ -436,6 +544,61 @@ function bindLanguageControl(onChange) {
   document.querySelector("#testLanguage")?.addEventListener("change", (event) => {
     localStorage.setItem(TEST_LANGUAGE_KEY, event.target.value);
     onChange?.();
+  });
+}
+
+function bindSurveyLanguageControl(onChange) {
+  document.querySelector("#surveyLanguage")?.addEventListener("change", (event) => {
+    localStorage.setItem(SURVEY_LANGUAGE_KEY, event.target.value);
+    onChange?.();
+  });
+}
+
+function showNurseLanguagePrompt(onChoose) {
+  if (nurseTrainingLanguagePromptShown) return;
+  nurseTrainingLanguagePromptShown = true;
+  const overlay = document.createElement("div");
+  overlay.className = "language-modal";
+  overlay.innerHTML = html`
+    <div class="language-modal__panel">
+      <h2>${escapeHtml(translateTestText("Выберите язык"))}</h2>
+      <div class="language-modal__actions">
+        <button type="button" data-lang-choice="ru">Русский</button>
+        <button type="button" data-lang-choice="tg">Тоҷикӣ</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-lang-choice]");
+    if (!button) return;
+    localStorage.setItem(TEST_LANGUAGE_KEY, button.dataset.langChoice);
+    overlay.remove();
+    onChoose?.();
+  });
+}
+
+function showSurveyLanguagePrompt(onChoose) {
+  if (surveyLanguagePromptShown) return;
+  surveyLanguagePromptShown = true;
+  const overlay = document.createElement("div");
+  overlay.className = "language-modal";
+  overlay.innerHTML = html`
+    <div class="language-modal__panel">
+      <h2>Выберите язык / Забонро интихоб кунед</h2>
+      <div class="language-modal__actions">
+        <button type="button" data-survey-lang-choice="ru">Русский</button>
+        <button type="button" data-survey-lang-choice="tg">Тоҷикӣ</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-survey-lang-choice]");
+    if (!button) return;
+    localStorage.setItem(SURVEY_LANGUAGE_KEY, button.dataset.surveyLangChoice);
+    overlay.remove();
+    onChoose?.();
   });
 }
 
@@ -1238,51 +1401,55 @@ function bindAdminTrainingFilters() {
 }
 
 function renderNurseSurvey() {
+  const t = (value) => translateSurveyText(value);
+  const surveySelect = (label, name, options) => select(t(label), name, options.map(([value, text]) => [value, t(text)]));
+  const clinicText = (text) => surveyLanguage() === "tg" ? String(text).replace("Поликлиника №", "Поликлиникаи №") : text;
   setPage(html`
     <main class="container">
       <form class="panel form" id="surveyForm">
-        <h1>Опросник медсестры</h1>
-        <h3>Паспортная часть</h3>
+        <h1>${escapeHtml(t("Опросник медсестры"))}</h1>
+        ${surveyLanguageControl()}
+        <h3>${escapeHtml(t("Паспортная часть"))}</h3>
         <section class="grid two">
-          ${input("Фамилия", "lastName", true)}
-          ${input("Имя", "firstName", true)}
-          ${input("Отчество", "middleName")}
-          ${input("Дата рождения", "birthDate", true, "date")}
-          ${select("Пол", "sex", [["female", "Женский"], ["male", "Мужской"]])}
-          <div class="form-row"><label>Возраст</label><input name="age" inputmode="numeric" required readonly /></div>
-          ${input("Телефон", "phone")}
-          ${input("Адрес", "address")}
+          ${input(t("Фамилия"), "lastName", true)}
+          ${input(t("Имя"), "firstName", true)}
+          ${input(t("Отчество"), "middleName")}
+          ${input(t("Дата рождения"), "birthDate", true, "date")}
+          ${surveySelect("Пол", "sex", [["female", "Женский"], ["male", "Мужской"]])}
+          <div class="form-row"><label>${escapeHtml(t("Возраст"))}</label><input name="age" inputmode="numeric" required readonly /></div>
+          ${input(t("Телефон"), "phone")}
+          ${input(t("Адрес"), "address")}
         </section>
         <div class="form-row">
-          <label>Поликлиника пациента</label>
-          <select name="clinic">${clinicOptions.map(([value, text]) => `<option value="${value}">${text}</option>`).join("")}</select>
+          <label>${escapeHtml(t("Поликлиника пациента"))}</label>
+          <select name="clinic">${clinicOptions.map(([value, text]) => `<option value="${value}">${escapeHtml(clinicText(text))}</option>`).join("")}</select>
         </div>
         <h3>FINDRISC</h3>
         <section class="grid two">
-          ${input("Рост, см", "height", true, "number")}
-          ${input("ИМТ", "bmi", true, "number")}
-          ${select("Физическая активность 30 минут в день", "activity", [["yes", "Да"], ["no", "Нет"]])}
-          ${select("Овощи/фрукты ежедневно", "vegetables", [["yes", "Да"], ["no", "Нет"]])}
-          ${select("Принимал препараты от давления", "bpMeds", [["no", "Нет"], ["yes", "Да"]])}
-          ${select("Когда-либо был высокий сахар", "highGlucose", [["no", "Нет"], ["yes", "Да"]])}
-          ${select("Диабет у родственников", "familyDiabetes", [["none", "Нет"], ["second", "Да, 2 линия"], ["first", "Да, 1 линия"]])}
+          ${input(t("Рост, см"), "height", true, "number")}
+          ${input(t("ИМТ"), "bmi", true, "number")}
+          ${surveySelect("Физическая активность 30 минут в день", "activity", [["yes", "Да"], ["no", "Нет"]])}
+          ${surveySelect("Овощи/фрукты ежедневно", "vegetables", [["yes", "Да"], ["no", "Нет"]])}
+          ${surveySelect("Принимал препараты от давления", "bpMeds", [["no", "Нет"], ["yes", "Да"]])}
+          ${surveySelect("Когда-либо был высокий сахар", "highGlucose", [["no", "Нет"], ["yes", "Да"]])}
+          ${surveySelect("Диабет у родственников", "familyDiabetes", [["none", "Нет"], ["second", "Да, 2 линия"], ["first", "Да, 1 линия"]])}
         </section>
-        <h3>Сердечно-сосудистый риск</h3>
+        <h3>${escapeHtml(t("Сердечно-сосудистый риск"))}</h3>
         <section class="grid two">
-          ${select("Курение", "smoker", [["no", "Нет"], ["yes", "Да"]])}
-          ${input("Систолическое АД", "systolic", true, "number")}
-          ${input("Диастолическое АД", "diastolic", true, "number")}
+          ${surveySelect("Курение", "smoker", [["no", "Нет"], ["yes", "Да"]])}
+          ${input(t("Систолическое АД"), "systolic", true, "number")}
+          ${input(t("Диастолическое АД"), "diastolic", true, "number")}
         </section>
-        <h3>Формула Rabito</h3>
+        <h3>${escapeHtml(t("Формула Rabito"))}</h3>
         <section class="grid three">
-          ${input("Окружность плеча, см", "arm", true, "number")}
-          ${input("Окружность живота/талия, см", "rabitoWaist", true, "number")}
-          ${input("Окружность голени, см", "calf", true, "number")}
-          <div class="form-row"><label>Расчётный вес Rabito, кг</label><input name="rabitoWeightPreview" inputmode="decimal" readonly /></div>
+          ${input(t("Окружность плеча, см"), "arm", true, "number")}
+          ${input(t("Окружность живота/талия, см"), "rabitoWaist", true, "number")}
+          ${input(t("Окружность голени, см"), "calf", true, "number")}
+          <div class="form-row"><label>${escapeHtml(t("Расчётный вес Rabito, кг"))}</label><input name="rabitoWeightPreview" inputmode="decimal" readonly /></div>
         </section>
         <div class="actions">
-          <button type="submit">Отправить анкету</button>
-          <button type="button" class="secondary" id="syncSurveysButton">Синхронизировать</button>
+          <button type="submit">${escapeHtml(t("Отправить анкету"))}</button>
+          <button type="button" class="secondary" id="syncSurveysButton">${escapeHtml(t("Синхронизировать"))}</button>
         </div>
         <div class="muted" id="syncSurveysStatus"></div>
         <div id="surveyResult"></div>
@@ -1290,9 +1457,11 @@ function renderNurseSurvey() {
     </main>
   `);
   const form = document.querySelector("#surveyForm");
+  bindSurveyLanguageControl(renderNurseSurvey);
   bindNurseSurveyCalculations(form);
   bindBirthDateAge(form);
   bindOfflineSurveySync(form);
+  showSurveyLanguagePrompt(renderNurseSurvey);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(form));
@@ -1305,7 +1474,7 @@ function renderNurseSurvey() {
       saveOfflineSurvey(data);
       document.querySelector("#surveyResult").innerHTML = html`
         <div class="notice warn">
-          Интернет недоступен или сервер не ответил. Анкета сохранена на этом устройстве и будет отправлена через кнопку синхронизации.
+          ${escapeHtml(t("Интернет недоступен или сервер не ответил. Анкета сохранена на этом устройстве и будет отправлена через кнопку синхронизации."))}
         </div>
       `;
       form.reset();
@@ -1337,13 +1506,37 @@ async function sendNurseSurvey(data) {
   return api("/api/nurse-surveys", { method: "POST", body: JSON.stringify(data) });
 }
 
+function translateSurveyDynamicText(value) {
+  if (surveyLanguage() !== "tg") return value;
+  const replacements = [
+    "Сердечно-сосудистый риск",
+    "Систолическое АД",
+    "Очень высокий",
+    "Слегка повышенный",
+    "Повышенный риск",
+    "Умеренный",
+    "Высокий",
+    "Низкий",
+    "баллов",
+    "факторы",
+    "возраст",
+    "мужской пол",
+    "курение",
+    "повышенное САД",
+    "мм рт.ст."
+  ];
+  return replacements.reduce((text, item) => text.replaceAll(item, translateSurveyText(item)), String(value || ""));
+}
+
 function showSurveySubmitted(survey) {
-  const reasons = ((survey.referralReasons || []).length ? survey.referralReasons : ["Повышенный риск"]).map((reason) => `<li>${escapeHtml(reason)}</li>`).join("");
+  const reasons = ((survey.referralReasons || []).length ? survey.referralReasons : ["Повышенный риск"])
+    .map((reason) => `<li>${escapeHtml(translateSurveyDynamicText(reason))}</li>`)
+    .join("");
   document.querySelector("#surveyResult").innerHTML = html`
     <div class="notice ${survey.needsDoctor ? "danger" : "ok"}">
-      FINDRISC: ${survey.findrisc.score} (${survey.findrisc.level}). Сердечно-сосудистый риск: ${survey.score2.percent}% (${survey.score2.level}).
-      Расчётный вес Rabito: ${survey.measurements.rabitoWeight || "-"} кг.
-      ${survey.needsDoctor ? `<strong>Направить к врачу.</strong><div>Причина:</div><ul>${reasons}</ul>` : "Повышенный риск не выявлен."}
+      FINDRISC: ${survey.findrisc.score} (${escapeHtml(translateSurveyDynamicText(survey.findrisc.level))}). ${escapeHtml(translateSurveyText("Сердечно-сосудистый риск"))}: ${survey.score2.percent}% (${escapeHtml(translateSurveyDynamicText(survey.score2.level))}).
+      ${escapeHtml(translateSurveyText("Расчётный вес Rabito, кг"))}: ${survey.measurements.rabitoWeight || "-"}.
+      ${survey.needsDoctor ? `<strong>${escapeHtml(translateSurveyText("Направить к врачу."))}</strong><div>${escapeHtml(translateSurveyText("Причина"))}:</div><ul>${reasons}</ul>` : escapeHtml(translateSurveyText("Повышенный риск не выявлен."))}
     </div>
   `;
 }
@@ -1353,7 +1546,7 @@ function updateOfflineSurveyStatus() {
   const button = document.querySelector("#syncSurveysButton");
   if (!status || !button) return;
   const count = offlineSurveyQueue().length;
-  status.textContent = count ? `Ожидают синхронизации: ${count}` : "Все анкеты отправлены.";
+  status.textContent = count ? `${translateSurveyText("Ожидают синхронизации")}: ${count}` : translateSurveyText("Все анкеты отправлены.");
   button.disabled = count === 0;
 }
 
@@ -1390,8 +1583,8 @@ async function syncOfflineSurveys() {
   updateOfflineSurveyStatus();
   if (!result) return;
   result.innerHTML = remaining.length
-    ? `<div class="notice warn">Отправлено: ${sent}. Осталось без синхронизации: ${remaining.length}. Попробуйте еще раз, когда интернет будет стабильным.</div>`
-    : `<div class="notice ok">Синхронизация завершена. Отправлено анкет: ${sent}.</div>`;
+    ? `<div class="notice warn">${escapeHtml(translateSurveyText("Отправлено"))}: ${sent}. ${escapeHtml(translateSurveyText("Осталось без синхронизации"))}: ${remaining.length}. ${escapeHtml(translateSurveyText("Попробуйте еще раз, когда интернет будет стабильным."))}</div>`
+    : `<div class="notice ok">${escapeHtml(translateSurveyText("Синхронизация завершена. Отправлено анкет"))}: ${sent}.</div>`;
 }
 
 function bindBirthDateAge(form) {
@@ -1871,6 +2064,7 @@ function renderTaskCaseFields(task) {
 async function loadNurseTraining() {
   state.nurseTraining = await api("/api/nurse-training");
   renderNurseTrainingList();
+  showNurseLanguagePrompt(renderNurseTrainingList);
 }
 
 function renderNurseTrainingList() {
@@ -1878,7 +2072,7 @@ function renderNurseTrainingList() {
     (acc[attempt.participantId] ||= []).push(attempt);
     return acc;
   }, {});
-  const rows = (state.nurseTraining.participants || []).map((participant) => {
+  const personCard = (participant) => {
     const attempts = attemptsByParticipant[participant.id] || [];
     const pre = attempts.find((attempt) => attempt.type === "pre");
     const post = attempts.find((attempt) => attempt.type === "post");
@@ -1886,21 +2080,22 @@ function renderNurseTrainingList() {
       <div class="card training-person">
         <div>
           <strong>${escapeHtml(participant.fullName)}</strong>
-          <div class="muted">${escapeHtml(participant.clinic || "")} / ${escapeHtml(participant.position || "Медсестра")}</div>
-          <div class="muted">До обучения: ${pre ? `${pre.percent}%` : "не сдан"} / После обучения: ${post ? `${post.percent}%` : "не сдан"}</div>
+          <div class="muted">${escapeHtml(participant.clinic || "")} / ${escapeHtml(translateTestText(participant.position || "Медсестра"))}</div>
+          <div class="muted">${escapeHtml(translateTestText("До обучения"))}: ${pre ? `${pre.percent}%` : escapeHtml(translateTestText("не сдан"))} / ${escapeHtml(translateTestText("После обучения"))}: ${post ? `${post.percent}%` : escapeHtml(translateTestText("не сдан"))}</div>
         </div>
-        <button data-action="select-nurse-training-participant" data-id="${participant.id}">Открыть</button>
+        <button data-action="select-nurse-training-participant" data-id="${participant.id}">${escapeHtml(translateTestText("Открыть"))}</button>
       </div>
     `;
-  }).join("");
+  };
+  const rows = (state.nurseTraining.participants || []).map(personCard).join("");
   setPage(html`
     <main class="container">
       <section class="panel">
-        <h1>№5 Тесты медсестер</h1>
+        <h1>${escapeHtml(translateTestText("№5 Тесты медсестер"))}</h1>
         ${languageControl()}
-        <p class="muted">Найдите свое имя. Сначала пройдите тест до обучения, после семинара - тест после обучения. Порог 70% действует только для теста после обучения.</p>
-        <input id="nurseTrainingSearch" placeholder="Введите фамилию или имя" />
-        <div id="nurseTrainingList" class="training-list">${rows || "<p class='muted'>Администратор еще не зарегистрировал медсестер.</p>"}</div>
+        <p class="muted">${escapeHtml(translateTestText("Найдите свое имя. Сначала пройдите тест до обучения, после семинара - тест после обучения. Порог 70% действует только для теста после обучения."))}</p>
+        <input id="nurseTrainingSearch" placeholder="${escapeHtml(translateTestText("Введите фамилию или имя"))}" />
+        <div id="nurseTrainingList" class="training-list">${rows || `<p class='muted'>${escapeHtml(translateTestText("Администратор еще не зарегистрировал медсестер."))}</p>`}</div>
       </section>
     </main>
   `);
@@ -1908,12 +2103,7 @@ function renderNurseTrainingList() {
   document.querySelector("#nurseTrainingSearch")?.addEventListener("input", (event) => {
     const query = event.target.value.toLowerCase();
     const participants = state.nurseTraining.participants.filter((item) => item.fullName.toLowerCase().includes(query));
-    document.querySelector("#nurseTrainingList").innerHTML = participants.map((participant) => html`
-      <div class="card training-person">
-        <div><strong>${escapeHtml(participant.fullName)}</strong><div class="muted">${escapeHtml(participant.clinic || "")}</div></div>
-        <button data-action="select-nurse-training-participant" data-id="${participant.id}">Открыть</button>
-      </div>
-    `).join("") || "<p class='muted'>Участник не найден</p>";
+    document.querySelector("#nurseTrainingList").innerHTML = participants.map(personCard).join("") || `<p class='muted'>${escapeHtml(translateTestText("Участник не найден"))}</p>`;
   });
 }
 
@@ -1924,13 +2114,13 @@ async function renderNurseTrainingWorkspace(participantId) {
   setPage(html`
     <main class="container">
       <section class="panel">
-        <h1>№5 Тесты медсестер</h1>
+        <h1>${escapeHtml(translateTestText("№5 Тесты медсестер"))}</h1>
         ${languageControl()}
         <h2>${escapeHtml(data.participant.fullName)}</h2>
         <div class="actions">
-          ${pre ? `<span class="pill ok">До обучения: ${pre.percent}%</span>` : `<button data-action="start-nurse-test" data-id="${participantId}" data-test-type="pre">Тест до обучения</button>`}
-          ${post ? `<span class="pill ${post.passed ? "ok" : "danger"}">После обучения: ${post.percent}% ${post.passed ? "Пройден" : "Не пройден"}</span>` : `<button data-action="start-nurse-test" data-id="${participantId}" data-test-type="post">Тест после обучения</button>`}
-          <button type="button" class="secondary" onclick="location.href='${NURSE_TRAINING_APP_PATH}'">К списку</button>
+          ${pre ? `<span class="pill ok">${escapeHtml(translateTestText("До обучения"))}: ${pre.percent}%</span>` : `<button data-action="start-nurse-test" data-id="${participantId}" data-test-type="pre">${escapeHtml(translateTestText("Тест до обучения"))}</button>`}
+          ${post ? `<span class="pill ${post.passed ? "ok" : "danger"}">${escapeHtml(translateTestText("После обучения"))}: ${post.percent}% ${escapeHtml(translateTestText(post.passed ? "Пройден" : "Не пройден"))}</span>` : `<button data-action="start-nurse-test" data-id="${participantId}" data-test-type="post">${escapeHtml(translateTestText("Тест после обучения"))}</button>`}
+          <button type="button" class="secondary" onclick="location.href='${NURSE_TRAINING_APP_PATH}'">${escapeHtml(translateTestText("К списку"))}</button>
         </div>
       </section>
     </main>
@@ -1942,7 +2132,7 @@ async function renderNurseTest(participantId, type) {
   const data = await api(`/api/nurse-training/participant/${participantId}`);
   const existing = data.attempts.find((attempt) => attempt.type === type);
   if (existing) {
-    alert("Этот тест уже сдан");
+    alert(translateTestText("Этот тест уже сдан"));
     return renderNurseTrainingWorkspace(participantId);
   }
   const questions = type === "post" ? data.postQuestions : data.preQuestions;
@@ -1962,7 +2152,7 @@ async function renderNurseTest(participantId, type) {
         <section class="panel">
           <h1>${escapeHtml(translateTestText(type === "post" ? "Тест после обучения" : "Тест до обучения"))}</h1>
           ${languageControl()}
-          <div class="notice warn">Участник: <strong>${escapeHtml(data.participant.fullName)}</strong>. ${type === "post" ? "Для прохождения нужно набрать 70% или больше." : "Порог прохождения для теста до обучения не применяется."}</div>
+          <div class="notice warn">${escapeHtml(translateTestText("Участник"))}: <strong>${escapeHtml(data.participant.fullName)}</strong>. ${escapeHtml(translateTestText(type === "post" ? "Для прохождения нужно набрать 70% или больше." : "Порог прохождения для теста до обучения не применяется."))}</div>
         </section>
         ${questionCards}
         <section class="panel actions">
@@ -1987,8 +2177,8 @@ async function renderNurseTest(participantId, type) {
             <h1>${escapeHtml(translateTestText("Тест отправлен"))}</h1>
             ${languageControl()}
             <div class="notice ${type === "post" ? (result.attempt.passed ? "ok" : "danger") : "ok"}">
-              Ваш результат: <strong>${result.attempt.correct}/${result.attempt.total} (${result.attempt.percent}%)</strong>.
-              ${type === "post" ? (result.attempt.passed ? "<strong>Тест пройден.</strong>" : "<strong>Тест не пройден. Нужно 70% и выше.</strong>") : ""}
+              ${escapeHtml(translateTestText("Ваш результат"))}: <strong>${result.attempt.correct}/${result.attempt.total} (${result.attempt.percent}%)</strong>.
+              ${type === "post" ? `<strong>${escapeHtml(translateTestText(result.attempt.passed ? "Тест пройден." : "Тест не пройден. Нужно 70% и выше."))}</strong>` : ""}
             </div>
             <button data-action="select-nurse-training-participant" data-id="${participantId}">${escapeHtml(translateTestText("Вернуться"))}</button>
           </section>

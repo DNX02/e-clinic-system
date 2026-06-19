@@ -367,6 +367,36 @@ th {
   margin-top: 10px;
 }
 
+.language-modal {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.56);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 18px;
+  position: fixed;
+  z-index: 50;
+}
+
+.language-modal__panel {
+  background: var(--panel);
+  border-radius: 8px;
+  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.28);
+  max-width: 360px;
+  padding: 22px;
+  width: 100%;
+}
+
+.language-modal__panel h2 {
+  margin-top: 0;
+}
+
+.language-modal__actions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+}
+
 .hidden {
   display: none !important;
 }
