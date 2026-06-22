@@ -39,6 +39,7 @@ const fullName = (p) => [p?.lastName, p?.firstName, p?.middleName].filter(Boolea
 const escapeHtml = (value = "") => String(value).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[ch]);
 const surveyClinic = (survey) => survey.patient?.clinic || survey.clinic || "Без поликлиники";
 const OFFLINE_SURVEY_QUEUE_KEY = "medical-offline-nurse-surveys";
+const OFFLINE_DOCTOR_QUEUE_KEY = "medical-offline-doctor-actions";
 const TEST_LANGUAGE_KEY = "medical-training-language";
 const SURVEY_LANGUAGE_KEY = "medical-survey-language";
 const DOCTOR_LANGUAGE_KEY = "medical-doctor-language";
@@ -81,6 +82,22 @@ const TAJIK_TEXT = {
   "Картотека больных": "Картотекаи беморон",
   "Введите имя или фамилию": "Ном ё насабро ворид кунед",
   "Добавить пациента": "Илова кардани бемор",
+  "Синхронизировать": "Ҳамоҳангсозӣ",
+  "Ожидают синхронизации": "Интизори ҳамоҳангсозӣ",
+  "Все записи отправлены.": "Ҳама сабтҳо фиристода шуданд.",
+  "Интернет недоступен или сервер не ответил. Запись сохранена на этом устройстве и будет отправлена через синхронизацию.": "Интернет дастрас нест ё сервер ҷавоб надод. Сабт дар ин дастгоҳ нигоҳ дошта шуд ва тавассути ҳамоҳангсозӣ фиристода мешавад.",
+  "Синхронизация завершена. Отправлено записей": "Ҳамоҳангсозӣ анҷом ёфт. Сабтҳои фиристодашуда",
+  "Осталось без синхронизации": "Бе ҳамоҳангсозӣ боқӣ монд",
+  "Попробуйте еще раз, когда интернет будет стабильным.": "Вақте интернет устувор мешавад, боз кӯшиш кунед.",
+  "Анкета медсестры": "Анкетаи ҳамшира",
+  "Данные пациента": "Маълумоти бемор",
+  "Дата рождения": "Санаи таваллуд",
+  "Артериальное давление": "Фишори хун",
+  "Расчетный вес Rabito": "Вазни ҳисобии Rabito",
+  "Причины направления": "Сабабҳои равонасозӣ",
+  "Повторное обследование через сколько дней": "Муоинаи такрорӣ баъди чанд рӯз",
+  "Повторное обследование": "Муоинаи такрорӣ",
+  "дней": "рӯз",
   "Выберите пациента": "Беморро интихоб кунед",
   "После выбора откроется повторное измерение, направления и препараты.": "Пас аз интихоб ченкунии такрорӣ, равонасозӣ ва доруҳо кушода мешаванд.",
   "Анкет пока нет": "Ҳоло анкета нест",
@@ -1352,6 +1369,7 @@ function renderVisitsAdmin() {
       <td>${escapeHtml(surveys[visit.surveyId] || "Пациент")}</td>
       <td>ИМТ ${visit.bmi || "-"} / АД ${visit.systolic}/${visit.diastolic} / сахар ${visit.glucose || "-"}</td>
       <td>${(visit.referrals || []).join(", ") || "-"}</td>
+      <td>${visit.followUpDays ? `Через ${visit.followUpDays} дней` : "-"}</td>
       <td>${doctorLifestyleSummary(visit.lifestyleRecommendations)}</td>
       <td>${escapeHtml((visit.diabetesDrugs || []).join("; "))}</td>
       <td>${escapeHtml((visit.hypertensionDrugs || []).join("; "))}</td>
@@ -1363,8 +1381,8 @@ function renderVisitsAdmin() {
       <h2>Действия врачей</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Врач</th><th>Пациент</th><th>ИМТ / АД</th><th>Направление</th><th>Рекомендации</th><th>СД 2</th><th>АГ</th><th>Дата</th></tr></thead>
-          <tbody>${rows || "<tr><td colspan='8'>Пока нет записей</td></tr>"}</tbody>
+          <thead><tr><th>Врач</th><th>Пациент</th><th>ИМТ / АД</th><th>Направление</th><th>Повторное обследование</th><th>Рекомендации</th><th>СД 2</th><th>АГ</th><th>Дата</th></tr></thead>
+          <tbody>${rows || "<tr><td colspan='9'>Пока нет записей</td></tr>"}</tbody>
         </table>
       </div>
     </section>
@@ -1641,6 +1659,28 @@ function translateSurveyDynamicText(value) {
   return replacements.reduce((text, item) => text.replaceAll(item, translateSurveyText(item)), String(value || ""));
 }
 
+function translateDoctorDynamicText(value) {
+  if (doctorLanguage() !== "tg") return value;
+  const replacements = [
+    "Сердечно-сосудистый риск",
+    "Систолическое АД",
+    "Очень высокий",
+    "Слегка повышенный",
+    "Повышенный риск",
+    "Умеренный",
+    "Высокий",
+    "Низкий",
+    "баллов",
+    "факторы",
+    "возраст",
+    "мужской пол",
+    "курение",
+    "повышенное САД",
+    "мм рт.ст."
+  ];
+  return replacements.reduce((text, item) => text.replaceAll(item, translateDoctorText(item)), String(value || ""));
+}
+
 function showSurveySubmitted(survey) {
   const reasons = ((survey.referralReasons || []).length ? survey.referralReasons : ["Повышенный риск"])
     .map((reason) => `<li>${escapeHtml(translateSurveyDynamicText(reason))}</li>`)
@@ -1698,6 +1738,100 @@ async function syncOfflineSurveys() {
   result.innerHTML = remaining.length
     ? `<div class="notice warn">${escapeHtml(translateSurveyText("Отправлено"))}: ${sent}. ${escapeHtml(translateSurveyText("Осталось без синхронизации"))}: ${remaining.length}. ${escapeHtml(translateSurveyText("Попробуйте еще раз, когда интернет будет стабильным."))}</div>`
     : `<div class="notice ok">${escapeHtml(translateSurveyText("Синхронизация завершена. Отправлено анкет"))}: ${sent}.</div>`;
+}
+
+function offlineDoctorQueue() {
+  try {
+    const queue = JSON.parse(localStorage.getItem(OFFLINE_DOCTOR_QUEUE_KEY) || "[]");
+    return Array.isArray(queue) ? queue : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeOfflineDoctorQueue(queue) {
+  localStorage.setItem(OFFLINE_DOCTOR_QUEUE_KEY, JSON.stringify(queue));
+}
+
+function saveOfflineDoctorAction(action) {
+  const queue = offlineDoctorQueue();
+  queue.push({ id: crypto.randomUUID(), savedAt: new Date().toISOString(), ...action });
+  writeOfflineDoctorQueue(queue);
+}
+
+function updateOfflineDoctorStatus() {
+  const status = document.querySelector("#doctorSyncStatus");
+  const button = document.querySelector("#doctorSyncButton");
+  if (!status || !button) return;
+  const count = offlineDoctorQueue().length;
+  status.textContent = count ? `${translateDoctorText("Ожидают синхронизации")}: ${count}` : translateDoctorText("Все записи отправлены.");
+  button.disabled = count === 0;
+}
+
+async function syncOfflineDoctorActions() {
+  const result = document.querySelector("#doctorSyncResult");
+  const button = document.querySelector("#doctorSyncButton");
+  let queue = offlineDoctorQueue();
+  if (!queue.length) {
+    updateOfflineDoctorStatus();
+    return;
+  }
+  if (button) button.disabled = true;
+  const remaining = [];
+  const surveyIdMap = {};
+  let sent = 0;
+
+  for (const item of queue) {
+    try {
+      if (item.type !== "survey") continue;
+      const { survey } = await api("/api/doctor/surveys", { method: "POST", body: JSON.stringify(item.data) });
+      surveyIdMap[item.localSurveyId] = survey.id;
+      sent += 1;
+    } catch {
+      remaining.push(item);
+    }
+  }
+
+  const visitItems = queue.filter((item) => item.type === "visit");
+  for (const item of visitItems) {
+    const data = { ...item.data };
+    if (surveyIdMap[data.surveyId]) data.surveyId = surveyIdMap[data.surveyId];
+    if (String(data.surveyId || "").startsWith("local-")) {
+      remaining.push(item);
+      continue;
+    }
+    try {
+      await api("/api/doctor/visits", { method: "POST", body: JSON.stringify(data) });
+      sent += 1;
+    } catch {
+      remaining.push({ ...item, data });
+    }
+  }
+
+  const deduped = [];
+  const seen = new Set();
+  for (const item of remaining) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    deduped.push(item);
+  }
+  writeOfflineDoctorQueue(deduped);
+  updateOfflineDoctorStatus();
+  if (result) {
+    result.innerHTML = deduped.length
+      ? `<div class="notice warn">${escapeHtml(translateDoctorText("Отправлено"))}: ${sent}. ${escapeHtml(translateDoctorText("Осталось без синхронизации"))}: ${deduped.length}. ${escapeHtml(translateDoctorText("Попробуйте еще раз, когда интернет будет стабильным."))}</div>`
+      : `<div class="notice ok">${escapeHtml(translateDoctorText("Синхронизация завершена. Отправлено записей"))}: ${sent}.</div>`;
+  }
+  try {
+    state.doctor = await api("/api/doctor/workspace");
+    state.selectedSurvey = state.selectedSurvey && !String(state.selectedSurvey.id).startsWith("local-")
+      ? state.doctor.surveys.find((survey) => survey.id === state.selectedSurvey.id) || state.selectedSurvey
+      : null;
+    if (!deduped.length) state.doctorMode = "list";
+    renderDoctor();
+  } catch {
+    updateOfflineDoctorStatus();
+  }
 }
 
 function bindBirthDateAge(form) {
@@ -2336,7 +2470,10 @@ function renderDoctor() {
           ${doctorLanguageControl()}
           <div class="actions">
             <button type="button" data-action="add-doctor-patient">${escapeHtml(t("Добавить пациента"))}</button>
+            <button type="button" class="secondary" id="doctorSyncButton">${escapeHtml(t("Синхронизировать"))}</button>
           </div>
+          <div class="muted" id="doctorSyncStatus"></div>
+          <div id="doctorSyncResult"></div>
           <input id="patientSearch" placeholder="${escapeHtml(t("Введите имя или фамилию"))}" />
           <div id="patientList" style="margin-top:12px">${doctorSurveyList(state.doctor.surveys)}</div>
         </section>
@@ -2344,6 +2481,8 @@ function renderDoctor() {
     </div>
   `);
   bindDoctorLanguageControl(renderDoctor);
+  document.querySelector("#doctorSyncButton")?.addEventListener("click", syncOfflineDoctorActions);
+  updateOfflineDoctorStatus();
   document.querySelector("#patientSearch")?.addEventListener("input", (event) => {
     const query = event.target.value.toLowerCase();
     const list = state.doctor.surveys.filter((survey) => fullName(survey.patient).toLowerCase().includes(query));
@@ -2417,11 +2556,44 @@ function doctorPatientSurveyForm() {
   `;
 }
 
+function doctorSurveySummary(survey) {
+  const t = (value) => translateDoctorText(value);
+  const patient = survey.patient || {};
+  const measurements = survey.measurements || {};
+  const reasons = (survey.referralReasons || []).map((reason) => `<li>${escapeHtml(translateDoctorDynamicText(reason))}</li>`).join("");
+  return html`
+    <section class="answer-details">
+      <h3>${escapeHtml(t("Анкета медсестры"))}</h3>
+      <div class="grid two">
+        <div>
+          <strong>${escapeHtml(t("Данные пациента"))}</strong>
+          <div class="muted">${escapeHtml(t("Дата рождения"))}: ${escapeHtml(patient.birthDate || "-")}</div>
+          <div class="muted">${escapeHtml(t("Пол"))}: ${escapeHtml(t(patient.sex === "male" ? "Мужской" : "Женский"))}</div>
+          <div class="muted">${escapeHtml(t("Телефон"))}: ${escapeHtml(patient.phone || "-")}</div>
+          <div class="muted">${escapeHtml(t("Адрес"))}: ${escapeHtml(patient.address || "-")}</div>
+        </div>
+        <div>
+          <strong>${escapeHtml(t("Паспортная часть"))}</strong>
+          <div class="muted">${escapeHtml(t("Возраст"))}: ${measurements.age || "-"}</div>
+          <div class="muted">${escapeHtml(t("Рост, см"))}: ${measurements.height || "-"}</div>
+          <div class="muted">${escapeHtml(t("Индекс массы тела"))}: ${measurements.bmi || "-"}</div>
+          <div class="muted">${escapeHtml(t("Артериальное давление"))}: ${measurements.systolic || "-"}/${measurements.diastolic || "-"}</div>
+          <div class="muted">FINDRISC: ${survey.findrisc?.score ?? "-"} (${escapeHtml(translateDoctorDynamicText(survey.findrisc?.level || "-"))})</div>
+          <div class="muted">${escapeHtml(t("Сердечно-сосудистый риск"))}: ${survey.score2?.percent ?? "-"}% (${escapeHtml(translateDoctorDynamicText(survey.score2?.level || "-"))})</div>
+          <div class="muted">${escapeHtml(t("Расчетный вес Rabito"))}: ${measurements.rabitoWeight || "-"} кг</div>
+        </div>
+      </div>
+      ${survey.needsDoctor ? `<div class="notice warn"><strong>${escapeHtml(t("Причины направления"))}</strong><ul>${reasons}</ul></div>` : ""}
+    </section>
+  `;
+}
+
 function doctorVisitForm(survey) {
   const t = (value) => translateDoctorText(value);
   return html`
     <form class="form" id="visitForm">
       <h2>${escapeHtml(fullName(survey.patient))}</h2>
+      ${doctorSurveySummary(survey)}
       <input type="hidden" name="surveyId" value="${survey.id}" />
       <section class="grid two">
         ${input(t("Вес по весам, кг"), "weight", true, "number")}
@@ -2430,6 +2602,7 @@ function doctorVisitForm(survey) {
         ${input(t("Сахар крови, ммоль/л"), "glucose", false, "number")}
         ${input(t("Повторное САД"), "systolic", true, "number")}
         ${input(t("Повторное ДАД"), "diastolic", true, "number")}
+        ${input(t("Повторное обследование через сколько дней"), "followUpDays", false, "number")}
       </section>
       <h3>${escapeHtml(t("Направление"))}</h3>
       <div class="checkbox-list">
@@ -2491,8 +2664,13 @@ function bindDoctorVisit() {
       document.querySelector("#visitResult").innerHTML = `<div class="notice ok">${escapeHtml(translateDoctorText("Осмотр сохранён и отправлен администратору."))}</div>`;
       form.reset();
       updateLifestyleRecommendationPanels();
+      updateOfflineDoctorStatus();
     } catch (error) {
-      alert(error.message);
+      saveOfflineDoctorAction({ type: "visit", data });
+      document.querySelector("#visitResult").innerHTML = `<div class="notice warn">${escapeHtml(translateDoctorText("Интернет недоступен или сервер не ответил. Запись сохранена на этом устройстве и будет отправлена через синхронизацию."))}</div>`;
+      form.reset();
+      updateLifestyleRecommendationPanels();
+      updateOfflineDoctorStatus();
     }
   });
 }
@@ -2513,7 +2691,43 @@ function bindDoctorPatientSurvey() {
       renderDoctor();
       setTimeout(() => document.querySelector("#doctorPrimaryPanel")?.scrollIntoView({ block: "start" }), 0);
     } catch (error) {
-      document.querySelector("#doctorPatientSurveyResult").innerHTML = `<div class="notice danger">${escapeHtml(error.message)}</div>`;
+      const localSurveyId = `local-${crypto.randomUUID()}`;
+      const localSurvey = {
+        id: localSurveyId,
+        patient: {
+          lastName: data.lastName,
+          firstName: data.firstName,
+          middleName: data.middleName,
+          birthDate: data.birthDate,
+          phone: data.phone,
+          address: data.address,
+          clinic: state.doctor.doctor?.clinic || data.clinic,
+          sex: data.sex
+        },
+        measurements: {
+          age: Number(data.age || 0),
+          height: Number(data.height || 0),
+          bmi: Number(data.bmi || 0),
+          systolic: Number(data.systolic || 0),
+          diastolic: Number(data.diastolic || 0),
+          arm: Number(data.arm || 0),
+          rabitoWaist: Number(data.rabitoWaist || 0),
+          calf: Number(data.calf || 0),
+          rabitoWeight: Number(form.elements.rabitoWeightPreview.value || 0)
+        },
+        findrisc: { score: "-", level: "-" },
+        score2: { percent: "-", level: "-" },
+        referralReasons: [],
+        needsDoctor: false,
+        createdAt: new Date().toISOString(),
+        offline: true
+      };
+      saveOfflineDoctorAction({ type: "survey", localSurveyId, data });
+      state.doctor.surveys = [localSurvey, ...state.doctor.surveys];
+      state.selectedSurvey = localSurvey;
+      state.doctorMode = "visit";
+      renderDoctor();
+      setTimeout(() => document.querySelector("#doctorPrimaryPanel")?.scrollIntoView({ block: "start" }), 0);
     }
   });
 }
