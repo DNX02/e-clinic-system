@@ -540,6 +540,44 @@ function referralReasons(input, findrisc, score2) {
   return reasons;
 }
 
+function buildNurseSurvey(body) {
+  const findrisc = calculateFindrisc(body);
+  const rabitoWeight = calculateRabito(body);
+  const score2 = calculateScore2Lite(body);
+  const reasons = referralReasons(body, findrisc, score2);
+  return {
+    id: crypto.randomUUID(),
+    patient: {
+      lastName: body.lastName,
+      firstName: body.firstName,
+      middleName: body.middleName,
+      birthDate: body.birthDate,
+      phone: body.phone,
+      address: body.address,
+      clinic: body.clinic,
+      sex: body.sex
+    },
+    measurements: {
+      age: Number(body.age || 0),
+      height: Number(body.height || 0),
+      bmi: Number(body.bmi || 0),
+      systolic: Number(body.systolic || 0),
+      diastolic: Number(body.diastolic || 0),
+      arm: Number(body.arm || 0),
+      waist: Number(body.rabitoWaist || body.waist || 0),
+      rabitoWaist: Number(body.rabitoWaist || body.waist || 0),
+      calf: Number(body.calf || 0),
+      rabitoWeight
+    },
+    answers: body,
+    findrisc,
+    score2,
+    referralReasons: reasons,
+    needsDoctor: reasons.length > 0,
+    createdAt: new Date().toISOString()
+  };
+}
+
 function publicParticipant(participant) {
   return {
     id: participant.id,
@@ -901,41 +939,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === "POST" && url.pathname === "/api/nurse-surveys") {
     const body = await parseBody(req);
-    const findrisc = calculateFindrisc(body);
-    const rabitoWeight = calculateRabito(body);
-    const score2 = calculateScore2Lite(body);
-    const reasons = referralReasons(body, findrisc, score2);
-    const survey = {
-      id: crypto.randomUUID(),
-      patient: {
-        lastName: body.lastName,
-        firstName: body.firstName,
-        middleName: body.middleName,
-        birthDate: body.birthDate,
-        phone: body.phone,
-        address: body.address,
-        clinic: body.clinic,
-        sex: body.sex
-      },
-      measurements: {
-        age: Number(body.age || 0),
-        height: Number(body.height || 0),
-        bmi: Number(body.bmi || 0),
-        systolic: Number(body.systolic || 0),
-        diastolic: Number(body.diastolic || 0),
-        arm: Number(body.arm || 0),
-        waist: Number(body.rabitoWaist || body.waist || 0),
-        rabitoWaist: Number(body.rabitoWaist || body.waist || 0),
-        calf: Number(body.calf || 0),
-        rabitoWeight
-      },
-      answers: body,
-      findrisc,
-      score2,
-      referralReasons: reasons,
-      needsDoctor: reasons.length > 0,
-      createdAt: new Date().toISOString()
-    };
+    const survey = buildNurseSurvey(body);
     db.nurseSurveys.push(survey);
     await writeDb(db);
     return send(res, 201, { survey });
@@ -951,6 +955,18 @@ async function handleApi(req, res, url) {
       visits: db.doctorVisits.filter((visit) => visit.doctorId === session.userId),
       dictionaries: { diabetesDrugs, hypertensionDrugs }
     });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/doctor/surveys") {
+    if (session?.userType !== "doctor") return send(res, 403, { error: "Нет доступа" });
+    const doctor = db.doctors.find((item) => item.id === session.userId);
+    if (!doctor) return send(res, 404, { error: "Врач не найден" });
+    const body = await parseBody(req);
+    const survey = buildNurseSurvey({ ...body, clinic: doctor.clinic });
+    survey.createdByDoctorId = doctor.id;
+    db.nurseSurveys.push(survey);
+    await writeDb(db);
+    return send(res, 201, { survey });
   }
 
   if (req.method === "POST" && url.pathname === "/api/doctor/visits") {

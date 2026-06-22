@@ -5,6 +5,7 @@ const initialState = () => ({
   doctor: null,
   tab: "stats",
   selectedSurvey: null,
+  doctorMode: "list",
   lastDoctorKey: null,
   surveyClinicFilter: "all",
   trainingClinicFilter: ["all"],
@@ -40,8 +41,10 @@ const surveyClinic = (survey) => survey.patient?.clinic || survey.clinic || "Б�
 const OFFLINE_SURVEY_QUEUE_KEY = "medical-offline-nurse-surveys";
 const TEST_LANGUAGE_KEY = "medical-training-language";
 const SURVEY_LANGUAGE_KEY = "medical-survey-language";
+const DOCTOR_LANGUAGE_KEY = "medical-doctor-language";
 let nurseTrainingLanguagePromptShown = false;
 let surveyLanguagePromptShown = false;
+let doctorLanguagePromptShown = false;
 const clinicSortKey = (value = "") => {
   const text = String(value);
   const number = text.match(/\d+/)?.[0];
@@ -70,6 +73,46 @@ const TAJIK_TEXT = {
   "Выберите язык": "Забонро интихоб кунед",
   "Продолжить": "Идома додан",
   "Опросник медсестры": "Пурсишномаи ҳамшира",
+  "Кабинет врача": "Ҳуҷраи духтур",
+  "Вход врача": "Воридшавии духтур",
+  "Логин врача": "Логини духтур",
+  "Специальный ключ": "Калиди махсус",
+  "Войти": "Ворид шудан",
+  "Картотека больных": "Картотекаи беморон",
+  "Введите имя или фамилию": "Ном ё насабро ворид кунед",
+  "Добавить пациента": "Илова кардани бемор",
+  "Выберите пациента": "Беморро интихоб кунед",
+  "После выбора откроется повторное измерение, направления и препараты.": "Пас аз интихоб ченкунии такрорӣ, равонасозӣ ва доруҳо кушода мешаванд.",
+  "Анкет пока нет": "Ҳоло анкета нест",
+  "Открыть": "Кушодан",
+  "Выйти": "Баромадан",
+  "Заполните анкету пациента. Пациент будет добавлен в картотеку вашей поликлиники.": "Анкетаи беморро пур кунед. Бемор ба картотекаи поликлиникаи шумо илова мешавад.",
+  "Отмена": "Бекор кардан",
+  "Пациент добавлен. Анкета сохранена и отправлена администратору.": "Бемор илова шуд. Анкета нигоҳ дошта шуд ва ба маъмур фиристода шуд.",
+  "Вес по весам, кг": "Вазн бо тарозу, кг",
+  "Сахар крови, ммоль/л": "Қанди хун, ммол/л",
+  "Повторное САД": "Фишори систоликии такрорӣ",
+  "Повторное ДАД": "Фишори диастоликии такрорӣ",
+  "Направление": "Равонасозӣ",
+  "Эндокринолог": "Эндокринолог",
+  "Кардиолог": "Кардиолог",
+  "План лечения": "Нақшаи табобат",
+  "Препараты для СД 2 типа": "Доруҳо барои диабети қанд навъи 2",
+  "Препараты для артериальной гипертензии": "Доруҳо барои фишорбаландии артериалӣ",
+  "Рекомендации пациенту": "Тавсияҳо ба бемор",
+  "Диета при сахарном диабете": "Парҳез ҳангоми диабети қанд",
+  "Специальные физические упражнения": "Машқҳои махсуси ҷисмонӣ",
+  "Физическая активность": "Фаъолияти ҷисмонӣ",
+  "Сохранить осмотр": "Нигоҳ доштани муоина",
+  "Осмотр сохранён и отправлен администратору.": "Муоина нигоҳ дошта шуд ва ба маъмур фиристода шуд.",
+  "Меньше сидеть: чаще вставать, ходить, использовать лестницу, постепенно увеличивать нагрузку.": "Камтар нишастан: бештар хестан, роҳ рафтан, аз зина истифода бурдан ва тадриҷан зиёд кардани сарборӣ.",
+  "При осложнениях диабета, сердечно-сосудистых симптомах или высоком риске нагрузку подбирать индивидуально.": "Ҳангоми оризаҳои диабет, нишонаҳои дилу раг ё хавфи баланд, сарборӣ бояд инфиродӣ интихоб шавад.",
+  "Основа питания: овощи, фрукты, бобовые, цельные злаки и нежирные источники белка.": "Асоси ғизо: сабзавот, мева, лӯбиёгиҳо, ғалладонаҳои бутун ва манбаъҳои камравғани сафеда.",
+  "Ограничить свободные сахара, сладкие напитки и продукты с добавленным сахаром.": "Шакарҳои озод, нӯшокиҳои ширин ва маҳсулоти дорои шакари иловашударо маҳдуд кардан.",
+  "Снизить насыщенные жиры и исключать трансжиры; выбирать растительные масла, рыбу и орехи по переносимости.": "Равғанҳои сершударо кам ва трансравғанҳоро хориҷ кардан; равғанҳои растанӣ, моҳӣ ва чормағзро мувофиқи таҳаммул интихоб кардан.",
+  "Ограничить соль: для большинства взрослых цель - менее 5 г соли в сутки; контролировать размер порций и регулярность приемов пищи.": "Намакро маҳдуд кардан: барои аксари калонсолон ҳадаф камтар аз 5 г намак дар як рӯз аст; андозаи порсия ва мунтазамии хӯрокро назорат кардан.",
+  "Не менее 150-300 минут умеренной аэробной активности в неделю или 75-150 минут интенсивной активности, если нет противопоказаний.": "На камтар аз 150-300 дақиқа фаъолияти аэробии миёна дар як ҳафта ё 75-150 дақиқа фаъолияти шадид, агар зиднишондод набошад.",
+  "Добавить упражнения для укрепления мышц 2 и более дней в неделю.": "Машқҳои мустаҳкамкунии мушакҳоро 2 ё бештар рӯз дар як ҳафта илова кардан.",
   "Паспортная часть": "Қисми шиносномавӣ",
   "Фамилия": "Насаб",
   "Имя": "Ном",
@@ -514,6 +557,15 @@ function translateSurveyText(value) {
   return TAJIK_TEXT[value] || value;
 }
 
+function doctorLanguage() {
+  return localStorage.getItem(DOCTOR_LANGUAGE_KEY) || "ru";
+}
+
+function translateDoctorText(value) {
+  if (doctorLanguage() !== "tg") return value;
+  return TAJIK_TEXT[value] || value;
+}
+
 function languageControl() {
   const lang = testLanguage();
   return html`
@@ -550,6 +602,26 @@ function bindLanguageControl(onChange) {
 function bindSurveyLanguageControl(onChange) {
   document.querySelector("#surveyLanguage")?.addEventListener("change", (event) => {
     localStorage.setItem(SURVEY_LANGUAGE_KEY, event.target.value);
+    onChange?.();
+  });
+}
+
+function doctorLanguageControl() {
+  const lang = doctorLanguage();
+  return html`
+    <div class="form-row language-control">
+      <label>${escapeHtml(translateDoctorText("Язык"))}</label>
+      <select id="doctorLanguage">
+        <option value="ru"${lang === "ru" ? " selected" : ""}>${escapeHtml(translateDoctorText("Русский"))}</option>
+        <option value="tg"${lang === "tg" ? " selected" : ""}>${escapeHtml(translateDoctorText("Тоҷикӣ"))}</option>
+      </select>
+    </div>
+  `;
+}
+
+function bindDoctorLanguageControl(onChange) {
+  document.querySelector("#doctorLanguage")?.addEventListener("change", (event) => {
+    localStorage.setItem(DOCTOR_LANGUAGE_KEY, event.target.value);
     onChange?.();
   });
 }
@@ -602,6 +674,30 @@ function showSurveyLanguagePrompt(onChoose) {
   });
 }
 
+function showDoctorLanguagePrompt(onChoose) {
+  if (doctorLanguagePromptShown) return;
+  doctorLanguagePromptShown = true;
+  const overlay = document.createElement("div");
+  overlay.className = "language-modal";
+  overlay.innerHTML = html`
+    <div class="language-modal__panel">
+      <h2>Выберите язык / Забонро интихоб кунед</h2>
+      <div class="language-modal__actions">
+        <button type="button" data-doctor-lang-choice="ru">Русский</button>
+        <button type="button" data-doctor-lang-choice="tg">Тоҷикӣ</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-doctor-lang-choice]");
+    if (!button) return;
+    localStorage.setItem(DOCTOR_LANGUAGE_KEY, button.dataset.doctorLangChoice);
+    overlay.remove();
+    onChoose?.();
+  });
+}
+
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {});
 }
@@ -628,13 +724,14 @@ function setPage(content) {
 }
 
 function topbar(title, nav = "") {
+  const logoutText = document.body.dataset.app === "doctor" ? translateDoctorText("Выйти") : "Выйти";
   return html`
     <header class="topbar">
       <div>
         <div class="brand">${title}</div>
         <div class="muted">${state.me?.name || ""}</div>
       </div>
-      <div class="nav">${nav}<button class="secondary" data-action="logout">Выйти</button></div>
+      <div class="nav">${nav}<button class="secondary" data-action="logout">${escapeHtml(logoutText)}</button></div>
     </header>
   `;
 }
@@ -669,6 +766,18 @@ document.addEventListener("click", async (event) => {
   }
   if (action === "select-survey") {
     state.selectedSurvey = state.doctor.surveys.find((item) => item.id === event.target.dataset.id);
+    state.doctorMode = "visit";
+    renderDoctor();
+    setTimeout(() => document.querySelector("#doctorPrimaryPanel")?.scrollIntoView({ block: "start" }), 0);
+  }
+  if (action === "add-doctor-patient") {
+    state.selectedSurvey = null;
+    state.doctorMode = "add";
+    renderDoctor();
+    setTimeout(() => document.querySelector("#doctorPrimaryPanel")?.scrollIntoView({ block: "start" }), 0);
+  }
+  if (action === "cancel-doctor-patient") {
+    state.doctorMode = "list";
     renderDoctor();
   }
   if (action === "select-training-participant") {
@@ -756,16 +865,20 @@ function renderAdminLogin() {
 }
 
 function renderDoctorLogin() {
+  const t = (value) => translateDoctorText(value);
   setPage(html`
     <main class="login">
       <form class="panel form" id="doctorLogin">
-        <h1>Вход врача</h1>
-        <div class="form-row"><label>Логин врача</label><input name="login" required /></div>
-        <div class="form-row"><label>Специальный ключ</label><input type="password" name="accessKey" required /></div>
-        <button>Войти</button>
+        <h1>${escapeHtml(t("Вход врача"))}</h1>
+        ${doctorLanguageControl()}
+        <div class="form-row"><label>${escapeHtml(t("Логин врача"))}</label><input name="login" required /></div>
+        <div class="form-row"><label>${escapeHtml(t("Специальный ключ"))}</label><input type="password" name="accessKey" required /></div>
+        <button>${escapeHtml(t("Войти"))}</button>
       </form>
     </main>
   `);
+  bindDoctorLanguageControl(renderDoctorLogin);
+  showDoctorLanguagePrompt(renderDoctorLogin);
   document.querySelector("#doctorLogin").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
@@ -2203,78 +2316,145 @@ function select(label, name, options) {
 async function loadDoctor() {
   state.doctor = await api("/api/doctor/workspace");
   renderDoctor();
+  showDoctorLanguagePrompt(renderDoctor);
 }
 
 function renderDoctor() {
+  const t = (value) => translateDoctorText(value);
+  const primaryPanel = state.doctorMode === "add"
+    ? doctorPatientSurveyForm()
+    : state.selectedSurvey
+      ? doctorVisitForm(state.selectedSurvey)
+      : `<h2>${escapeHtml(t("Выберите пациента"))}</h2><p class='muted'>${escapeHtml(t("После выбора откроется повторное измерение, направления и препараты."))}</p>`;
   setPage(html`
     <div class="layout">
-      ${topbar("Кабинет врача")}
+      ${topbar(escapeHtml(t("Кабинет врача")))}
       <main class="container grid two doctor-workspace">
+        <section class="panel" id="doctorPrimaryPanel">${primaryPanel}</section>
         <section class="panel">
-          <h2>Картотека больных</h2>
-          <input id="patientSearch" placeholder="Введите имя или фамилию" />
+          <h2>${escapeHtml(t("Картотека больных"))}</h2>
+          ${doctorLanguageControl()}
+          <div class="actions">
+            <button type="button" data-action="add-doctor-patient">${escapeHtml(t("Добавить пациента"))}</button>
+          </div>
+          <input id="patientSearch" placeholder="${escapeHtml(t("Введите имя или фамилию"))}" />
           <div id="patientList" style="margin-top:12px">${doctorSurveyList(state.doctor.surveys)}</div>
         </section>
-        <section class="panel">${state.selectedSurvey ? doctorVisitForm(state.selectedSurvey) : "<h2>Выберите пациента</h2><p class='muted'>После выбора откроется повторное измерение, направления и препараты.</p>"}</section>
       </main>
     </div>
   `);
+  bindDoctorLanguageControl(renderDoctor);
   document.querySelector("#patientSearch")?.addEventListener("input", (event) => {
     const query = event.target.value.toLowerCase();
     const list = state.doctor.surveys.filter((survey) => fullName(survey.patient).toLowerCase().includes(query));
     document.querySelector("#patientList").innerHTML = doctorSurveyList(list);
   });
   bindDoctorVisit();
+  bindDoctorPatientSurvey();
 }
 
 function doctorSurveyList(surveys) {
+  const t = (value) => translateDoctorText(value);
   return surveys.map((survey) => html`
     <div class="card" style="margin-bottom:8px">
       <strong>${escapeHtml(fullName(survey.patient))}</strong>
       <div class="muted">${escapeHtml(survey.patient?.clinic || "")}</div>
       <div class="muted">АД ${survey.measurements.systolic}/${survey.measurements.diastolic}, FINDRISC ${survey.findrisc.score}, ${new Date(survey.createdAt).toLocaleDateString("ru-RU")}</div>
-      <button data-action="select-survey" data-id="${survey.id}">Открыть</button>
+      <button data-action="select-survey" data-id="${survey.id}">${escapeHtml(t("Открыть"))}</button>
     </div>
-  `).join("") || "<p class='muted'>Анкет пока нет</p>";
+  `).join("") || `<p class='muted'>${escapeHtml(t("Анкет пока нет"))}</p>`;
+}
+
+function doctorPatientSurveyForm() {
+  const t = (value) => translateDoctorText(value);
+  const doctorSelect = (label, name, options) => select(t(label), name, options.map(([value, text]) => [value, t(text)]));
+  return html`
+    <form class="form" id="doctorPatientSurveyForm">
+      <h2>${escapeHtml(t("Добавить пациента"))}</h2>
+      <p class="muted">${escapeHtml(t("Заполните анкету пациента. Пациент будет добавлен в картотеку вашей поликлиники."))}</p>
+      <input type="hidden" name="clinic" value="${escapeHtml(state.doctor.doctor?.clinic || "")}" />
+      <div class="notice ok">${escapeHtml(t("Поликлиника пациента"))}: <strong>${escapeHtml(state.doctor.doctor?.clinic || "")}</strong></div>
+      <h3>${escapeHtml(t("Паспортная часть"))}</h3>
+      <section class="grid two">
+        ${input(t("Фамилия"), "lastName", true)}
+        ${input(t("Имя"), "firstName", true)}
+        ${input(t("Отчество"), "middleName")}
+        ${input(t("Дата рождения"), "birthDate", true, "date")}
+        ${doctorSelect("Пол", "sex", [["female", "Женский"], ["male", "Мужской"]])}
+        <div class="form-row"><label>${escapeHtml(t("Возраст"))}</label><input name="age" inputmode="numeric" required readonly /></div>
+        ${input(t("Телефон"), "phone")}
+        ${input(t("Адрес"), "address")}
+      </section>
+      <h3>FINDRISC</h3>
+      <section class="grid two">
+        ${input(t("Рост, см"), "height", true, "number")}
+        ${input(t("Индекс массы тела"), "bmi", true, "number")}
+        ${doctorSelect("Физическая активность 30 минут в день", "activity", [["yes", "Да"], ["no", "Нет"]])}
+        ${doctorSelect("Овощи/фрукты ежедневно", "vegetables", [["yes", "Да"], ["no", "Нет"]])}
+        ${doctorSelect("Принимал препараты от давления", "bpMeds", [["no", "Нет"], ["yes", "Да"]])}
+        ${doctorSelect("Когда-либо был высокий сахар", "highGlucose", [["no", "Нет"], ["yes", "Да"]])}
+        ${doctorSelect("Диабет у родственников", "familyDiabetes", [["none", "Нет"], ["second", "Да, 2 линия"], ["first", "Да, 1 линия"]])}
+      </section>
+      <h3>${escapeHtml(t("Сердечно-сосудистый риск"))}</h3>
+      <section class="grid two">
+        ${doctorSelect("Курение", "smoker", [["no", "Нет"], ["yes", "Да"]])}
+        ${input(t("Систолическое АД"), "systolic", true, "number")}
+        ${input(t("Диастолическое АД"), "diastolic", true, "number")}
+      </section>
+      <h3>${escapeHtml(t("Формула Rabito"))}</h3>
+      <section class="grid three">
+        ${input(t("Окружность плеча, см"), "arm", true, "number")}
+        ${input(t("Окружность живота/талия, см"), "rabitoWaist", true, "number")}
+        ${input(t("Окружность голени, см"), "calf", true, "number")}
+        <div class="form-row"><label>${escapeHtml(t("Расчётный вес Rabito, кг"))}</label><input name="rabitoWeightPreview" inputmode="decimal" readonly /></div>
+      </section>
+      <div class="actions">
+        <button type="submit">${escapeHtml(t("Отправить анкету"))}</button>
+        <button type="button" class="secondary" data-action="cancel-doctor-patient">${escapeHtml(t("Отмена"))}</button>
+      </div>
+      <div id="doctorPatientSurveyResult"></div>
+    </form>
+  `;
 }
 
 function doctorVisitForm(survey) {
+  const t = (value) => translateDoctorText(value);
   return html`
     <form class="form" id="visitForm">
       <h2>${escapeHtml(fullName(survey.patient))}</h2>
       <input type="hidden" name="surveyId" value="${survey.id}" />
       <section class="grid two">
-        ${input("Вес по весам, кг", "weight", true, "number")}
-        ${input("Рост, см", "height", true, "number")}
-        <div class="form-row"><label>ИМТ</label><input name="bmi" inputmode="decimal" readonly required /></div>
-        ${input("Сахар крови, ммоль/л", "glucose", false, "number")}
-        ${input("Повторное САД", "systolic", true, "number")}
-        ${input("Повторное ДАД", "diastolic", true, "number")}
+        ${input(t("Вес по весам, кг"), "weight", true, "number")}
+        ${input(t("Рост, см"), "height", true, "number")}
+        <div class="form-row"><label>${escapeHtml(t("Индекс массы тела"))}</label><input name="bmi" inputmode="decimal" readonly required /></div>
+        ${input(t("Сахар крови, ммоль/л"), "glucose", false, "number")}
+        ${input(t("Повторное САД"), "systolic", true, "number")}
+        ${input(t("Повторное ДАД"), "diastolic", true, "number")}
       </section>
-      <h3>Направление</h3>
+      <h3>${escapeHtml(t("Направление"))}</h3>
       <div class="checkbox-list">
-        ${check("referrals", "Эндокринолог")}
-        ${check("referrals", "Кардиолог")}
+        ${check("referrals", t("Эндокринолог"), "Эндокринолог")}
+        ${check("referrals", t("Кардиолог"), "Кардиолог")}
       </div>
-      <div class="form-row"><label>План лечения</label><textarea name="treatmentPlan"></textarea></div>
-      <h3>Препараты для СД 2 типа</h3>
+      <div class="form-row"><label>${escapeHtml(t("План лечения"))}</label><textarea name="treatmentPlan"></textarea></div>
+      <h3>${escapeHtml(t("Препараты для СД 2 типа"))}</h3>
       <div class="checkbox-list">${state.doctor.dictionaries.diabetesDrugs.map((item) => check("diabetesDrugs", item)).join("")}</div>
-      <h3>Препараты для артериальной гипертензии</h3>
+      <h3>${escapeHtml(t("Препараты для артериальной гипертензии"))}</h3>
       <div class="checkbox-list">${state.doctor.dictionaries.hypertensionDrugs.map((item) => check("hypertensionDrugs", item)).join("")}</div>
-      <h3>Рекомендации пациенту</h3>
+      <h3>${escapeHtml(t("Рекомендации пациенту"))}</h3>
       <div class="checkbox-list lifestyle-list">
-        ${check("lifestyleRecommendations", "Диета при сахарном диабете", "diabetesDiet")}
+        ${check("lifestyleRecommendations", t("Диета при сахарном диабете"), "diabetesDiet")}
         <div class="recommendation-panel" data-recommendation="diabetesDiet">
-          <strong>Диета при сахарном диабете</strong>
-          <ul>${lifestyleRecommendations.diabetesDiet.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+          <strong>${escapeHtml(t("Диета при сахарном диабете"))}</strong>
+          <ul>${lifestyleRecommendations.diabetesDiet.map((item) => `<li>${escapeHtml(t(item))}</li>`).join("")}</ul>
         </div>
-        ${check("lifestyleRecommendations", "Специальные физические упражнения", "physicalActivity")}
+        ${check("lifestyleRecommendations", t("Специальные физические упражнения"), "physicalActivity")}
         <div class="recommendation-panel" data-recommendation="physicalActivity">
-          <strong>Физическая активность</strong>
-          <ul>${lifestyleRecommendations.physicalActivity.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+          <strong>${escapeHtml(t("Физическая активность"))}</strong>
+          <ul>${lifestyleRecommendations.physicalActivity.map((item) => `<li>${escapeHtml(t(item))}</li>`).join("")}</ul>
         </div>
       </div>
-      <button>Сохранить осмотр</button>
+      <button>${escapeHtml(t("Сохранить осмотр"))}</button>
       <div id="visitResult"></div>
     </form>
   `;
@@ -2308,11 +2488,32 @@ function bindDoctorVisit() {
     data.lifestyleRecommendations = new FormData(form).getAll("lifestyleRecommendations");
     try {
       await api("/api/doctor/visits", { method: "POST", body: JSON.stringify(data) });
-      document.querySelector("#visitResult").innerHTML = '<div class="notice ok">Осмотр сохранён и отправлен администратору.</div>';
+      document.querySelector("#visitResult").innerHTML = `<div class="notice ok">${escapeHtml(translateDoctorText("Осмотр сохранён и отправлен администратору."))}</div>`;
       form.reset();
       updateLifestyleRecommendationPanels();
     } catch (error) {
       alert(error.message);
+    }
+  });
+}
+
+function bindDoctorPatientSurvey() {
+  const form = document.querySelector("#doctorPatientSurveyForm");
+  if (!form) return;
+  bindNurseSurveyCalculations(form);
+  bindBirthDateAge(form);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(form));
+    try {
+      const { survey } = await api("/api/doctor/surveys", { method: "POST", body: JSON.stringify(data) });
+      state.doctor.surveys = [survey, ...state.doctor.surveys.filter((item) => item.id !== survey.id)];
+      state.selectedSurvey = survey;
+      state.doctorMode = "visit";
+      renderDoctor();
+      setTimeout(() => document.querySelector("#doctorPrimaryPanel")?.scrollIntoView({ block: "start" }), 0);
+    } catch (error) {
+      document.querySelector("#doctorPatientSurveyResult").innerHTML = `<div class="notice danger">${escapeHtml(error.message)}</div>`;
     }
   });
 }
