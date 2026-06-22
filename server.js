@@ -987,6 +987,7 @@ async function handleApi(req, res, url) {
       systolic: Number(body.systolic || 0),
       diastolic: Number(body.diastolic || 0),
       followUpDays: Number(body.followUpDays || 0),
+      laboratoryTests: Array.isArray(body.laboratoryTests) ? body.laboratoryTests : [],
       referrals: body.referrals || [],
       treatmentPlan: body.treatmentPlan || "",
       diabetesDrugs: body.diabetesDrugs || [],

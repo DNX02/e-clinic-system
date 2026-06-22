@@ -67,6 +67,38 @@ const lifestyleRecommendations = {
     "При осложнениях диабета, сердечно-сосудистых симптомах или высоком риске нагрузку подбирать индивидуально."
   ]
 };
+const doctorLabTests = [
+  "Сахар крови",
+  "Общий анализ крови",
+  "Общий анализ мочи",
+  "Холестерин общий",
+  "ЛПНП",
+  "ЛПВП",
+  "Триглицериды",
+  "HbA1c",
+  "Креатинин",
+  "СКФ",
+  "АЛТ",
+  "АСТ",
+  "Билирубин",
+  "Мочевина",
+  "Калий",
+  "Натрий",
+  "ТТГ",
+  "Свободный Т4",
+  "Свободный Т3",
+  "Инсулин",
+  "С-пептид",
+  "Кортизол",
+  "Пролактин",
+  "Тестостерон",
+  "Другое"
+];
+const doctorLabTemplates = {
+  "Общий анализ крови": ["Гемоглобин", "Эритроциты", "Лейкоциты", "Тромбоциты", "СОЭ"],
+  "Общий анализ мочи": ["Белок", "Глюкоза", "Кетоны", "Лейкоциты", "Эритроциты", "Удельный вес"],
+  "Сахар крови": ["Глюкоза натощак", "Глюкоза после еды", "HbA1c"]
+};
 const TAJIK_TEXT = {
   "Русский": "Русӣ",
   "Тоҷикӣ": "Тоҷикӣ",
@@ -98,6 +130,47 @@ const TAJIK_TEXT = {
   "Повторное обследование через сколько дней": "Муоинаи такрорӣ баъди чанд рӯз",
   "Повторное обследование": "Муоинаи такрорӣ",
   "дней": "рӯз",
+  "Дополнительные лабораторные исследования": "Таҳқиқотҳои иловагии лабораторӣ",
+  "Добавить анализ": "Илова кардани таҳлил",
+  "Лабораторный анализ": "Таҳлили лабораторӣ",
+  "Результат": "Натиҷа",
+  "Удалить": "Нест кардан",
+  "Сахар крови": "Қанди хун",
+  "Общий анализ крови": "Таҳлили умумии хун",
+  "Общий анализ мочи": "Таҳлили умумии пешоб",
+  "Холестерин общий": "Холестерини умумӣ",
+  "ЛПНП": "ЛПНП",
+  "ЛПВП": "ЛПВП",
+  "Триглицериды": "Триглисеридҳо",
+  "HbA1c": "HbA1c",
+  "Креатинин": "Креатинин",
+  "СКФ": "СФГ",
+  "АЛТ": "АЛТ",
+  "АСТ": "АСТ",
+  "Билирубин": "Билирубин",
+  "Мочевина": "Мочевина",
+  "Калий": "Калий",
+  "Натрий": "Натрий",
+  "ТТГ": "ТТГ",
+  "Свободный Т4": "Т4 озод",
+  "Свободный Т3": "Т3 озод",
+  "Инсулин": "Инсулин",
+  "С-пептид": "С-пептид",
+  "Кортизол": "Кортизол",
+  "Пролактин": "Пролактин",
+  "Тестостерон": "Тестостерон",
+  "Другое": "Дигар",
+  "Гемоглобин": "Гемоглобин",
+  "Эритроциты": "Эритроситҳо",
+  "Лейкоциты": "Лейкоситҳо",
+  "Тромбоциты": "Тромбоситҳо",
+  "СОЭ": "СОЭ",
+  "Белок": "Сафеда",
+  "Глюкоза": "Глюкоза",
+  "Кетоны": "Кетонҳо",
+  "Удельный вес": "Вазни хос",
+  "Глюкоза натощак": "Глюкоза ношто",
+  "Глюкоза после еды": "Глюкоза баъди хӯрок",
   "Выберите пациента": "Беморро интихоб кунед",
   "После выбора откроется повторное измерение, направления и препараты.": "Пас аз интихоб ченкунии такрорӣ, равонасозӣ ва доруҳо кушода мешаванд.",
   "Анкет пока нет": "Ҳоло анкета нест",
@@ -1370,6 +1443,7 @@ function renderVisitsAdmin() {
       <td>ИМТ ${visit.bmi || "-"} / АД ${visit.systolic}/${visit.diastolic} / сахар ${visit.glucose || "-"}</td>
       <td>${(visit.referrals || []).join(", ") || "-"}</td>
       <td>${visit.followUpDays ? `Через ${visit.followUpDays} дней` : "-"}</td>
+      <td>${doctorLabSummary(visit.laboratoryTests)}</td>
       <td>${doctorLifestyleSummary(visit.lifestyleRecommendations)}</td>
       <td>${escapeHtml((visit.diabetesDrugs || []).join("; "))}</td>
       <td>${escapeHtml((visit.hypertensionDrugs || []).join("; "))}</td>
@@ -1381,8 +1455,8 @@ function renderVisitsAdmin() {
       <h2>Действия врачей</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Врач</th><th>Пациент</th><th>ИМТ / АД</th><th>Направление</th><th>Повторное обследование</th><th>Рекомендации</th><th>СД 2</th><th>АГ</th><th>Дата</th></tr></thead>
-          <tbody>${rows || "<tr><td colspan='9'>Пока нет записей</td></tr>"}</tbody>
+          <thead><tr><th>Врач</th><th>Пациент</th><th>ИМТ / АД</th><th>Направление</th><th>Повторное обследование</th><th>Лаборатория</th><th>Рекомендации</th><th>СД 2</th><th>АГ</th><th>Дата</th></tr></thead>
+          <tbody>${rows || "<tr><td colspan='10'>Пока нет записей</td></tr>"}</tbody>
         </table>
       </div>
     </section>
@@ -1394,6 +1468,16 @@ function doctorLifestyleSummary(recommendations = {}) {
   if (recommendations.diabetesDiet) items.push("Диета");
   if (recommendations.physicalActivity) items.push("Физическая активность");
   return items.length ? items.join(", ") : "-";
+}
+
+function doctorLabSummary(labs = []) {
+  if (!Array.isArray(labs) || !labs.length) return "-";
+  return labs.map((lab) => {
+    const fields = lab.fields && typeof lab.fields === "object"
+      ? Object.entries(lab.fields).filter(([, value]) => value).map(([key, value]) => `${key}: ${value}`).join(", ")
+      : "";
+    return `${lab.test || "Анализ"}${fields ? ` (${fields})` : lab.result ? `: ${lab.result}` : ""}`;
+  }).join("; ");
 }
 
 function renderQrAdmin() {
@@ -2610,6 +2694,11 @@ function doctorVisitForm(survey) {
         ${check("referrals", t("Кардиолог"), "Кардиолог")}
       </div>
       <div class="form-row"><label>${escapeHtml(t("План лечения"))}</label><textarea name="treatmentPlan"></textarea></div>
+      <h3>${escapeHtml(t("Дополнительные лабораторные исследования"))}</h3>
+      <div id="doctorLabList" class="lab-list"></div>
+      <div class="actions">
+        <button type="button" class="secondary" id="addDoctorLab">${escapeHtml(t("Добавить анализ"))}</button>
+      </div>
       <h3>${escapeHtml(t("Препараты для СД 2 типа"))}</h3>
       <div class="checkbox-list">${state.doctor.dictionaries.diabetesDrugs.map((item) => check("diabetesDrugs", item)).join("")}</div>
       <h3>${escapeHtml(t("Препараты для артериальной гипертензии"))}</h3>
@@ -2637,6 +2726,72 @@ function check(name, value, optionValue = value) {
   return `<label><input type="checkbox" name="${name}" value="${escapeHtml(optionValue)}" /> ${escapeHtml(value)}</label>`;
 }
 
+function doctorLabRow(testName = "Сахар крови", values = {}) {
+  const t = (value) => translateDoctorText(value);
+  const rowId = crypto.randomUUID();
+  const fields = doctorLabTemplates[testName] || [];
+  return html`
+    <div class="card lab-row" data-lab-row="${rowId}">
+      <section class="grid two">
+        <div class="form-row">
+          <label>${escapeHtml(t("Лабораторный анализ"))}</label>
+          <select class="doctorLabTest">
+            ${doctorLabTests.map((item) => `<option value="${escapeHtml(item)}"${item === testName ? " selected" : ""}>${escapeHtml(t(item))}</option>`).join("")}
+          </select>
+        </div>
+        <div class="form-row generic-lab-result ${fields.length ? "hidden" : ""}">
+          <label>${escapeHtml(t("Результат"))}</label>
+          <input class="doctorLabGenericResult" value="${escapeHtml(values.result || "")}" />
+        </div>
+      </section>
+      <section class="grid two lab-template-fields">
+        ${fields.map((field) => html`
+          <div class="form-row">
+            <label>${escapeHtml(t(field))}</label>
+            <input class="doctorLabField" data-field="${escapeHtml(field)}" value="${escapeHtml(values[field] || "")}" />
+          </div>
+        `).join("")}
+      </section>
+      <button type="button" class="secondary danger" data-action="remove-lab-row">${escapeHtml(t("Удалить"))}</button>
+    </div>
+  `;
+}
+
+function renderDoctorLabRows() {
+  const list = document.querySelector("#doctorLabList");
+  if (!list) return;
+  list.querySelectorAll(".doctorLabTest").forEach((select) => {
+    select.addEventListener("change", () => {
+      const row = select.closest(".lab-row");
+      row.outerHTML = doctorLabRow(select.value);
+      bindDoctorLabControls();
+    });
+  });
+  list.querySelectorAll('[data-action="remove-lab-row"]').forEach((button) => {
+    button.addEventListener("click", () => button.closest(".lab-row")?.remove());
+  });
+}
+
+function bindDoctorLabControls() {
+  renderDoctorLabRows();
+}
+
+function addDoctorLabRow(testName = "Сахар крови") {
+  const list = document.querySelector("#doctorLabList");
+  if (!list) return;
+  list.insertAdjacentHTML("beforeend", doctorLabRow(testName));
+  bindDoctorLabControls();
+}
+
+function collectDoctorLabs() {
+  return Array.from(document.querySelectorAll("#doctorLabList .lab-row")).map((row) => {
+    const test = row.querySelector(".doctorLabTest")?.value || "";
+    const fields = Object.fromEntries(Array.from(row.querySelectorAll(".doctorLabField")).map((input) => [input.dataset.field, input.value]));
+    const result = row.querySelector(".doctorLabGenericResult")?.value || "";
+    return { test, result, fields };
+  }).filter((item) => item.test && (item.result || Object.values(item.fields).some(Boolean)));
+}
+
 function bindDoctorVisit() {
   const form = document.querySelector("#visitForm");
   if (!form) return;
@@ -2648,6 +2803,8 @@ function bindDoctorVisit() {
   };
   form.elements.weight.addEventListener("input", calculateBmi);
   form.elements.height.addEventListener("input", calculateBmi);
+  document.querySelector("#addDoctorLab")?.addEventListener("click", () => addDoctorLabRow());
+  bindDoctorLabControls();
   form.querySelectorAll('input[name="lifestyleRecommendations"]').forEach((input) => {
     input.addEventListener("change", updateLifestyleRecommendationPanels);
   });
@@ -2659,6 +2816,7 @@ function bindDoctorVisit() {
     data.diabetesDrugs = new FormData(form).getAll("diabetesDrugs");
     data.hypertensionDrugs = new FormData(form).getAll("hypertensionDrugs");
     data.lifestyleRecommendations = new FormData(form).getAll("lifestyleRecommendations");
+    data.laboratoryTests = collectDoctorLabs();
     try {
       await api("/api/doctor/visits", { method: "POST", body: JSON.stringify(data) });
       document.querySelector("#visitResult").innerHTML = `<div class="notice ok">${escapeHtml(translateDoctorText("Осмотр сохранён и отправлен администратору."))}</div>`;
