@@ -188,6 +188,8 @@ const TAJIK_TEXT = {
   "Пациенты": "Беморон",
   "Статистика": "Омор",
   "Кабинет": "Кабинет",
+  "К врачу": "Ба назди духтур",
+  "Обычный риск": "Хавфи муқаррарӣ",
   "Сменить логин и пароль": "Иваз кардани логин ва парол",
   "Новый логин": "Логини нав",
   "Новый пароль / ключ": "Парол / калиди нав",
@@ -3023,15 +3025,41 @@ function doctorStatsPanel() {
 
 function doctorPatientsPanel() {
   const t = (value) => translateDoctorText(value);
+  const visits = state.doctor?.visits || [];
+  const patientCount = new Set(visits.map((visit) => visit.surveyId)).size;
+  const queueCount = state.doctor?.surveys?.length || 0;
   const primaryPanel = state.doctorMode === "add"
     ? doctorPatientSurveyForm()
     : state.selectedSurvey
       ? doctorVisitForm(state.selectedSurvey)
-      : `<h2>${escapeHtml(t("Выберите пациента"))}</h2><p class='muted'>${escapeHtml(t("После выбора откроется повторное измерение, направления и препараты."))}</p>`;
+      : html`
+        <section class="doctor-empty-state">
+          <div class="doctor-empty-icon">+</div>
+          <h2>${escapeHtml(t("Выберите пациента"))}</h2>
+          <p class="muted">${escapeHtml(t("После выбора откроется повторное измерение, направления и препараты."))}</p>
+        </section>
+      `;
   return html`
-    <section class="panel" id="doctorPrimaryPanel">${primaryPanel}</section>
+    <section class="doctor-hero">
+      <div>
+        <span>${escapeHtml(state.doctor.doctor?.clinic || "")}</span>
+        <h1>${escapeHtml(t("Кабинет врача"))}</h1>
+        <p>${escapeHtml(state.doctor.doctor?.fullName || state.me?.name || "")}</p>
+      </div>
+      <div class="doctor-hero-metrics">
+        <div><strong>${queueCount}</strong><span>${escapeHtml(t("Пациенты"))}</span></div>
+        <div><strong>${visits.length}</strong><span>${escapeHtml(t("Всего осмотров"))}</span></div>
+        <div><strong>${patientCount}</strong><span>${escapeHtml(t("Осмотренные пациенты"))}</span></div>
+      </div>
+    </section>
+    <section class="panel doctor-primary-panel" id="doctorPrimaryPanel">${primaryPanel}</section>
     <section class="panel patient-sidebar">
-      <h2>${escapeHtml(t("Картотека больных"))}</h2>
+      <div class="sidebar-title">
+        <div>
+          <h2>${escapeHtml(t("Картотека больных"))}</h2>
+          <p class="muted">${escapeHtml(t("Пациенты"))}: ${queueCount}</p>
+        </div>
+      </div>
       ${doctorLanguageControl()}
       <div class="actions">
         <button type="button" data-action="add-doctor-patient">${escapeHtml(t("Добавить пациента"))}</button>
@@ -3058,7 +3086,7 @@ function renderDoctor() {
       ? doctorStatsPanel()
       : doctorPatientsPanel();
   setPage(html`
-    <div class="layout">
+    <div class="layout doctor-layout">
       ${topbar(escapeHtml(t("Кабинет врача")), doctorNav)}
       <main class="container grid two doctor-workspace">
         ${content}
@@ -3081,11 +3109,20 @@ function renderDoctor() {
 function doctorSurveyList(surveys) {
   const t = (value) => translateDoctorText(value);
   return surveys.map((survey) => html`
-    <div class="card" style="margin-bottom:8px">
-      <strong>${escapeHtml(fullName(survey.patient))}</strong>
-      <div class="muted">${escapeHtml(survey.patient?.clinic || "")}</div>
-      <div class="muted">АД ${survey.measurements.systolic}/${survey.measurements.diastolic}, FINDRISC ${survey.findrisc.score}, ${new Date(survey.createdAt).toLocaleDateString("ru-RU")}</div>
-      <button data-action="select-survey" data-id="${survey.id}">${escapeHtml(t("Открыть"))}</button>
+    <div class="patient-card ${survey.needsDoctor ? "needs-care" : ""}">
+      <div class="patient-card__main">
+        <strong>${escapeHtml(fullName(survey.patient))}</strong>
+        <span>${escapeHtml(survey.patient?.clinic || "")}</span>
+      </div>
+      <div class="patient-card__meta">
+        <span>АД ${survey.measurements.systolic}/${survey.measurements.diastolic}</span>
+        <span>FINDRISC ${survey.findrisc.score}</span>
+        <span>${new Date(survey.createdAt).toLocaleDateString("ru-RU")}</span>
+      </div>
+      <div class="patient-card__footer">
+        ${survey.needsDoctor ? `<span class="pill warn">${escapeHtml(t("К врачу"))}</span>` : `<span class="pill ok">${escapeHtml(t("Обычный риск"))}</span>`}
+        <button data-action="select-survey" data-id="${survey.id}">${escapeHtml(t("Открыть"))}</button>
+      </div>
     </div>
   `).join("") || `<p class='muted'>${escapeHtml(t("Анкет пока нет"))}</p>`;
 }
@@ -3439,6 +3476,7 @@ function updateLifestyleRecommendationPanels() {
 }
 
 boot();
+
 
 
 
