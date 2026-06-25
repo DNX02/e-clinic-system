@@ -99,6 +99,112 @@ button:disabled {
   background:
     linear-gradient(135deg, rgba(232, 246, 240, 0.96) 0%, rgba(247, 251, 249, 0.92) 46%, rgba(238, 245, 242, 0.98) 100%),
     #f4f7f5;
+  overflow: hidden;
+  position: relative;
+}
+
+.doctor-layout::before,
+.doctor-layout::after {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  z-index: 0;
+}
+
+.doctor-layout::before {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.18)),
+    rgba(255, 255, 255, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.64);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.80), 0 30px 80px rgba(17, 106, 91, 0.10);
+  height: 360px;
+  left: -90px;
+  top: 110px;
+  transform: rotate(-10deg);
+  width: 360px;
+}
+
+.doctor-layout::after {
+  background:
+    linear-gradient(145deg, rgba(17, 106, 91, 0.16), rgba(255, 255, 255, 0.28)),
+    rgba(255, 255, 255, 0.20);
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 26px 70px rgba(15, 32, 29, 0.08);
+  height: 420px;
+  right: -130px;
+  top: 320px;
+  transform: rotate(13deg);
+  width: 420px;
+}
+
+.doctor-layout .topbar,
+.doctor-layout .container {
+  position: relative;
+  z-index: 1;
+}
+
+.doctor-layout .container::before {
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.12)),
+    rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.50);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.70), 0 24px 60px rgba(17, 106, 91, 0.08);
+  content: "";
+  height: 260px;
+  left: 46%;
+  pointer-events: none;
+  position: fixed;
+  top: 68%;
+  transform: rotate(-7deg);
+  width: 520px;
+  z-index: -1;
+}
+
+@supports (animation-timeline: scroll()) {
+  .doctor-layout::before {
+    animation: glassFloatLeft linear both;
+    animation-timeline: scroll();
+  }
+
+  .doctor-layout::after {
+    animation: glassFloatRight linear both;
+    animation-timeline: scroll();
+  }
+
+  .doctor-layout .container::before {
+    animation: glassFloatCenter linear both;
+    animation-timeline: scroll();
+  }
+}
+
+@keyframes glassFloatLeft {
+  from {
+    transform: translateY(0) rotate(-10deg);
+  }
+  to {
+    transform: translateY(-120px) rotate(-3deg);
+  }
+}
+
+@keyframes glassFloatRight {
+  from {
+    transform: translateY(0) rotate(13deg);
+  }
+  to {
+    transform: translateY(-180px) rotate(6deg);
+  }
+}
+
+@keyframes glassFloatCenter {
+  from {
+    transform: translateY(80px) rotate(-7deg);
+  }
+  to {
+    transform: translateY(-150px) rotate(4deg);
+  }
 }
 
 .doctor-layout .topbar {
@@ -1086,6 +1192,24 @@ th {
 
   .doctor-layout .doctor-workspace {
     padding-bottom: 112px;
+  }
+
+  .doctor-layout::before {
+    height: 220px;
+    left: -120px;
+    top: 170px;
+    width: 220px;
+  }
+
+  .doctor-layout::after {
+    height: 260px;
+    right: -170px;
+    top: 420px;
+    width: 260px;
+  }
+
+  .doctor-layout .container::before {
+    display: none;
   }
 
   .doctor-hero {
