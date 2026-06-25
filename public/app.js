@@ -7,6 +7,7 @@ const initialState = () => ({
   doctorSection: "patients",
   selectedSurvey: null,
   doctorMode: "list",
+  doctorRiskFirst: false,
   lastDoctorKey: null,
   surveyClinicFilter: "all",
   trainingClinicFilter: ["all"],
@@ -190,6 +191,7 @@ const TAJIK_TEXT = {
   "Кабинет": "Кабинет",
   "К врачу": "Ба назди духтур",
   "Обычный риск": "Хавфи муқаррарӣ",
+  "Сначала к врачу": "Аввал беморони ба духтур",
   "Сменить логин и пароль": "Иваз кардани логин ва парол",
   "Новый логин": "Логини нав",
   "Новый пароль / ключ": "Парол / калиди нав",
@@ -888,6 +890,10 @@ document.addEventListener("click", async (event) => {
       state.selectedSurvey = null;
     }
     renderDoctor();
+  }
+  if (action === "doctor-toggle-risk-sort") {
+    state.doctorRiskFirst = !state.doctorRiskFirst;
+    renderDoctorPatientList();
   }
   if (action === "investor-tab") {
     state.investorTab = event.target.dataset.tab;
@@ -3064,11 +3070,12 @@ function doctorPatientsPanel() {
       <div class="actions">
         <button type="button" data-action="add-doctor-patient">${escapeHtml(t("Добавить пациента"))}</button>
         <button type="button" class="secondary" id="doctorSyncButton">${escapeHtml(t("Синхронизировать"))}</button>
+        <button type="button" class="${state.doctorRiskFirst ? "" : "secondary"}" data-action="doctor-toggle-risk-sort">${escapeHtml(t("Сначала к врачу"))}</button>
       </div>
       <div class="muted" id="doctorSyncStatus"></div>
       <div id="doctorSyncResult"></div>
       <input id="patientSearch" placeholder="${escapeHtml(t("Введите имя или фамилию"))}" />
-      <div id="patientList" style="margin-top:12px">${doctorSurveyList(state.doctor.surveys)}</div>
+      <div id="patientList" style="margin-top:12px">${doctorSurveyList(doctorSortedSurveys(state.doctor.surveys))}</div>
     </section>
   `;
 }
@@ -3097,13 +3104,28 @@ function renderDoctor() {
   document.querySelector("#doctorSyncButton")?.addEventListener("click", syncOfflineDoctorActions);
   updateOfflineDoctorStatus();
   document.querySelector("#patientSearch")?.addEventListener("input", (event) => {
-    const query = event.target.value.toLowerCase();
-    const list = state.doctor.surveys.filter((survey) => fullName(survey.patient).toLowerCase().includes(query));
-    document.querySelector("#patientList").innerHTML = doctorSurveyList(list);
+    renderDoctorPatientList();
   });
   bindDoctorVisit();
   bindDoctorPatientSurvey();
   bindDoctorAccountForm();
+}
+
+function doctorSortedSurveys(surveys) {
+  const list = [...(surveys || [])];
+  if (state.doctorRiskFirst) {
+    list.sort((left, right) => Number(Boolean(right.needsDoctor)) - Number(Boolean(left.needsDoctor)) || new Date(right.createdAt) - new Date(left.createdAt));
+  }
+  return list;
+}
+
+function renderDoctorPatientList() {
+  const search = document.querySelector("#patientSearch");
+  const patientList = document.querySelector("#patientList");
+  if (!patientList) return;
+  const query = (search?.value || "").toLowerCase();
+  const list = state.doctor.surveys.filter((survey) => fullName(survey.patient).toLowerCase().includes(query));
+  patientList.innerHTML = doctorSurveyList(doctorSortedSurveys(list));
 }
 
 function doctorSurveyList(surveys) {
@@ -3476,6 +3498,7 @@ function updateLifestyleRecommendationPanels() {
 }
 
 boot();
+
 
 
 
