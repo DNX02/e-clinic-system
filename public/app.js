@@ -14,7 +14,9 @@ const initialState = () => ({
   trainingRegistrationDateFilter: "",
   nurseTrainingClinicFilter: ["all"],
   nurseTrainingDateFilter: "",
-  nurseTrainingRegistrationDateFilter: ""
+  nurseTrainingRegistrationDateFilter: "",
+  investor: null,
+  investorTab: "overview"
 });
 let state = initialState();
 let offlineSurveyOnlineListenerBound = false;
@@ -23,6 +25,7 @@ const DOCTOR_APP_PATH = "/app-2-doctor";
 const SURVEY_APP_PATH = "/app-3-patient-survey";
 const TRAINING_APP_PATH = "/app-4-doctor-knowledge";
 const NURSE_TRAINING_APP_PATH = "/app-5-nurse-knowledge";
+const INVESTOR_APP_PATH = "/app-6-investor-dashboard";
 
 const api = async (url, options = {}) => {
   const response = await fetch(url, {
@@ -841,6 +844,7 @@ function route() {
   if (appMode === "survey" || path === SURVEY_APP_PATH) return renderNurseSurvey();
   if (appMode === "training" || path === TRAINING_APP_PATH) return loadTrainingPretest();
   if (appMode === "nurse-training" || path === NURSE_TRAINING_APP_PATH) return loadNurseTraining();
+  if (appMode === "investor" || path === INVESTOR_APP_PATH) return loadInvestorDashboard();
   if (appMode === "doctor" || path === DOCTOR_APP_PATH) return state.me?.type === "doctor" ? loadDoctor() : renderDoctorLogin();
   if (appMode === "admin" || path === ADMIN_APP_PATH) return state.me?.type === "admin" ? loadAdmin() : renderAdminLogin();
   renderHome();
@@ -882,6 +886,10 @@ document.addEventListener("click", async (event) => {
       state.selectedSurvey = null;
     }
     renderDoctor();
+  }
+  if (action === "investor-tab") {
+    state.investorTab = event.target.dataset.tab;
+    renderInvestorDashboard();
   }
   if (action === "delete-doctor") {
     if (!confirm("Удалить профиль врача?")) return;
@@ -952,6 +960,7 @@ function renderHome() {
   const surveyUrl = `${location.origin}${SURVEY_APP_PATH}`;
   const trainingUrl = `${location.origin}${TRAINING_APP_PATH}`;
   const nurseTrainingUrl = `${location.origin}${NURSE_TRAINING_APP_PATH}`;
+  const investorUrl = `${location.origin}${INVESTOR_APP_PATH}`;
   setPage(html`
     <main class="login">
       <section class="panel">
@@ -965,6 +974,8 @@ function renderHome() {
           <input id="homeTrainingUrl" readonly value="${trainingUrl}" />
           <a href="${NURSE_TRAINING_APP_PATH}"><button>№5 Тесты медсестер</button></a>
           <input id="homeNurseTrainingUrl" readonly value="${nurseTrainingUrl}" />
+          <a href="${INVESTOR_APP_PATH}"><button>№6 Для инвесторов</button></a>
+          <input id="homeInvestorUrl" readonly value="${investorUrl}" />
         </div>
         <p class="muted">Ссылка №1 администратора не показывается здесь, чтобы врачи случайно не открывали админку.</p>
       </section>
@@ -975,7 +986,237 @@ function renderHome() {
     document.querySelector("#homeSurveyUrl").value = apps.survey;
     if (apps.training) document.querySelector("#homeTrainingUrl").value = apps.training;
     if (apps.nurseTraining) document.querySelector("#homeNurseTrainingUrl").value = apps.nurseTraining;
+    if (apps.investor) document.querySelector("#homeInvestorUrl").value = apps.investor;
   }).catch(() => {});
+}
+
+async function loadInvestorDashboard() {
+  state.investor = await api("/api/investor/dashboard");
+  renderInvestorDashboard();
+}
+
+function investorNumber(value, suffix = "") {
+  return `${Number(value || 0).toLocaleString("ru-RU")}${suffix}`;
+}
+
+function investorKpi(label, value, detail = "", tone = "") {
+  return html`
+    <div class="investor-kpi ${tone}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      ${detail ? `<small>${escapeHtml(detail)}</small>` : ""}
+    </div>
+  `;
+}
+
+function chartSeriesMax(items, keys = ["value"]) {
+  return Math.max(1, ...items.flatMap((item) => keys.map((key) => Number(item[key] || 0))));
+}
+
+function investorBarChart(items, key = "value", accent = "var(--primary)") {
+  const rows = items.slice(0, 15);
+  const max = chartSeriesMax(rows, [key]);
+  return html`
+    <div class="investor-bars">
+      ${rows.map((item) => {
+        const value = Number(item[key] || 0);
+        const width = Math.max(4, Math.round((value / max) * 100));
+        return html`
+          <div class="investor-bar-row">
+            <span>${escapeHtml(item.label)}</span>
+            <div><i style="width:${width}%;background:${accent}"></i></div>
+            <strong>${investorNumber(value)}</strong>
+          </div>
+        `;
+      }).join("") || `<p class="muted">Пока нет данных</p>`}
+    </div>
+  `;
+}
+
+function investorGroupedBarChart(items) {
+  const rows = items.slice(0, 15);
+  const max = chartSeriesMax(rows, ["registered", "preCompleted", "postCompleted"]);
+  return html`
+    <div class="investor-bars grouped">
+      ${rows.map((item) => html`
+        <div class="investor-bar-row">
+          <span>${escapeHtml(item.label)}</span>
+          <div class="mini-stack">
+            <i class="tone-a" style="width:${Math.max(4, Math.round((Number(item.registered || 0) / max) * 100))}%"></i>
+            <i class="tone-b" style="width:${Math.max(4, Math.round((Number(item.preCompleted || 0) / max) * 100))}%"></i>
+            <i class="tone-c" style="width:${Math.max(4, Math.round((Number(item.postCompleted || 0) / max) * 100))}%"></i>
+          </div>
+          <strong>${item.registered}/${item.preCompleted}/${item.postCompleted}</strong>
+        </div>
+      `).join("") || `<p class="muted">Пока нет данных</p>`}
+    </div>
+  `;
+}
+
+function investorLineChart(seriesA, seriesB, labelA, labelB) {
+  const dates = [...new Set([...(seriesA || []), ...(seriesB || [])].map((item) => item.label))].sort();
+  const mapA = Object.fromEntries((seriesA || []).map((item) => [item.label, Number(item.value || 0)]));
+  const mapB = Object.fromEntries((seriesB || []).map((item) => [item.label, Number(item.value || 0)]));
+  const max = Math.max(1, ...dates.map((date) => Math.max(mapA[date] || 0, mapB[date] || 0)));
+  const width = 720;
+  const height = 240;
+  const pad = 28;
+  const point = (date, index, map) => {
+    const x = pad + (dates.length <= 1 ? (width - pad * 2) / 2 : (index / (dates.length - 1)) * (width - pad * 2));
+    const y = height - pad - ((map[date] || 0) / max) * (height - pad * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  };
+  const pointsA = dates.map((date, index) => point(date, index, mapA)).join(" ");
+  const hasSeriesB = Boolean(labelB && (seriesB || []).length);
+  const pointsB = hasSeriesB ? dates.map((date, index) => point(date, index, mapB)).join(" ") : "";
+  return html`
+    <div class="investor-line-card">
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Динамика по дням">
+        <path d="M ${pad} ${height - pad} H ${width - pad}" class="axis" />
+        <path d="M ${pad} ${pad} V ${height - pad}" class="axis" />
+        ${pointsA ? `<polyline points="${pointsA}" class="line-a" />` : ""}
+        ${pointsB ? `<polyline points="${pointsB}" class="line-b" />` : ""}
+        ${dates.map((date, index) => {
+          const [xA, yA] = point(date, index, mapA).split(",");
+          const [xB, yB] = point(date, index, mapB).split(",");
+          return `<circle cx="${xA}" cy="${yA}" r="4" class="dot-a" />${hasSeriesB ? `<circle cx="${xB}" cy="${yB}" r="4" class="dot-b" />` : ""}`;
+        }).join("")}
+      </svg>
+      <div class="chart-legend"><span class="legend-a">${escapeHtml(labelA)}</span>${labelB ? `<span class="legend-b">${escapeHtml(labelB)}</span>` : ""}</div>
+    </div>
+  `;
+}
+
+function investorDonut(label, value, tone = "") {
+  const safe = Math.max(0, Math.min(100, Number(value || 0)));
+  return html`
+    <div class="investor-donut ${tone}" style="--value:${safe}">
+      <div class="donut-ring"><strong>${safe}%</strong></div>
+      <span>${escapeHtml(label)}</span>
+    </div>
+  `;
+}
+
+function investorEducationPanel(kind, title) {
+  const data = state.investor.education[kind];
+  return html`
+    <section class="investor-grid">
+      ${investorKpi("Зарегистрировано", investorNumber(data.total), title)}
+      ${investorKpi("Средний пре-тест", investorNumber(data.preAverage, "%"), `${data.preCompleted} сдали`, "soft")}
+      ${investorKpi("Средний пост-тест", investorNumber(data.postAverage, "%"), `${data.postCompleted} сдали`, "hot")}
+      ${investorKpi("Прошли 70%+", investorNumber(data.passed70), "порог качества", "success")}
+    </section>
+    <section class="investor-card">
+      <div class="section-title"><h2>Динамика регистрации</h2><span>${escapeHtml(title)}</span></div>
+      ${investorLineChart(data.byDate, [], "Регистрация", "")}
+    </section>
+    <section class="investor-card">
+      <div class="section-title"><h2>Поликлиники: регистрация / пре / пост</h2><span>сравнение участия</span></div>
+      ${investorGroupedBarChart(data.byClinic)}
+      <div class="chart-legend"><span class="legend-neutral">Регистрация</span><span class="legend-a">Пре-тест</span><span class="legend-b">Пост-тест</span></div>
+    </section>
+    <section class="investor-card">
+      <div class="section-title"><h2>Средний результат по поликлиникам</h2><span>пре и пост</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Поликлиника</th><th>Пре-тест</th><th>Пост-тест</th><th>Рост</th></tr></thead>
+          <tbody>${data.byClinic.map((item) => `<tr><td>${escapeHtml(item.label)}</td><td>${item.preAverage}%</td><td>${item.postAverage}%</td><td>${item.postAverage - item.preAverage >= 0 ? "+" : ""}${item.postAverage - item.preAverage}%</td></tr>`).join("") || "<tr><td colspan='4'>Пока нет данных</td></tr>"}</tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function investorOverview() {
+  const data = state.investor;
+  return html`
+    <section class="investor-grid">
+      ${investorKpi("Врачи в системе", investorNumber(data.summary.doctorsTotal), "активная сеть")}
+      ${investorKpi("Анкеты пациентов", investorNumber(data.summary.surveysTotal), "скрининг на местах", "soft")}
+      ${investorKpi("Осмотры врачей", investorNumber(data.summary.visitsTotal), "клинические действия", "success")}
+      ${investorKpi("Пост-тест врачей", investorNumber(data.summary.doctorTrainingPostAverage, "%"), "средний результат", "hot")}
+    </section>
+    <section class="investor-split">
+      <div class="investor-card wide">
+        <div class="section-title"><h2>Динамика работы</h2><span>анкеты и осмотры по дням</span></div>
+        ${investorLineChart(data.nurses.surveyByDate, data.clinical.visitsByDate, "Анкеты", "Осмотры")}
+      </div>
+      <div class="investor-card">
+        <div class="section-title"><h2>Риски пациентов</h2><span>доля повышенного риска</span></div>
+        <div class="donut-grid">
+          ${data.clinical.risk.map((item, index) => investorDonut(item.label, item.value, index === 0 ? "hot" : index === 1 ? "soft" : "")).join("")}
+        </div>
+      </div>
+    </section>
+    <section class="investor-split">
+      <div class="investor-card">
+        <div class="section-title"><h2>Врачи по поликлиникам</h2><span>покрытие</span></div>
+        ${investorBarChart(data.doctors.registeredByClinic, "value", "#0f766e")}
+      </div>
+      <div class="investor-card">
+        <div class="section-title"><h2>Анкеты по поликлиникам</h2><span>активность скрининга</span></div>
+        ${investorBarChart(data.nurses.surveyByClinic, "value", "#dc2626")}
+      </div>
+    </section>
+  `;
+}
+
+function investorClinics() {
+  const data = state.investor;
+  return html`
+    <section class="investor-split">
+      <div class="investor-card">
+        <div class="section-title"><h2>Покрытие врачами</h2><span>по поликлиникам</span></div>
+        ${investorBarChart(data.doctors.registeredByClinic, "value", "#0f766e")}
+      </div>
+      <div class="investor-card">
+        <div class="section-title"><h2>Работа медсестер</h2><span>анкеты пациентов</span></div>
+        ${investorBarChart(data.nurses.surveyByClinic, "value", "#b91c1c")}
+      </div>
+    </section>
+    <section class="investor-card">
+      <div class="section-title"><h2>Клинические диагнозы</h2><span>по осмотрам врачей</span></div>
+      ${investorBarChart(data.clinical.diagnoses, "value", "#7c3aed")}
+    </section>
+  `;
+}
+
+function renderInvestorDashboard() {
+  const data = state.investor;
+  if (!data) return;
+  const tabs = [
+    ["overview", "Обзор"],
+    ["doctors", "Обучение врачей"],
+    ["nurses", "Обучение медсестер"],
+    ["clinics", "Поликлиники"]
+  ];
+  const content = state.investorTab === "doctors"
+    ? investorEducationPanel("doctors", "врачи")
+    : state.investorTab === "nurses"
+      ? investorEducationPanel("nurses", "медсестры")
+      : state.investorTab === "clinics"
+        ? investorClinics()
+        : investorOverview();
+  setPage(html`
+    <main class="investor-shell">
+      <section class="investor-hero">
+        <div>
+          <span class="investor-eyebrow">E-Clinic Control</span>
+          <h1>Инвестиционная аналитика проекта</h1>
+          <p>Живая картина внедрения: обучение персонала, активность поликлиник, скрининг пациентов и клинические результаты.</p>
+        </div>
+        <div class="investor-hero-card">
+          <span>Обновлено</span>
+          <strong>${new Date(data.generatedAt).toLocaleString("ru-RU")}</strong>
+          <small>Данные берутся напрямую из работающей системы</small>
+        </div>
+      </section>
+      <nav class="investor-tabs">
+        ${tabs.map(([tab, label]) => `<button data-action="investor-tab" data-tab="${tab}" class="${state.investorTab === tab ? "active" : ""}">${label}</button>`).join("")}
+      </nav>
+      <section class="investor-view">${content}</section>
+    </main>
+  `);
 }
 
 function renderAdminLogin() {
@@ -1546,10 +1787,13 @@ function renderQrAdmin() {
   const doctorUrl = `${location.origin}${DOCTOR_APP_PATH}`;
   const surveyUrl = `${location.origin}${SURVEY_APP_PATH}`;
   const trainingUrl = `${location.origin}${TRAINING_APP_PATH}`;
+  const nurseTrainingUrl = `${location.origin}${NURSE_TRAINING_APP_PATH}`;
+  const investorUrl = `${location.origin}${INVESTOR_APP_PATH}`;
   const qr = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(surveyUrl)}`;
   const doctorQr = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(doctorUrl)}`;
   const trainingQr = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(trainingUrl)}`;
   const nurseTrainingQr = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(nurseTrainingUrl)}`;
+  const investorQr = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(investorUrl)}`;
   return html`
     <section class="panel">
       <h2>Отдельные ссылки приложений</h2>
@@ -1573,6 +1817,11 @@ function renderQrAdmin() {
           <h3>№5 Тесты медсестер</h3>
           <img alt="QR-код тестов медсестер" src="${nurseTrainingQr}" />
           <input readonly value="${nurseTrainingUrl}" />
+        </div>
+        <div class="qr-box">
+          <h3>№6 Для инвесторов</h3>
+          <img alt="QR-код инвесторской аналитики" src="${investorQr}" />
+          <input readonly value="${investorUrl}" />
         </div>
       </div>
       <div class="form-row" style="margin-top:16px">
@@ -3190,5 +3439,6 @@ function updateLifestyleRecommendationPanels() {
 }
 
 boot();
+
 
 

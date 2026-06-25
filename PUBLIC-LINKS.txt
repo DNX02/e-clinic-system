@@ -4,3 +4,4 @@ App #2 Doctor: https://doctor.e-clinic-control.ru/
 App #3 Patient survey: https://survey.e-clinic-control.ru/
 App #4 Doctor knowledge: https://training.e-clinic-control.ru/
 App #5 Nurse knowledge: https://nurse.e-clinic-control.ru/
+App #6 Investor analytics: https://investor.e-clinic-control.ru/

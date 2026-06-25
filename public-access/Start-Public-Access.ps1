@@ -83,7 +83,8 @@ if (Test-Path $NamedTunnelConfig) {
     "App #2 Doctor: https://doctor.e-clinic-control.ru/",
     "App #3 Patient survey: https://survey.e-clinic-control.ru/",
     "App #4 Doctor knowledge: https://training.e-clinic-control.ru/",
-    "App #5 Nurse knowledge: https://nurse.e-clinic-control.ru/"
+    "App #5 Nurse knowledge: https://nurse.e-clinic-control.ru/",
+    "App #6 Investor analytics: https://investor.e-clinic-control.ru/"
   )
 } else {
   $publicUrl = $null
@@ -112,7 +113,8 @@ if (Test-Path $NamedTunnelConfig) {
     "App #2 Doctor: $publicUrl/app-2-doctor",
     "App #3 Patient survey: $publicUrl/app-3-patient-survey",
     "App #4 Doctor knowledge: $publicUrl/app-4-doctor-knowledge",
-    "App #5 Nurse knowledge: $publicUrl/app-5-nurse-knowledge"
+    "App #5 Nurse knowledge: $publicUrl/app-5-nurse-knowledge",
+    "App #6 Investor analytics: $publicUrl/app-6-investor-dashboard"
   )
 }
 

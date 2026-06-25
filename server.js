@@ -17,6 +17,7 @@ const DOCTOR_APP_PATH = "/app-2-doctor";
 const SURVEY_APP_PATH = "/app-3-patient-survey";
 const TRAINING_APP_PATH = "/app-4-doctor-knowledge";
 const NURSE_TRAINING_APP_PATH = "/app-5-nurse-knowledge";
+const INVESTOR_APP_PATH = "/app-6-investor-dashboard";
 let dbCache = null;
 let dbLoadPromise = null;
 let dbWritePromise = Promise.resolve();
@@ -784,7 +785,8 @@ async function handleApi(req, res, url) {
         doctor: `${preferredBaseUrl}${DOCTOR_APP_PATH}`,
         survey: `${preferredBaseUrl}${SURVEY_APP_PATH}`
         , training: `${preferredBaseUrl}${TRAINING_APP_PATH}`,
-        nurseTraining: `${preferredBaseUrl}${NURSE_TRAINING_APP_PATH}`
+        nurseTraining: `${preferredBaseUrl}${NURSE_TRAINING_APP_PATH}`,
+        investor: `${preferredBaseUrl}${INVESTOR_APP_PATH}`
       }
     });
   }
@@ -839,6 +841,10 @@ async function handleApi(req, res, url) {
       nurseTrainingAttempts: db.nurseTrainingAttempts,
       nurseTrainingStats: buildNurseTrainingStats(db)
     });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/investor/dashboard") {
+    return send(res, 200, buildInvestorDashboard(db));
   }
 
   if (req.method === "POST" && url.pathname === "/api/admin/training-participants") {
@@ -1266,6 +1272,128 @@ function buildNurseTrainingStats(db) {
   };
 }
 
+function dateKey(value) {
+  return value ? new Date(value).toISOString().slice(0, 10) : "Не указано";
+}
+
+function percentAverage(items) {
+  return items.length ? Math.round(items.reduce((sum, item) => sum + Number(item.percent || 0), 0) / items.length) : 0;
+}
+
+function objectToSeries(data) {
+  return Object.entries(data)
+    .sort(([a], [b]) => clinicKey(a).localeCompare(clinicKey(b), "ru"))
+    .map(([label, value]) => ({ label, value }));
+}
+
+function doctorPostPercent(attempts) {
+  const taskAttempts = attempts.filter((attempt) => attempt.type === "task");
+  const correct = taskAttempts.reduce((sum, attempt) => sum + Number(attempt.correct || 0), 0);
+  const total = taskAttempts.reduce((sum, attempt) => sum + Number(attempt.total || attempt.maxScore || 0), 0);
+  return total ? Math.round((correct / total) * 100) : 0;
+}
+
+function buildEducationInvestorStats(participants, attempts, postMode) {
+  const attemptsByParticipant = attempts.reduce((acc, attempt) => {
+    (acc[attempt.participantId] ||= []).push(attempt);
+    return acc;
+  }, {});
+  const rows = participants.map((participant) => {
+    const participantAttempts = attemptsByParticipant[participant.id] || [];
+    const pre = participantAttempts.find((attempt) => attempt.type === "pre");
+    const post = postMode === "task"
+      ? doctorPostPercent(participantAttempts)
+      : Number(participantAttempts.find((attempt) => attempt.type === "post")?.percent || 0);
+    return {
+      clinic: participant.clinic || "Не указано",
+      registeredAt: participant.createdAt,
+      prePercent: pre ? Number(pre.percent || 0) : 0,
+      postPercent: post,
+      hasPre: Boolean(pre),
+      hasPost: post > 0
+    };
+  });
+  const byClinic = {};
+  for (const row of rows) {
+    byClinic[row.clinic] ||= { label: row.clinic, registered: 0, preCompleted: 0, postCompleted: 0, preSum: 0, postSum: 0 };
+    byClinic[row.clinic].registered += 1;
+    if (row.hasPre) {
+      byClinic[row.clinic].preCompleted += 1;
+      byClinic[row.clinic].preSum += row.prePercent;
+    }
+    if (row.hasPost) {
+      byClinic[row.clinic].postCompleted += 1;
+      byClinic[row.clinic].postSum += row.postPercent;
+    }
+  }
+  const byDate = countSelected(rows.map((row) => dateKey(row.registeredAt)));
+  const preRows = rows.filter((row) => row.hasPre).map((row) => ({ percent: row.prePercent }));
+  const postRows = rows.filter((row) => row.hasPost).map((row) => ({ percent: row.postPercent }));
+  return {
+    total: participants.length,
+    preCompleted: preRows.length,
+    postCompleted: postRows.length,
+    preAverage: percentAverage(preRows),
+    postAverage: percentAverage(postRows),
+    passed70: postRows.filter((row) => row.percent >= 70).length,
+    byDate: objectToSeries(byDate),
+    byClinic: Object.values(byClinic)
+      .sort((a, b) => clinicKey(a.label).localeCompare(clinicKey(b.label), "ru"))
+      .map((item) => ({
+        label: item.label,
+        registered: item.registered,
+        preCompleted: item.preCompleted,
+        postCompleted: item.postCompleted,
+        preAverage: item.preCompleted ? Math.round(item.preSum / item.preCompleted) : 0,
+        postAverage: item.postCompleted ? Math.round(item.postSum / item.postCompleted) : 0
+      }))
+  };
+}
+
+function buildInvestorDashboard(db) {
+  const stats = buildStats(db);
+  const doctorEducation = buildEducationInvestorStats(db.trainingParticipants, db.trainingAttempts, "task");
+  const nurseEducation = buildEducationInvestorStats(db.nurseTrainingParticipants, db.nurseTrainingAttempts, "post");
+  const surveysByClinic = countSelected(db.nurseSurveys.map((survey) => survey.patient?.clinic || survey.clinic || "Не указано"));
+  const visitsByDate = countSelected(db.doctorVisits.map((visit) => dateKey(visit.createdAt)));
+  const surveyByDate = countSelected(db.nurseSurveys.map((survey) => dateKey(survey.createdAt)));
+  const diagnoses = countSelected(db.doctorVisits.map((visit) => visit.diagnosis || "Без диагноза"));
+  return {
+    generatedAt: new Date().toISOString(),
+    summary: {
+      doctorsTotal: stats.doctorsTotal,
+      surveysTotal: stats.surveysTotal,
+      visitsTotal: stats.visitsTotal,
+      riskNeedsDoctorPercent: stats.needsDoctorPercent,
+      highFindriscPercent: stats.highFindriscPercent,
+      highScore2Percent: stats.highScore2Percent,
+      doctorTrainingPostAverage: doctorEducation.postAverage,
+      nurseTrainingPostAverage: nurseEducation.postAverage
+    },
+    doctors: {
+      registeredByClinic: objectToSeries(countSelected(db.doctors.map((doctor) => doctor.clinic || "Не указано"))),
+      registeredByDate: objectToSeries(countSelected(db.doctors.map((doctor) => dateKey(doctor.createdAt))))
+    },
+    nurses: {
+      surveyByClinic: objectToSeries(surveysByClinic),
+      surveyByDate: objectToSeries(surveyByDate)
+    },
+    clinical: {
+      visitsByDate: objectToSeries(visitsByDate),
+      diagnoses: objectToSeries(diagnoses),
+      risk: [
+        { label: "Нужно к врачу", value: stats.needsDoctorPercent },
+        { label: "FINDRISC повышен", value: stats.highFindriscPercent },
+        { label: "СС риск высок", value: stats.highScore2Percent }
+      ]
+    },
+    education: {
+      doctors: doctorEducation,
+      nurses: nurseEducation
+    }
+  };
+}
+
 async function serveStatic(req, res, url) {
   const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(":")[0].toLowerCase();
   const appRoutes = {
@@ -1274,14 +1402,16 @@ async function serveStatic(req, res, url) {
     [DOCTOR_APP_PATH]: "/doctor.html",
     [SURVEY_APP_PATH]: "/survey.html",
     [TRAINING_APP_PATH]: "/training.html",
-    [NURSE_TRAINING_APP_PATH]: "/nurse-training.html"
+    [NURSE_TRAINING_APP_PATH]: "/nurse-training.html",
+    [INVESTOR_APP_PATH]: "/investor.html"
   };
   const hostHomeRoutes = {
     "admin.e-clinic-control.ru": "/admin.html",
     "doctor.e-clinic-control.ru": "/doctor.html",
     "survey.e-clinic-control.ru": "/survey.html",
     "training.e-clinic-control.ru": "/training.html",
-    "nurse.e-clinic-control.ru": "/nurse-training.html"
+    "nurse.e-clinic-control.ru": "/nurse-training.html",
+    "investor.e-clinic-control.ru": "/investor.html"
   };
   const route = url.pathname === "/" && hostHomeRoutes[host] ? hostHomeRoutes[host] : appRoutes[url.pathname] || url.pathname;
   const safePath = normalize(route).replace(/^(\.\.[/\\])+/, "");
@@ -1325,6 +1455,7 @@ createServer(async (req, res) => {
     console.log(`  Patient form: ${baseUrl}${SURVEY_APP_PATH}`);
     console.log(`  Training:     ${baseUrl}${TRAINING_APP_PATH}`);
     console.log(`  Nurse test:   ${baseUrl}${NURSE_TRAINING_APP_PATH}`);
+    console.log(`  Investor:     ${baseUrl}${INVESTOR_APP_PATH}`);
   }
   console.log("Admin: admin / Admin123!");
   console.log("View only: admin2 / View123!, admin3 / View123!");
