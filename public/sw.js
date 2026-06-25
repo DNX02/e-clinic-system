@@ -1,4 +1,4 @@
-const CACHE_NAME = "medical-mobile-v42";
+const CACHE_NAME = "medical-mobile-v43";
 const SHELL = [
   "/app-1-admin-panel",
   "/app-2-doctor",
@@ -10,7 +10,7 @@ const SHELL = [
   "/nurse-training.html",
   "/investor.html",
   "/styles.css",
-  "/app.js?v=20260625h",
+  "/app.js?v=20260625i",
   "/admin.webmanifest",
   "/doctor.webmanifest",
   "/survey.webmanifest",
@@ -44,6 +44,7 @@ self.addEventListener("fetch", (event) => {
       }).catch(() => caches.match(event.request))
   );
 });
+
 
 
 

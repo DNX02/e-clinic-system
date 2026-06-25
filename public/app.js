@@ -8,6 +8,7 @@ const initialState = () => ({
   selectedSurvey: null,
   doctorMode: "list",
   doctorRiskFirst: false,
+  doctorPatientPage: 1,
   lastDoctorKey: null,
   surveyClinicFilter: "all",
   trainingClinicFilter: ["all"],
@@ -219,6 +220,7 @@ const TAJIK_TEXT = {
   "После выбора откроется повторное измерение, направления и препараты.": "Пас аз интихоб ченкунии такрорӣ, равонасозӣ ва доруҳо кушода мешаванд.",
   "Анкет пока нет": "Ҳоло анкета нест",
   "Открыть": "Кушодан",
+  "Далее": "Ба пеш",
   "Выйти": "Баромадан",
   "Заполните анкету пациента. Пациент будет добавлен в картотеку вашей поликлиники.": "Анкетаи беморро пур кунед. Бемор ба картотекаи поликлиникаи шумо илова мешавад.",
   "Отмена": "Бекор кардан",
@@ -893,6 +895,11 @@ document.addEventListener("click", async (event) => {
   }
   if (action === "doctor-toggle-risk-sort") {
     state.doctorRiskFirst = !state.doctorRiskFirst;
+    state.doctorPatientPage = 1;
+    renderDoctorPatientList();
+  }
+  if (action === "doctor-patient-page") {
+    state.doctorPatientPage = Math.max(1, Number(event.target.dataset.page || 1));
     renderDoctorPatientList();
   }
   if (action === "investor-tab") {
@@ -3075,7 +3082,7 @@ function doctorPatientsPanel() {
       <div class="muted" id="doctorSyncStatus"></div>
       <div id="doctorSyncResult"></div>
       <input id="patientSearch" placeholder="${escapeHtml(t("Введите имя или фамилию"))}" />
-      <div id="patientList" style="margin-top:12px">${doctorSurveyList(doctorSortedSurveys(state.doctor.surveys))}</div>
+      <div id="patientList" style="margin-top:12px">${doctorPaginatedSurveyList(doctorSortedSurveys(state.doctor.surveys))}</div>
     </section>
   `;
 }
@@ -3104,6 +3111,7 @@ function renderDoctor() {
   document.querySelector("#doctorSyncButton")?.addEventListener("click", syncOfflineDoctorActions);
   updateOfflineDoctorStatus();
   document.querySelector("#patientSearch")?.addEventListener("input", (event) => {
+    state.doctorPatientPage = 1;
     renderDoctorPatientList();
   });
   bindDoctorVisit();
@@ -3125,7 +3133,28 @@ function renderDoctorPatientList() {
   if (!patientList) return;
   const query = (search?.value || "").toLowerCase();
   const list = state.doctor.surveys.filter((survey) => fullName(survey.patient).toLowerCase().includes(query));
-  patientList.innerHTML = doctorSurveyList(doctorSortedSurveys(list));
+  patientList.innerHTML = doctorPaginatedSurveyList(doctorSortedSurveys(list));
+}
+
+function doctorPaginatedSurveyList(surveys) {
+  const t = (value) => translateDoctorText(value);
+  const pageSize = 20;
+  const totalPages = Math.max(1, Math.ceil((surveys || []).length / pageSize));
+  state.doctorPatientPage = Math.min(Math.max(1, state.doctorPatientPage || 1), totalPages);
+  const start = (state.doctorPatientPage - 1) * pageSize;
+  const pageItems = surveys.slice(start, start + pageSize);
+  const from = surveys.length ? start + 1 : 0;
+  const to = Math.min(start + pageSize, surveys.length);
+  return html`
+    ${doctorSurveyList(pageItems)}
+    <div class="patient-pagination">
+      <span>${from}-${to} / ${surveys.length}</span>
+      <div class="actions">
+        <button type="button" class="secondary" data-action="doctor-patient-page" data-page="${state.doctorPatientPage - 1}" ${state.doctorPatientPage <= 1 ? "disabled" : ""}>${escapeHtml(t("Назад"))}</button>
+        <button type="button" class="secondary" data-action="doctor-patient-page" data-page="${state.doctorPatientPage + 1}" ${state.doctorPatientPage >= totalPages ? "disabled" : ""}>${escapeHtml(t("Далее"))}</button>
+      </div>
+    </div>
+  `;
 }
 
 function doctorSurveyList(surveys) {
@@ -3498,6 +3527,7 @@ function updateLifestyleRecommendationPanels() {
 }
 
 boot();
+
 
 
 

@@ -644,6 +644,21 @@ th {
   min-height: 36px;
 }
 
+.patient-pagination {
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.68);
+  color: var(--muted);
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.patient-pagination button {
+  min-height: 36px;
+}
+
 .doctor-layout .metric {
   backdrop-filter: blur(20px) saturate(150%);
   background: rgba(255, 255, 255, 0.58);
