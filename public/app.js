@@ -901,6 +901,7 @@ document.addEventListener("click", async (event) => {
   if (action === "doctor-patient-page") {
     state.doctorPatientPage = Math.max(1, Number(event.target.dataset.page || 1));
     renderDoctorPatientList();
+    document.querySelector("#patientList")?.scrollIntoView({ block: "start", behavior: "smooth" });
   }
   if (action === "investor-tab") {
     state.investorTab = event.target.dataset.tab;
@@ -3527,6 +3528,7 @@ function updateLifestyleRecommendationPanels() {
 }
 
 boot();
+
 
 
 
