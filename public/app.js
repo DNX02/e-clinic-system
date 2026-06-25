@@ -171,6 +171,34 @@ const TAJIK_TEXT = {
   "Удельный вес": "Вазни хос",
   "Глюкоза натощак": "Глюкоза ношто",
   "Глюкоза после еды": "Глюкоза баъди хӯрок",
+  "Тип сахара": "Навъи қанд",
+  "Натощак": "Ношто",
+  "Случайный замер": "Ченкунии тасодуфӣ",
+  "Через 2 часа после еды": "Пас аз 2 соати хӯрок",
+  "Диагноз": "Ташхис",
+  "Автоматически по сахару": "Ба таври худкор аз рӯи қанд",
+  "Норма": "Меъёр",
+  "Преддиабет": "Пешдиабет",
+  "Сахарный диабет": "Диабети қанд",
+  "Личный кабинет": "Кабинети шахсӣ",
+  "Сменить логин и пароль": "Иваз кардани логин ва парол",
+  "Новый логин": "Логини нав",
+  "Новый пароль / ключ": "Парол / калиди нав",
+  "Оставьте пустым, если ключ менять не нужно": "Агар калидро иваз кардан лозим набошад, холӣ гузоред",
+  "Сохранить логин и пароль": "Нигоҳ доштани логин ва парол",
+  "Логин и пароль обновлены.": "Логин ва парол нав карда шуданд.",
+  "Осмотренные пациенты": "Беморони муоинашуда",
+  "Всего осмотров": "Ҳамагӣ муоинаҳо",
+  "Пациентов": "Беморон",
+  "История осмотров": "Таърихи муоинаҳо",
+  "Предыдущие осмотры": "Муоинаҳои қаблӣ",
+  "Пациент": "Бемор",
+  "Дата": "Сана",
+  "Назначения": "Таъйинот",
+  "Лекарства": "Доруҳо",
+  "Лаборатория": "Лаборатория",
+  "Повторный осмотр": "Муоинаи такрорӣ",
+  "Пока нет осмотров": "Ҳоло муоина нест",
   "Выберите пациента": "Беморро интихоб кунед",
   "После выбора откроется повторное измерение, направления и препараты.": "Пас аз интихоб ченкунии такрорӣ, равонасозӣ ва доруҳо кушода мешаванд.",
   "Анкет пока нет": "Ҳоло анкета нест",
@@ -1358,6 +1386,17 @@ function renderDoctorsAdmin() {
     <tr>
       <td>${escapeHtml(doctor.fullName)}</td>
       <td>${escapeHtml(doctor.login)}</td>
+      <td>
+        ${doctor.accessKeyVisible
+          ? `<input readonly value="${escapeHtml(doctor.accessKeyVisible)}" />`
+          : '<span class="pill warn">Ключ не сохранен</span><div class="muted">Задайте новый ключ при редактировании или через кабинет врача.</div>'}
+        <form class="doctor-key-form" data-id="${doctor.id}" style="margin-top:8px">
+          <div class="actions">
+            <input name="accessKey" placeholder="Новый ключ" ${state.admin.canEdit ? "" : "disabled"} />
+            <button class="secondary" ${state.admin.canEdit ? "" : "disabled"}>Сменить</button>
+          </div>
+        </form>
+      </td>
       <td>${escapeHtml(doctor.clinic)}</td>
       <td>${escapeHtml(doctor.specialty)}</td>
       <td>${doctor.experienceYears}</td>
@@ -1382,8 +1421,8 @@ function renderDoctorsAdmin() {
         <h2>Список врачей</h2>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>ФИО</th><th>Логин</th><th>Поликлиника</th><th>Специальность</th><th>Стаж</th><th></th></tr></thead>
-            <tbody>${rows || "<tr><td colspan='6'>Пока нет врачей</td></tr>"}</tbody>
+            <thead><tr><th>ФИО</th><th>Логин</th><th>Пароль / ключ</th><th>Поликлиника</th><th>Специальность</th><th>Стаж</th><th></th></tr></thead>
+            <tbody>${rows || "<tr><td colspan='7'>Пока нет врачей</td></tr>"}</tbody>
           </table>
         </div>
       </section>
@@ -1440,7 +1479,7 @@ function renderVisitsAdmin() {
     <tr>
       <td>${escapeHtml(doctors[visit.doctorId] || "Врач")}</td>
       <td>${escapeHtml(surveys[visit.surveyId] || "Пациент")}</td>
-      <td>ИМТ ${visit.bmi || "-"} / АД ${visit.systolic}/${visit.diastolic} / сахар ${visit.glucose || "-"}</td>
+      <td>ИМТ ${visit.bmi || "-"} / АД ${visit.systolic}/${visit.diastolic} / сахар ${visit.glucose || "-"}${visit.diagnosis ? `<div class="muted">Диагноз: ${escapeHtml(visit.diagnosis)}</div>` : ""}</td>
       <td>${(visit.referrals || []).join(", ") || "-"}</td>
       <td>${visit.followUpDays ? `Через ${visit.followUpDays} дней` : "-"}</td>
       <td>${doctorLabSummary(visit.laboratoryTests)}</td>
@@ -1538,6 +1577,25 @@ function bindAdminForms() {
     } catch (error) {
       alert(error.message);
     }
+  });
+  document.querySelectorAll(".doctor-key-form").forEach((keyForm) => {
+    keyForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const doctor = state.admin.doctors.find((item) => item.id === keyForm.dataset.id);
+      const accessKey = keyForm.elements.accessKey.value.trim();
+      if (!doctor || !accessKey) return;
+      try {
+        const result = await api(`/api/admin/doctors/${doctor.id}`, {
+          method: "PUT",
+          body: JSON.stringify({ ...doctor, accessKey })
+        });
+        state.admin.doctors = state.admin.doctors.map((item) => item.id === doctor.id ? result.doctor : item);
+        state.lastDoctorKey = { doctorId: result.doctor.id, fullName: result.doctor.fullName, accessKey };
+        renderAdmin();
+      } catch (error) {
+        alert(error.message);
+      }
+    });
   });
   const trainingForm = document.querySelector("#trainingParticipantForm");
   if (trainingForm) trainingForm.addEventListener("submit", async (event) => {
@@ -2537,6 +2595,129 @@ async function loadDoctor() {
   showDoctorLanguagePrompt(renderDoctor);
 }
 
+function doctorPatientNameBySurveyId(surveyId) {
+  const survey = state.doctor?.surveys?.find((item) => item.id === surveyId);
+  return fullName(survey?.patient) || "Пациент";
+}
+
+function doctorVisitsForSurvey(surveyId) {
+  return (state.doctor?.visits || [])
+    .filter((visit) => visit.surveyId === surveyId)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+function glucoseTypeLabel(type) {
+  const labels = {
+    fasting: "Натощак",
+    random: "Случайный замер",
+    postMeal: "Через 2 часа после еды",
+    hba1c: "HbA1c"
+  };
+  return labels[type] || labels.fasting;
+}
+
+function diagnosisByGlucose(value, type = "fasting") {
+  const glucose = Number(String(value || "").replace(",", "."));
+  if (!glucose) return { diagnosis: "", level: "" };
+  if (type === "hba1c") {
+    if (glucose >= 6.5) return { diagnosis: "Сахарный диабет", level: "danger" };
+    if (glucose >= 5.7) return { diagnosis: "Преддиабет", level: "warn" };
+    return { diagnosis: "Норма", level: "ok" };
+  }
+  if (type === "random" || type === "postMeal") {
+    if (glucose >= 11.1) return { diagnosis: "Сахарный диабет", level: "danger" };
+    if (glucose >= 7.8) return { diagnosis: "Преддиабет", level: "warn" };
+    return { diagnosis: "Норма", level: "ok" };
+  }
+  if (glucose >= 7) return { diagnosis: "Сахарный диабет", level: "danger" };
+  if (glucose >= 6.1) return { diagnosis: "Преддиабет", level: "warn" };
+  return { diagnosis: "Норма", level: "ok" };
+}
+
+function doctorVisitDetails(visit) {
+  const t = (value) => translateDoctorText(value);
+  const referrals = (visit.referrals || []).join(", ") || "-";
+  const diabetesDrugs = (visit.diabetesDrugs || []).join("; ");
+  const hypertensionDrugs = (visit.hypertensionDrugs || []).join("; ");
+  const drugs = [diabetesDrugs, hypertensionDrugs].filter(Boolean).join("; ") || "-";
+  return html`
+    <details class="answer-details visit-details">
+      <summary>${new Date(visit.createdAt).toLocaleString("ru-RU")} - ${escapeHtml(t("Диагноз"))}: ${visit.diagnosis ? escapeHtml(t(visit.diagnosis)) : "-"}</summary>
+      <div class="grid two">
+        <div>
+          <div class="muted">${escapeHtml(t("Индекс массы тела"))}: ${visit.bmi || "-"}</div>
+          <div class="muted">${escapeHtml(t("Артериальное давление"))}: ${visit.systolic || "-"}/${visit.diastolic || "-"}</div>
+          <div class="muted">${escapeHtml(t("Сахар крови"))}: ${visit.glucose || "-"} (${escapeHtml(t(glucoseTypeLabel(visit.glucoseType)))})</div>
+          <div class="muted">${escapeHtml(t("Направление"))}: ${escapeHtml(referrals)}</div>
+          <div class="muted">${escapeHtml(t("Повторный осмотр"))}: ${visit.followUpDays ? `${visit.followUpDays} ${escapeHtml(t("дней"))}` : "-"}</div>
+        </div>
+        <div>
+          <div class="muted">${escapeHtml(t("Лекарства"))}: ${escapeHtml(drugs)}</div>
+          <div class="muted">${escapeHtml(t("Лаборатория"))}: ${escapeHtml(doctorLabSummary(visit.laboratoryTests))}</div>
+          <div class="muted">${escapeHtml(t("План лечения"))}: ${escapeHtml(visit.treatmentPlan || "-")}</div>
+        </div>
+      </div>
+    </details>
+  `;
+}
+
+function doctorVisitHistory(surveyId) {
+  const t = (value) => translateDoctorText(value);
+  const visits = doctorVisitsForSurvey(surveyId);
+  if (!visits.length) return "";
+  return html`
+    <section class="visit-history">
+      <h3>${escapeHtml(t("Предыдущие осмотры"))}</h3>
+      <div class="training-list">${visits.map(doctorVisitDetails).join("")}</div>
+    </section>
+  `;
+}
+
+function doctorProfilePanel() {
+  const t = (value) => translateDoctorText(value);
+  const visits = [...(state.doctor?.visits || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const patientCount = new Set(visits.map((visit) => visit.surveyId)).size;
+  const visitRows = visits.slice(0, 30).map((visit) => html`
+    <tr>
+      <td>${escapeHtml(doctorPatientNameBySurveyId(visit.surveyId))}</td>
+      <td>${new Date(visit.createdAt).toLocaleString("ru-RU")}</td>
+      <td>${visit.diagnosis ? escapeHtml(t(visit.diagnosis)) : "-"}</td>
+      <td>${visit.bmi || "-"} / ${visit.systolic || "-"}/${visit.diastolic || "-"} / ${visit.glucose || "-"}</td>
+      <td>${escapeHtml(((visit.diabetesDrugs || []).concat(visit.hypertensionDrugs || [])).join("; ") || "-")}</td>
+      <td>${escapeHtml(doctorLabSummary(visit.laboratoryTests))}</td>
+      <td>${visit.followUpDays ? `${visit.followUpDays} ${escapeHtml(t("дней"))}` : "-"}</td>
+    </tr>
+  `).join("");
+  return html`
+    <section class="panel doctor-profile-panel">
+      <h2>${escapeHtml(t("Личный кабинет"))}</h2>
+      <section class="grid two">
+        <form class="form" id="doctorAccountForm">
+          <h3>${escapeHtml(t("Сменить логин и пароль"))}</h3>
+          <div class="form-row"><label>${escapeHtml(t("Новый логин"))}</label><input name="login" value="${escapeHtml(state.doctor?.doctor?.login || "")}" required /></div>
+          <div class="form-row"><label>${escapeHtml(t("Новый пароль / ключ"))}</label><input name="accessKey" placeholder="${escapeHtml(t("Оставьте пустым, если ключ менять не нужно"))}" /></div>
+          <button>${escapeHtml(t("Сохранить логин и пароль"))}</button>
+          <div id="doctorAccountResult"></div>
+        </form>
+        <div>
+          <h3>${escapeHtml(t("Осмотренные пациенты"))}</h3>
+          <div class="grid two">
+            <div class="metric"><span>${escapeHtml(t("Всего осмотров"))}</span><strong>${visits.length}</strong></div>
+            <div class="metric"><span>${escapeHtml(t("Пациентов"))}</span><strong>${patientCount}</strong></div>
+          </div>
+        </div>
+      </section>
+      <h3>${escapeHtml(t("История осмотров"))}</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>${escapeHtml(t("Пациент"))}</th><th>${escapeHtml(t("Дата"))}</th><th>${escapeHtml(t("Диагноз"))}</th><th>ИМТ / АД / сахар</th><th>${escapeHtml(t("Лекарства"))}</th><th>${escapeHtml(t("Лаборатория"))}</th><th>${escapeHtml(t("Повторный осмотр"))}</th></tr></thead>
+          <tbody>${visitRows || `<tr><td colspan="7">${escapeHtml(t("Пока нет осмотров"))}</td></tr>`}</tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
 function renderDoctor() {
   const t = (value) => translateDoctorText(value);
   const primaryPanel = state.doctorMode === "add"
@@ -2561,6 +2742,7 @@ function renderDoctor() {
           <input id="patientSearch" placeholder="${escapeHtml(t("Введите имя или фамилию"))}" />
           <div id="patientList" style="margin-top:12px">${doctorSurveyList(state.doctor.surveys)}</div>
         </section>
+        ${doctorProfilePanel()}
       </main>
     </div>
   `);
@@ -2574,6 +2756,7 @@ function renderDoctor() {
   });
   bindDoctorVisit();
   bindDoctorPatientSurvey();
+  bindDoctorAccountForm();
 }
 
 function doctorSurveyList(surveys) {
@@ -2678,16 +2861,20 @@ function doctorVisitForm(survey) {
     <form class="form" id="visitForm">
       <h2>${escapeHtml(fullName(survey.patient))}</h2>
       ${doctorSurveySummary(survey)}
+      ${doctorVisitHistory(survey.id)}
       <input type="hidden" name="surveyId" value="${survey.id}" />
       <section class="grid two">
         ${input(t("Вес по весам, кг"), "weight", true, "number")}
         ${input(t("Рост, см"), "height", true, "number")}
         <div class="form-row"><label>${escapeHtml(t("Индекс массы тела"))}</label><input name="bmi" inputmode="decimal" readonly required /></div>
         ${input(t("Сахар крови, ммоль/л"), "glucose", false, "number")}
+        ${select(t("Тип сахара"), "glucoseType", [["fasting", t("Натощак")], ["random", t("Случайный замер")], ["postMeal", t("Через 2 часа после еды")], ["hba1c", "HbA1c"]])}
+        <div class="form-row"><label>${escapeHtml(t("Диагноз"))}</label><input name="diagnosis" id="doctorDiagnosis" /></div>
         ${input(t("Повторное САД"), "systolic", true, "number")}
         ${input(t("Повторное ДАД"), "diastolic", true, "number")}
         ${input(t("Повторное обследование через сколько дней"), "followUpDays", false, "number")}
       </section>
+      <div class="muted" id="glucoseDiagnosisHint"></div>
       <h3>${escapeHtml(t("Направление"))}</h3>
       <div class="checkbox-list">
         ${check("referrals", t("Эндокринолог"), "Эндокринолог")}
@@ -2803,6 +2990,22 @@ function bindDoctorVisit() {
   };
   form.elements.weight.addEventListener("input", calculateBmi);
   form.elements.height.addEventListener("input", calculateBmi);
+  const updateDiagnosis = () => {
+    const result = diagnosisByGlucose(form.elements.glucose.value, form.elements.glucoseType.value);
+    const diagnosis = form.elements.diagnosis;
+    const translated = translateDoctorText(result.diagnosis || "");
+    if (result.diagnosis) {
+      diagnosis.value = translated;
+      diagnosis.dataset.autoDiagnosis = translated;
+    } else if (diagnosis.dataset.autoDiagnosis && diagnosis.value === diagnosis.dataset.autoDiagnosis) {
+      diagnosis.value = "";
+      diagnosis.dataset.autoDiagnosis = "";
+    }
+    const hint = document.querySelector("#glucoseDiagnosisHint");
+    if (hint) hint.innerHTML = result.diagnosis ? `${escapeHtml(translateDoctorText("Автоматически по сахару"))}: <span class="pill ${result.level}">${escapeHtml(translated)}</span>` : "";
+  };
+  form.elements.glucose.addEventListener("input", updateDiagnosis);
+  form.elements.glucoseType.addEventListener("change", updateDiagnosis);
   document.querySelector("#addDoctorLab")?.addEventListener("click", () => addDoctorLabRow());
   bindDoctorLabControls();
   form.querySelectorAll('input[name="lifestyleRecommendations"]').forEach((input) => {
@@ -2818,7 +3021,8 @@ function bindDoctorVisit() {
     data.lifestyleRecommendations = new FormData(form).getAll("lifestyleRecommendations");
     data.laboratoryTests = collectDoctorLabs();
     try {
-      await api("/api/doctor/visits", { method: "POST", body: JSON.stringify(data) });
+      const result = await api("/api/doctor/visits", { method: "POST", body: JSON.stringify(data) });
+      state.doctor.visits = [result.visit, ...(state.doctor.visits || [])];
       document.querySelector("#visitResult").innerHTML = `<div class="notice ok">${escapeHtml(translateDoctorText("Осмотр сохранён и отправлен администратору."))}</div>`;
       form.reset();
       updateLifestyleRecommendationPanels();
@@ -2829,6 +3033,23 @@ function bindDoctorVisit() {
       form.reset();
       updateLifestyleRecommendationPanels();
       updateOfflineDoctorStatus();
+    }
+  });
+}
+
+function bindDoctorAccountForm() {
+  const form = document.querySelector("#doctorAccountForm");
+  if (!form) return;
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const data = Object.fromEntries(new FormData(form));
+      const result = await api("/api/doctor/account", { method: "PUT", body: JSON.stringify(data) });
+      state.doctor.doctor = result.doctor;
+      document.querySelector("#doctorAccountResult").innerHTML = `<div class="notice ok">${escapeHtml(translateDoctorText("Логин и пароль обновлены."))}</div>`;
+      form.elements.accessKey.value = "";
+    } catch (error) {
+      document.querySelector("#doctorAccountResult").innerHTML = `<div class="notice danger">${escapeHtml(error.message)}</div>`;
     }
   });
 }
@@ -2899,3 +3120,4 @@ function updateLifestyleRecommendationPanels() {
 }
 
 boot();
+

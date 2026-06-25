@@ -313,6 +313,19 @@ th {
   padding-left: 20px;
 }
 
+.doctor-profile-panel {
+  grid-column: 1 / -1;
+}
+
+.visit-history {
+  display: grid;
+  gap: 10px;
+}
+
+.visit-details summary {
+  line-height: 1.35;
+}
+
 .training-list {
   display: grid;
   gap: 10px;

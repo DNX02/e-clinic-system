@@ -451,6 +451,7 @@ async function clearSession(req) {
 
 function publicDoctor(doctor) {
   const { accessKeyHash, ...safe } = doctor;
+  if (!safe.accessKeyVisible) safe.accessKeyVisible = "";
   return safe;
 }
 
@@ -899,6 +900,7 @@ async function handleApi(req, res, url) {
       fullName: body.fullName,
       login: body.login,
       accessKeyHash: hashPassword(accessKey),
+      accessKeyVisible: accessKey,
       passport: body.passport,
       clinic: body.clinic,
       specialty: body.specialty,
@@ -924,7 +926,10 @@ async function handleApi(req, res, url) {
       specialty: body.specialty,
       experienceYears: Number(body.experienceYears || 0)
     });
-    if (body.accessKey) doctor.accessKeyHash = hashPassword(body.accessKey);
+    if (body.accessKey) {
+      doctor.accessKeyHash = hashPassword(body.accessKey);
+      doctor.accessKeyVisible = body.accessKey;
+    }
     await writeDb(db);
     return send(res, 200, { doctor: publicDoctor(doctor) });
   }
@@ -957,6 +962,25 @@ async function handleApi(req, res, url) {
     });
   }
 
+  if (req.method === "PUT" && url.pathname === "/api/doctor/account") {
+    if (session?.userType !== "doctor") return send(res, 403, { error: "Нет доступа" });
+    const doctor = db.doctors.find((item) => item.id === session.userId);
+    if (!doctor) return send(res, 404, { error: "Врач не найден" });
+    const body = await parseBody(req);
+    const login = String(body.login || "").trim();
+    const accessKey = String(body.accessKey || "").trim();
+    if (!login) return send(res, 400, { error: "Логин обязателен" });
+    const loginTaken = db.doctors.some((item) => item.id !== doctor.id && item.login === login);
+    if (loginTaken) return send(res, 409, { error: "Такой логин уже используется" });
+    doctor.login = login;
+    if (accessKey) {
+      doctor.accessKeyHash = hashPassword(accessKey);
+      doctor.accessKeyVisible = accessKey;
+    }
+    await writeDb(db);
+    return send(res, 200, { doctor: publicDoctor(doctor) });
+  }
+
   if (req.method === "POST" && url.pathname === "/api/doctor/surveys") {
     if (session?.userType !== "doctor") return send(res, 403, { error: "Нет доступа" });
     const doctor = db.doctors.find((item) => item.id === session.userId);
@@ -984,6 +1008,8 @@ async function handleApi(req, res, url) {
       height,
       bmi,
       glucose: Number(body.glucose || 0),
+      glucoseType: body.glucoseType || "fasting",
+      diagnosis: String(body.diagnosis || ""),
       systolic: Number(body.systolic || 0),
       diastolic: Number(body.diastolic || 0),
       followUpDays: Number(body.followUpDays || 0),
