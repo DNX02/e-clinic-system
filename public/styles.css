@@ -1085,7 +1085,7 @@ th {
   }
 
   .doctor-layout .doctor-workspace {
-    padding-bottom: 86px;
+    padding-bottom: 112px;
   }
 
   .doctor-hero {
@@ -1108,9 +1108,23 @@ th {
   }
 
   .doctor-layout .nav {
-    background: rgba(255, 255, 255, 0.96);
-    border-radius: 0;
-    border-top: 1px solid var(--line);
+    backdrop-filter: blur(22px) saturate(150%);
+    background: rgba(255, 255, 255, 0.62);
+    border: 1px solid rgba(255, 255, 255, 0.78);
+    border-radius: 8px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 18px 46px rgba(23, 32, 29, 0.16);
+    left: 12px;
+    padding: 7px;
+    right: 12px;
+  }
+
+  .doctor-layout .nav button {
+    border-radius: 6px;
+  }
+
+  .doctor-layout .nav button.active {
+    background: rgba(255, 255, 255, 0.86);
   }
 
   .patient-sidebar {
