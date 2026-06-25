@@ -97,12 +97,14 @@ button:disabled {
 
 .doctor-layout {
   background:
-    linear-gradient(180deg, #eef7f3 0, rgba(244, 247, 245, 0) 340px),
-    var(--bg);
+    linear-gradient(135deg, rgba(232, 246, 240, 0.96) 0%, rgba(247, 251, 249, 0.92) 46%, rgba(238, 245, 242, 0.98) 100%),
+    #f4f7f5;
 }
 
 .doctor-layout .topbar {
-  border-bottom: 1px solid rgba(220, 229, 223, 0.72);
+  background: rgba(255, 255, 255, 0.58);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow: 0 18px 50px rgba(23, 32, 29, 0.08);
 }
 
 .doctor-layout .brand {
@@ -110,9 +112,10 @@ button:disabled {
 }
 
 .doctor-layout .nav {
-  background: #eef5f1;
-  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.34);
+  border: 1px solid rgba(255, 255, 255, 0.64);
   border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 12px 34px rgba(15, 32, 29, 0.08);
   padding: 5px;
 }
 
@@ -123,8 +126,8 @@ button:disabled {
 }
 
 .doctor-layout .nav button.active {
-  background: #ffffff;
-  box-shadow: 0 8px 22px rgba(15, 32, 29, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 10px 28px rgba(15, 32, 29, 0.10);
   color: var(--primary-dark);
 }
 
@@ -158,7 +161,10 @@ button:disabled {
 .doctor-layout .panel,
 .doctor-layout .card,
 .doctor-layout .patient-card {
-  box-shadow: 0 18px 45px rgba(23, 32, 29, 0.06);
+  backdrop-filter: blur(22px) saturate(150%);
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.74);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82), 0 22px 55px rgba(23, 32, 29, 0.10);
 }
 
 .panel h2,
@@ -364,9 +370,12 @@ th {
 .doctor-hero {
   align-items: end;
   background:
-    linear-gradient(135deg, rgba(17, 106, 91, 0.95), rgba(11, 79, 68, 0.94)),
-    #116a5b;
+    linear-gradient(135deg, rgba(17, 106, 91, 0.74), rgba(11, 79, 68, 0.82)),
+    rgba(17, 106, 91, 0.76);
+  backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.38);
   border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34), 0 28px 70px rgba(11, 79, 68, 0.18);
   color: #ffffff;
   display: grid;
   gap: 18px;
@@ -397,9 +406,11 @@ th {
 }
 
 .doctor-hero-metrics div {
-  background: rgba(255, 255, 255, 0.13);
-  border: 1px solid rgba(255, 255, 255, 0.20);
+  backdrop-filter: blur(16px) saturate(140%);
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.34);
   border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
   padding: 14px;
 }
 
@@ -422,7 +433,9 @@ th {
 
 .doctor-empty-icon {
   align-items: center;
-  background: #e8f4ef;
+  backdrop-filter: blur(18px) saturate(150%);
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.76);
   border-radius: 50%;
   color: var(--primary);
   display: grid;
@@ -457,14 +470,15 @@ th {
 }
 
 .patient-sidebar input#patientSearch {
-  background: #f8fbf9;
-  border-color: #d9e5df;
+  background: rgba(255, 255, 255, 0.54);
+  border-color: rgba(255, 255, 255, 0.76);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
   margin-top: 12px;
 }
 
 .patient-card {
-  background: #ffffff;
-  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.54);
+  border: 1px solid rgba(255, 255, 255, 0.72);
   border-left: 4px solid var(--primary);
   border-radius: 8px;
   display: grid;
@@ -475,8 +489,9 @@ th {
 }
 
 .patient-card:hover {
-  border-color: #b8cfc6;
-  box-shadow: 0 18px 42px rgba(17, 106, 91, 0.12);
+  background: rgba(255, 255, 255, 0.68);
+  border-color: rgba(255, 255, 255, 0.90);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 22px 52px rgba(17, 106, 91, 0.14);
   transform: translateY(-1px);
 }
 
@@ -506,7 +521,8 @@ th {
 }
 
 .patient-card__meta span {
-  background: #f3f8f5;
+  background: rgba(255, 255, 255, 0.50);
+  border: 1px solid rgba(255, 255, 255, 0.62);
   border-radius: 999px;
   padding: 4px 8px;
 }
@@ -523,15 +539,19 @@ th {
 }
 
 .doctor-layout .metric {
-  background: #ffffff;
-  border: 1px solid var(--line);
+  backdrop-filter: blur(20px) saturate(150%);
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.74);
   border-left: 4px solid var(--primary);
   border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82), 0 18px 45px rgba(23, 32, 29, 0.08);
   padding: 16px;
 }
 
 .doctor-layout .answer-details {
-  background: #fbfdfc;
+  backdrop-filter: blur(18px) saturate(145%);
+  background: rgba(255, 255, 255, 0.48);
+  border-color: rgba(255, 255, 255, 0.72);
 }
 
 .stat-tables {
