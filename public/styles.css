@@ -313,8 +313,26 @@ th {
   padding-left: 20px;
 }
 
-.doctor-profile-panel {
+.doctor-profile-panel,
+.doctor-stats-panel {
   grid-column: 1 / -1;
+}
+
+.account-form {
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+}
+
+.patient-sidebar {
+  max-height: calc(100vh - 120px);
+  overflow: auto;
+  position: sticky;
+  top: 92px;
+}
+
+.stat-tables {
+  margin-top: 16px;
 }
 
 .visit-history {
@@ -492,6 +510,11 @@ th {
 
   .doctor-workspace {
     align-items: start;
+  }
+
+  .patient-sidebar {
+    max-height: none;
+    position: static;
   }
 
   .filter-bar {

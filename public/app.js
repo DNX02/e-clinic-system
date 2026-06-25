@@ -4,6 +4,7 @@ const initialState = () => ({
   admin: null,
   doctor: null,
   tab: "stats",
+  doctorSection: "patients",
   selectedSurvey: null,
   doctorMode: "list",
   lastDoctorKey: null,
@@ -181,6 +182,9 @@ const TAJIK_TEXT = {
   "Преддиабет": "Пешдиабет",
   "Сахарный диабет": "Диабети қанд",
   "Личный кабинет": "Кабинети шахсӣ",
+  "Пациенты": "Беморон",
+  "Статистика": "Омор",
+  "Кабинет": "Кабинет",
   "Сменить логин и пароль": "Иваз кардани логин ва парол",
   "Новый логин": "Логини нав",
   "Новый пароль / ключ": "Парол / калиди нав",
@@ -191,6 +195,11 @@ const TAJIK_TEXT = {
   "Всего осмотров": "Ҳамагӣ муоинаҳо",
   "Пациентов": "Беморон",
   "История осмотров": "Таърихи муоинаҳо",
+  "Последние осмотры": "Муоинаҳои охирин",
+  "Статистика врача": "Омори духтур",
+  "Осмотры по дням": "Муоинаҳо аз рӯи рӯзҳо",
+  "Диагнозы": "Ташхисҳо",
+  "Назначенные препараты": "Доруҳои таъйиншуда",
   "Предыдущие осмотры": "Муоинаҳои қаблӣ",
   "Пациент": "Бемор",
   "Дата": "Сана",
@@ -866,6 +875,14 @@ document.addEventListener("click", async (event) => {
     state.tab = event.target.dataset.tab;
     renderAdmin();
   }
+  if (action === "doctor-tab") {
+    state.doctorSection = event.target.dataset.tab;
+    if (state.doctorSection !== "patients") {
+      state.doctorMode = "list";
+      state.selectedSurvey = null;
+    }
+    renderDoctor();
+  }
   if (action === "delete-doctor") {
     if (!confirm("Удалить профиль врача?")) return;
     await api(`/api/admin/doctors/${event.target.dataset.id}`, { method: "DELETE", body: "{}" });
@@ -885,12 +902,14 @@ document.addEventListener("click", async (event) => {
   if (action === "select-survey") {
     state.selectedSurvey = state.doctor.surveys.find((item) => item.id === event.target.dataset.id);
     state.doctorMode = "visit";
+    state.doctorSection = "patients";
     renderDoctor();
     setTimeout(() => document.querySelector("#doctorPrimaryPanel")?.scrollIntoView({ block: "start" }), 0);
   }
   if (action === "add-doctor-patient") {
     state.selectedSurvey = null;
     state.doctorMode = "add";
+    state.doctorSection = "patients";
     renderDoctor();
     setTimeout(() => document.querySelector("#doctorPrimaryPanel")?.scrollIntoView({ block: "start" }), 0);
   }
@@ -1056,19 +1075,22 @@ function filteredAdminSurveys() {
 function renderStatsAdmin() {
   const s = state.admin.stats;
   return html`
-    <section class="grid three">
-      <div class="card metric">Врачей<strong>${money(s.doctorsTotal)}</strong></div>
-      <div class="card metric">Анкет медсестры<strong>${money(s.surveysTotal)}</strong></div>
-      <div class="card metric">Осмотров врача<strong>${money(s.visitsTotal)}</strong></div>
-      <div class="card metric">Участников обучения<strong>${money(state.admin.trainingStats?.participantsTotal || 0)}</strong></div>
-      <div class="card metric">Тест до обучения<strong>${money(state.admin.trainingStats?.preCompleted || 0)}</strong></div>
-      <div class="card metric">Средний до обучения<strong>${money(state.admin.trainingStats?.preAveragePercent || 0)}%</strong></div>
-      <div class="card metric">После обучения<strong>${money(state.admin.trainingStats?.taskCompleted || 0)} задач</strong></div>
-      <div class="card metric">Медсестер №5<strong>${money(state.admin.nurseTrainingStats?.participantsTotal || 0)}</strong></div>
-      <div class="card metric">№5 после обучения прошли<strong>${money(state.admin.nurseTrainingStats?.postPassed || 0)}</strong></div>
-      <div class="card metric">Нужно к врачу<strong>${money(s.needsDoctor)} / ${s.needsDoctorPercent}%</strong></div>
-      <div class="card metric">FINDRISC повышен<strong>${money(s.highFindrisc)} / ${s.highFindriscPercent}%</strong></div>
-      <div class="card metric">Сердечно-сосудистый риск высок<strong>${money(s.highScore2)} / ${s.highScore2Percent}%</strong></div>
+    <section class="panel dashboard-panel">
+      <h2>Статистика</h2>
+      <section class="grid three">
+        <div class="card metric">Врачей<strong>${money(s.doctorsTotal)}</strong></div>
+        <div class="card metric">Анкет медсестры<strong>${money(s.surveysTotal)}</strong></div>
+        <div class="card metric">Осмотров врача<strong>${money(s.visitsTotal)}</strong></div>
+        <div class="card metric">Участников обучения<strong>${money(state.admin.trainingStats?.participantsTotal || 0)}</strong></div>
+        <div class="card metric">Тест до обучения<strong>${money(state.admin.trainingStats?.preCompleted || 0)}</strong></div>
+        <div class="card metric">Средний до обучения<strong>${money(state.admin.trainingStats?.preAveragePercent || 0)}%</strong></div>
+        <div class="card metric">После обучения<strong>${money(state.admin.trainingStats?.taskCompleted || 0)} задач</strong></div>
+        <div class="card metric">Медсестер №5<strong>${money(state.admin.nurseTrainingStats?.participantsTotal || 0)}</strong></div>
+        <div class="card metric">№5 после обучения прошли<strong>${money(state.admin.nurseTrainingStats?.postPassed || 0)}</strong></div>
+        <div class="card metric">Нужно к врачу<strong>${money(s.needsDoctor)} / ${s.needsDoctorPercent}%</strong></div>
+        <div class="card metric">FINDRISC повышен<strong>${money(s.highFindrisc)} / ${s.highFindriscPercent}%</strong></div>
+        <div class="card metric">Сердечно-сосудистый риск высок<strong>${money(s.highScore2)} / ${s.highScore2Percent}%</strong></div>
+      </section>
     </section>
     <section class="grid two" style="margin-top:16px">
       ${drugStats("Препараты СД 2 типа", state.admin.drugStats.diabetesDrugCounts)}
@@ -2676,8 +2698,7 @@ function doctorVisitHistory(surveyId) {
 function doctorProfilePanel() {
   const t = (value) => translateDoctorText(value);
   const visits = [...(state.doctor?.visits || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  const patientCount = new Set(visits.map((visit) => visit.surveyId)).size;
-  const visitRows = visits.slice(0, 30).map((visit) => html`
+  const visitRows = visits.slice(0, 20).map((visit) => html`
     <tr>
       <td>${escapeHtml(doctorPatientNameBySurveyId(visit.surveyId))}</td>
       <td>${new Date(visit.createdAt).toLocaleString("ru-RU")}</td>
@@ -2691,23 +2712,16 @@ function doctorProfilePanel() {
   return html`
     <section class="panel doctor-profile-panel">
       <h2>${escapeHtml(t("Личный кабинет"))}</h2>
-      <section class="grid two">
-        <form class="form" id="doctorAccountForm">
-          <h3>${escapeHtml(t("Сменить логин и пароль"))}</h3>
+      <form class="form account-form" id="doctorAccountForm">
+        <h3>${escapeHtml(t("Сменить логин и пароль"))}</h3>
+        <section class="grid two">
           <div class="form-row"><label>${escapeHtml(t("Новый логин"))}</label><input name="login" value="${escapeHtml(state.doctor?.doctor?.login || "")}" required /></div>
           <div class="form-row"><label>${escapeHtml(t("Новый пароль / ключ"))}</label><input name="accessKey" placeholder="${escapeHtml(t("Оставьте пустым, если ключ менять не нужно"))}" /></div>
-          <button>${escapeHtml(t("Сохранить логин и пароль"))}</button>
-          <div id="doctorAccountResult"></div>
-        </form>
-        <div>
-          <h3>${escapeHtml(t("Осмотренные пациенты"))}</h3>
-          <div class="grid two">
-            <div class="metric"><span>${escapeHtml(t("Всего осмотров"))}</span><strong>${visits.length}</strong></div>
-            <div class="metric"><span>${escapeHtml(t("Пациентов"))}</span><strong>${patientCount}</strong></div>
-          </div>
-        </div>
-      </section>
-      <h3>${escapeHtml(t("История осмотров"))}</h3>
+        </section>
+        <button>${escapeHtml(t("Сохранить логин и пароль"))}</button>
+        <div id="doctorAccountResult"></div>
+      </form>
+      <h3>${escapeHtml(t("Последние осмотры"))}</h3>
       <div class="table-wrap">
         <table>
           <thead><tr><th>${escapeHtml(t("Пациент"))}</th><th>${escapeHtml(t("Дата"))}</th><th>${escapeHtml(t("Диагноз"))}</th><th>ИМТ / АД / сахар</th><th>${escapeHtml(t("Лекарства"))}</th><th>${escapeHtml(t("Лаборатория"))}</th><th>${escapeHtml(t("Повторный осмотр"))}</th></tr></thead>
@@ -2718,31 +2732,87 @@ function doctorProfilePanel() {
   `;
 }
 
-function renderDoctor() {
+function doctorSimpleRows(data) {
+  return Object.entries(data)
+    .sort(([a], [b]) => String(a).localeCompare(String(b), "ru"))
+    .map(([key, value]) => `<tr><td>${escapeHtml(key)}</td><td>${value}</td></tr>`)
+    .join("");
+}
+
+function doctorStatsPanel() {
+  const t = (value) => translateDoctorText(value);
+  const visits = state.doctor?.visits || [];
+  const patientCount = new Set(visits.map((visit) => visit.surveyId)).size;
+  const byDate = countBy(visits, (visit) => visit.createdAt ? new Date(visit.createdAt).toISOString().slice(0, 10) : "Не указано");
+  const byDiagnosis = countBy(visits, (visit) => visit.diagnosis || "Без диагноза");
+  const byDrug = countBy(visits.flatMap((visit) => [...(visit.diabetesDrugs || []), ...(visit.hypertensionDrugs || [])]), (item) => item);
+  return html`
+    <section class="panel doctor-stats-panel">
+      <h2>${escapeHtml(t("Статистика врача"))}</h2>
+      <section class="grid three">
+        <div class="metric"><span>${escapeHtml(t("Всего осмотров"))}</span><strong>${visits.length}</strong></div>
+        <div class="metric"><span>${escapeHtml(t("Пациентов"))}</span><strong>${patientCount}</strong></div>
+        <div class="metric"><span>${escapeHtml(t("Назначенные препараты"))}</span><strong>${Object.values(byDrug).reduce((sum, value) => sum + value, 0)}</strong></div>
+      </section>
+      <section class="grid three stat-tables">
+        <div class="card">
+          <h3>${escapeHtml(t("Осмотры по дням"))}</h3>
+          <div class="table-wrap"><table><tbody>${doctorSimpleRows(byDate) || `<tr><td>${escapeHtml(t("Пока нет осмотров"))}</td><td>0</td></tr>`}</tbody></table></div>
+        </div>
+        <div class="card">
+          <h3>${escapeHtml(t("Диагнозы"))}</h3>
+          <div class="table-wrap"><table><tbody>${doctorSimpleRows(byDiagnosis) || `<tr><td>${escapeHtml(t("Пока нет осмотров"))}</td><td>0</td></tr>`}</tbody></table></div>
+        </div>
+        <div class="card">
+          <h3>${escapeHtml(t("Назначенные препараты"))}</h3>
+          <div class="table-wrap"><table><tbody>${doctorSimpleRows(byDrug) || `<tr><td>-</td><td>0</td></tr>`}</tbody></table></div>
+        </div>
+      </section>
+    </section>
+  `;
+}
+
+function doctorPatientsPanel() {
   const t = (value) => translateDoctorText(value);
   const primaryPanel = state.doctorMode === "add"
     ? doctorPatientSurveyForm()
     : state.selectedSurvey
       ? doctorVisitForm(state.selectedSurvey)
       : `<h2>${escapeHtml(t("Выберите пациента"))}</h2><p class='muted'>${escapeHtml(t("После выбора откроется повторное измерение, направления и препараты."))}</p>`;
+  return html`
+    <section class="panel" id="doctorPrimaryPanel">${primaryPanel}</section>
+    <section class="panel patient-sidebar">
+      <h2>${escapeHtml(t("Картотека больных"))}</h2>
+      ${doctorLanguageControl()}
+      <div class="actions">
+        <button type="button" data-action="add-doctor-patient">${escapeHtml(t("Добавить пациента"))}</button>
+        <button type="button" class="secondary" id="doctorSyncButton">${escapeHtml(t("Синхронизировать"))}</button>
+      </div>
+      <div class="muted" id="doctorSyncStatus"></div>
+      <div id="doctorSyncResult"></div>
+      <input id="patientSearch" placeholder="${escapeHtml(t("Введите имя или фамилию"))}" />
+      <div id="patientList" style="margin-top:12px">${doctorSurveyList(state.doctor.surveys)}</div>
+    </section>
+  `;
+}
+
+function renderDoctor() {
+  const t = (value) => translateDoctorText(value);
+  const doctorNav = [
+    ["patients", "Пациенты"],
+    ["profile", "Кабинет"],
+    ["stats", "Статистика"]
+  ].map(([tab, label]) => `<button data-action="doctor-tab" data-tab="${tab}" class="${state.doctorSection === tab ? "active" : ""}">${escapeHtml(t(label))}</button>`).join("");
+  const content = state.doctorSection === "profile"
+    ? doctorProfilePanel()
+    : state.doctorSection === "stats"
+      ? doctorStatsPanel()
+      : doctorPatientsPanel();
   setPage(html`
     <div class="layout">
-      ${topbar(escapeHtml(t("Кабинет врача")))}
+      ${topbar(escapeHtml(t("Кабинет врача")), doctorNav)}
       <main class="container grid two doctor-workspace">
-        <section class="panel" id="doctorPrimaryPanel">${primaryPanel}</section>
-        <section class="panel">
-          <h2>${escapeHtml(t("Картотека больных"))}</h2>
-          ${doctorLanguageControl()}
-          <div class="actions">
-            <button type="button" data-action="add-doctor-patient">${escapeHtml(t("Добавить пациента"))}</button>
-            <button type="button" class="secondary" id="doctorSyncButton">${escapeHtml(t("Синхронизировать"))}</button>
-          </div>
-          <div class="muted" id="doctorSyncStatus"></div>
-          <div id="doctorSyncResult"></div>
-          <input id="patientSearch" placeholder="${escapeHtml(t("Введите имя или фамилию"))}" />
-          <div id="patientList" style="margin-top:12px">${doctorSurveyList(state.doctor.surveys)}</div>
-        </section>
-        ${doctorProfilePanel()}
+        ${content}
       </main>
     </div>
   `);
@@ -3120,4 +3190,5 @@ function updateLifestyleRecommendationPanels() {
 }
 
 boot();
+
 
