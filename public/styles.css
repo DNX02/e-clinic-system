@@ -881,7 +881,7 @@ th {
 
 .investor-kpi {
   border-radius: 8px;
-  min-height: 150px;
+  min-height: 205px;
   overflow: hidden;
   padding: 18px;
   position: relative;
@@ -910,7 +910,8 @@ th {
 }
 
 .investor-kpi span,
-.investor-kpi small {
+.investor-kpi small,
+.investor-kpi p {
   color: var(--muted);
 }
 
@@ -918,7 +919,41 @@ th {
   display: block;
   font-size: 38px;
   line-height: 1;
-  margin: 22px 0 10px;
+  margin: 18px 0 10px;
+}
+
+.investor-kpi p {
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 12px 0 0;
+}
+
+.investor-explain {
+  background: #ffffff;
+}
+
+.explain-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.explain-grid div {
+  background: #f6faf8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.explain-grid strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.explain-grid p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
 }
 
 .investor-split {
@@ -1310,6 +1345,7 @@ th {
   .investor-hero,
   .investor-split,
   .investor-grid,
+  .explain-grid,
   .stat-tables {
     grid-template-columns: 1fr;
   }

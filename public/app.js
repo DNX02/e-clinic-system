@@ -1015,13 +1015,30 @@ function investorNumber(value, suffix = "") {
   return `${Number(value || 0).toLocaleString("ru-RU")}${suffix}`;
 }
 
-function investorKpi(label, value, detail = "", tone = "") {
+function investorKpi(label, value, detail = "", tone = "", meaning = "") {
   return html`
     <div class="investor-kpi ${tone}">
       <span>${escapeHtml(label)}</span>
       <strong>${escapeHtml(value)}</strong>
       ${detail ? `<small>${escapeHtml(detail)}</small>` : ""}
+      ${meaning ? `<p>${escapeHtml(meaning)}</p>` : ""}
     </div>
+  `;
+}
+
+function investorPlainInfo(title, items) {
+  return html`
+    <section class="investor-card investor-explain">
+      <div class="section-title"><h2>${escapeHtml(title)}</h2><span>простыми словами</span></div>
+      <div class="explain-grid">
+        ${items.map((item) => html`
+          <div>
+            <strong>${escapeHtml(item.title)}</strong>
+            <p>${escapeHtml(item.text)}</p>
+          </div>
+        `).join("")}
+      </div>
+    </section>
   `;
 }
 
@@ -1117,11 +1134,16 @@ function investorEducationPanel(kind, title) {
   const data = state.investor.education[kind];
   return html`
     <section class="investor-grid">
-      ${investorKpi("Зарегистрировано", investorNumber(data.total), title)}
-      ${investorKpi("Средний пре-тест", investorNumber(data.preAverage, "%"), `${data.preCompleted} сдали`, "soft")}
-      ${investorKpi("Средний пост-тест", investorNumber(data.postAverage, "%"), `${data.postCompleted} сдали`, "hot")}
-      ${investorKpi("Прошли 70%+", investorNumber(data.passed70), "порог качества", "success")}
+      ${investorKpi("Зарегистрировано", investorNumber(data.total), title, "", "Сколько участников внесены в систему для обучения.")}
+      ${investorKpi("Средний пре-тест", investorNumber(data.preAverage, "%"), `${data.preCompleted} сдали`, "soft", "Средний уровень знаний до обучения. Чем ниже, тем больше исходный пробел.")}
+      ${investorKpi("Средний пост-тест", investorNumber(data.postAverage, "%"), `${data.postCompleted} сдали`, "hot", "Средний результат после обучения. Это главный показатель усвоения материала.")}
+      ${investorKpi("Прошли 70%+", investorNumber(data.passed70), "порог качества", "success", "Сколько участников достигли минимального целевого уровня знаний.")}
     </section>
+    ${investorPlainInfo("Как читать эту вкладку", [
+      { title: "Пре-тест", text: "Показывает стартовый уровень знаний до обучения." },
+      { title: "Пост-тест", text: "Показывает, что изменилось после обучения." },
+      { title: "Рост", text: "Разница между пост-тестом и пре-тестом. Для спонсора это показатель эффекта программы." }
+    ])}
     <section class="investor-card">
       <div class="section-title"><h2>Динамика регистрации</h2><span>${escapeHtml(title)}</span></div>
       ${investorLineChart(data.byDate, [], "Регистрация", "")}
@@ -1147,11 +1169,17 @@ function investorOverview() {
   const data = state.investor;
   return html`
     <section class="investor-grid">
-      ${investorKpi("Врачи в системе", investorNumber(data.summary.doctorsTotal), "активная сеть")}
-      ${investorKpi("Анкеты пациентов", investorNumber(data.summary.surveysTotal), "скрининг на местах", "soft")}
-      ${investorKpi("Осмотры врачей", investorNumber(data.summary.visitsTotal), "клинические действия", "success")}
-      ${investorKpi("Пост-тест врачей", investorNumber(data.summary.doctorTrainingPostAverage, "%"), "средний результат", "hot")}
+      ${investorKpi("Врачи в системе", investorNumber(data.summary.doctorsTotal), "активная сеть", "", "Сколько врачей подключены к цифровой платформе и могут работать с пациентами.")}
+      ${investorKpi("Анкеты пациентов", investorNumber(data.summary.surveysTotal), "скрининг на местах", "soft", "Сколько пациентов уже прошли первичный цифровой опрос и расчет рисков.")}
+      ${investorKpi("Осмотры врачей", investorNumber(data.summary.visitsTotal), "клинические действия", "success", "Сколько раз врач открыл карту пациента и зафиксировал осмотр, анализы или назначения.")}
+      ${investorKpi("Пост-тест врачей", investorNumber(data.summary.doctorTrainingPostAverage, "%"), "средний результат", "hot", "Средний итоговый уровень знаний врачей после обучения.")}
     </section>
+    ${investorPlainInfo("Что показывает этот экран", [
+      { title: "Охват", text: "Сколько сотрудников и пациентов уже включены в проект." },
+      { title: "Активность", text: "Сколько анкет и осмотров реально выполнено, а не только запланировано." },
+      { title: "Качество обучения", text: "Какой средний результат участники показывают после обучения." },
+      { title: "Риски", text: "Какая доля пациентов требует внимания врача или дополнительного контроля." }
+    ])}
     <section class="investor-split">
       <div class="investor-card wide">
         <div class="section-title"><h2>Динамика работы</h2><span>анкеты и осмотры по дням</span></div>
@@ -3528,6 +3556,7 @@ function updateLifestyleRecommendationPanels() {
 }
 
 boot();
+
 
 
 
