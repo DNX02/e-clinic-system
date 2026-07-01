@@ -843,9 +843,10 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/server-info") {
     const urls = getLanUrls();
     const currentBaseUrl = requestBaseUrl(req);
-    const preferredBaseUrl = currentBaseUrl.includes("trycloudflare.com")
-      ? currentBaseUrl
-      : urls.find((item) => !item.includes("localhost")) || urls[0];
+    const isLocalRequest = /(^https?:\/\/localhost\b)|(^https?:\/\/127\.0\.0\.1\b)|(^https?:\/\/\[::1\])/.test(currentBaseUrl);
+    const preferredBaseUrl = isLocalRequest
+      ? urls.find((item) => !item.includes("localhost")) || urls[0]
+      : currentBaseUrl;
     return send(res, 200, {
       urls,
       apps: {
