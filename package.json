@@ -5,6 +5,10 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "upload-db": "node scripts/upload-db-to-postgres.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
   }
 }

@@ -12,6 +12,7 @@ const dataDir = join(__dirname, "data");
 const dbPath = join(dataDir, "db.json");
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "0.0.0.0";
+const DATABASE_URL = process.env.DATABASE_URL || "";
 const ADMIN_APP_PATH = "/app-1-admin-panel";
 const DOCTOR_APP_PATH = "/app-2-doctor";
 const SURVEY_APP_PATH = "/app-3-patient-survey";
@@ -21,6 +22,8 @@ const INVESTOR_APP_PATH = "/app-6-investor-dashboard";
 let dbCache = null;
 let dbLoadPromise = null;
 let dbWritePromise = Promise.resolve();
+let dbReadyPromise = null;
+let pgPoolPromise = null;
 
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -337,16 +340,14 @@ const remappedNursePostQuestions = nursePostQuestions.map((question, index) => {
   return remapQuestionOptions(question, orders[index % orders.length]);
 });
 
-async function ensureDb() {
-  await mkdir(dataDir, { recursive: true });
-  if (existsSync(dbPath)) return;
+function createDefaultDb() {
   const now = new Date().toISOString();
   const admins = seedAdmins.map(({ password, ...user }) => ({
     ...user,
     passwordHash: hashPassword(password),
     createdAt: now
   }));
-  await writeDb({
+  return {
     admins,
     doctors: [],
     nurseSurveys: [],
@@ -357,7 +358,55 @@ async function ensureDb() {
     nurseTrainingAttempts: [],
     sessions: {},
     settings: { createdAt: now }
-  });
+  };
+}
+
+async function pgPool() {
+  if (!pgPoolPromise) {
+    pgPoolPromise = import("pg").then(({ Pool }) => new Pool({
+      connectionString: DATABASE_URL,
+      ssl: process.env.PGSSLMODE === "disable" ? false : { rejectUnauthorized: false }
+    }));
+  }
+  return pgPoolPromise;
+}
+
+async function ensureDb() {
+  if (!dbReadyPromise) {
+    dbReadyPromise = DATABASE_URL ? ensureCloudDb() : ensureFileDb();
+  }
+  return dbReadyPromise;
+}
+
+async function ensureFileDb() {
+  await mkdir(dataDir, { recursive: true });
+  if (existsSync(dbPath)) return;
+  await writeFile(dbPath, JSON.stringify(createDefaultDb(), null, 2), "utf8");
+}
+
+async function ensureCloudDb() {
+  const pool = await pgPool();
+  await pool.query(`
+    create table if not exists app_state (
+      id text primary key,
+      data jsonb not null,
+      updated_at timestamptz not null default now()
+    )
+  `);
+  const existing = await pool.query("select id from app_state where id = $1", ["main"]);
+  if (existing.rowCount) return;
+  let initialDb = createDefaultDb();
+  if (existsSync(dbPath)) {
+    try {
+      initialDb = JSON.parse(await readFile(dbPath, "utf8"));
+    } catch {
+      initialDb = createDefaultDb();
+    }
+  }
+  await pool.query(
+    "insert into app_state (id, data, updated_at) values ($1, $2::jsonb, now()) on conflict (id) do nothing",
+    ["main", JSON.stringify(initialDb)]
+  );
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
@@ -375,7 +424,7 @@ async function readDb() {
   if (dbCache) return dbCache;
   if (!dbLoadPromise) {
     dbLoadPromise = (async () => {
-      const db = JSON.parse(await readFile(dbPath, "utf8"));
+      const db = DATABASE_URL ? await readCloudDb() : JSON.parse(await readFile(dbPath, "utf8"));
       let changed = false;
       for (const key of ["trainingParticipants", "trainingAttempts", "nurseTrainingParticipants", "nurseTrainingAttempts"]) {
         if (!Array.isArray(db[key])) {
@@ -396,6 +445,18 @@ async function readDb() {
 async function writeDb(db) {
   dbCache = db;
   const body = JSON.stringify(db, null, 2);
+  if (DATABASE_URL) {
+    const writeTask = dbWritePromise.catch(() => {}).then(async () => {
+      const pool = await pgPool();
+      await pool.query(
+        "update app_state set data = $2::jsonb, updated_at = now() where id = $1",
+        ["main", body]
+      );
+    });
+    dbWritePromise = writeTask;
+    await writeTask;
+    return;
+  }
   const tmpPath = `${dbPath}.${process.pid}.${Date.now()}.tmp`;
   const writeTask = dbWritePromise.catch(() => {}).then(async () => {
     await writeFile(tmpPath, body, "utf8");
@@ -403,6 +464,13 @@ async function writeDb(db) {
   });
   dbWritePromise = writeTask;
   await writeTask;
+}
+
+async function readCloudDb() {
+  const pool = await pgPool();
+  const result = await pool.query("select data from app_state where id = $1", ["main"]);
+  if (!result.rowCount) return createDefaultDb();
+  return result.rows[0].data;
 }
 
 function send(res, status, payload, headers = {}) {
