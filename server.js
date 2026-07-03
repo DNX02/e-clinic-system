@@ -19,6 +19,7 @@ const SURVEY_APP_PATH = "/app-3-patient-survey";
 const TRAINING_APP_PATH = "/app-4-doctor-knowledge";
 const NURSE_TRAINING_APP_PATH = "/app-5-nurse-knowledge";
 const INVESTOR_APP_PATH = "/app-6-investor-dashboard";
+const MONITOR_APP_PATH = "/app-7-operations-monitor";
 let dbCache = null;
 let dbLoadPromise = null;
 let dbWritePromise = Promise.resolve();
@@ -356,6 +357,7 @@ function createDefaultDb() {
     trainingAttempts: [],
     nurseTrainingParticipants: [],
     nurseTrainingAttempts: [],
+    activityEvents: [],
     sessions: {},
     settings: { createdAt: now }
   };
@@ -627,6 +629,10 @@ function buildNurseSurvey(body) {
       clinic: body.clinic,
       sex: body.sex
     },
+    nurse: {
+      fullName: body.nurseName || body.nurseFullName || "",
+      source: body.nurseName || body.nurseFullName ? "survey" : ""
+    },
     measurements: {
       age: Number(body.age || 0),
       height: Number(body.height || 0),
@@ -646,6 +652,28 @@ function buildNurseSurvey(body) {
     needsDoctor: reasons.length > 0,
     createdAt: new Date().toISOString()
   };
+}
+
+function appendActivity(db, event) {
+  db.activityEvents ||= [];
+  db.activityEvents.push({
+    id: crypto.randomUUID(),
+    type: event.type,
+    actorRole: event.actorRole || "",
+    actorId: event.actorId || "",
+    actorName: event.actorName || "",
+    clinic: event.clinic || "",
+    surveyId: event.surveyId || "",
+    visitId: event.visitId || "",
+    patientName: event.patientName || "",
+    details: event.details || "",
+    createdAt: new Date().toISOString()
+  });
+  if (db.activityEvents.length > 5000) db.activityEvents = db.activityEvents.slice(-5000);
+}
+
+function patientNameFromSurvey(survey) {
+  return [survey?.patient?.lastName, survey?.patient?.firstName, survey?.patient?.middleName].filter(Boolean).join(" ");
 }
 
 function publicParticipant(participant) {
@@ -855,7 +883,8 @@ async function handleApi(req, res, url) {
         survey: `${preferredBaseUrl}${SURVEY_APP_PATH}`
         , training: `${preferredBaseUrl}${TRAINING_APP_PATH}`,
         nurseTraining: `${preferredBaseUrl}${NURSE_TRAINING_APP_PATH}`,
-        investor: `${preferredBaseUrl}${INVESTOR_APP_PATH}`
+        investor: `${preferredBaseUrl}${INVESTOR_APP_PATH}`,
+        monitor: `${preferredBaseUrl}${MONITOR_APP_PATH}`
       }
     });
   }
@@ -914,6 +943,20 @@ async function handleApi(req, res, url) {
 
   if (req.method === "GET" && url.pathname === "/api/investor/dashboard") {
     return send(res, 200, buildInvestorDashboard(db));
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/monitor/dashboard") {
+    if (!requireAdmin(session)) return send(res, 403, { error: "Нет доступа" });
+    return send(res, 200, buildOperationsMonitor(db, Object.fromEntries(url.searchParams)));
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/monitor/report.csv") {
+    if (!requireAdmin(session)) return send(res, 403, { error: "Нет доступа" });
+    const report = buildOperationsReportCsv(db, Object.fromEntries(url.searchParams));
+    return send(res, 200, report, {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="e-clinic-monitor-${new Date().toISOString().slice(0, 10)}.csv"`
+    });
   }
 
   if (req.method === "POST" && url.pathname === "/api/admin/training-participants") {
@@ -1021,6 +1064,15 @@ async function handleApi(req, res, url) {
     const body = await parseBody(req);
     const survey = buildNurseSurvey(body);
     db.nurseSurveys.push(survey);
+    appendActivity(db, {
+      type: "nurse_survey_created",
+      actorRole: "nurse",
+      actorName: survey.nurse?.fullName || "Медсестра не указана",
+      clinic: survey.patient?.clinic || survey.clinic || "",
+      surveyId: survey.id,
+      patientName: patientNameFromSurvey(survey),
+      details: survey.needsDoctor ? "Анкета отправлена, нужен врач" : "Анкета отправлена"
+    });
     await writeDb(db);
     return send(res, 201, { survey });
   }
@@ -1064,8 +1116,38 @@ async function handleApi(req, res, url) {
     const survey = buildNurseSurvey({ ...body, clinic: doctor.clinic });
     survey.createdByDoctorId = doctor.id;
     db.nurseSurveys.push(survey);
+    appendActivity(db, {
+      type: "doctor_patient_created",
+      actorRole: "doctor",
+      actorId: doctor.id,
+      actorName: doctor.fullName,
+      clinic: doctor.clinic,
+      surveyId: survey.id,
+      patientName: patientNameFromSurvey(survey),
+      details: "Врач добавил пациента"
+    });
     await writeDb(db);
     return send(res, 201, { survey });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/doctor/survey-view") {
+    if (session?.userType !== "doctor") return send(res, 403, { error: "Нет доступа" });
+    const doctor = db.doctors.find((item) => item.id === session.userId);
+    if (!doctor) return send(res, 404, { error: "Врач не найден" });
+    const body = await parseBody(req);
+    const survey = db.nurseSurveys.find((item) => item.id === body.surveyId);
+    appendActivity(db, {
+      type: "doctor_survey_viewed",
+      actorRole: "doctor",
+      actorId: doctor.id,
+      actorName: doctor.fullName,
+      clinic: doctor.clinic,
+      surveyId: body.surveyId,
+      patientName: patientNameFromSurvey(survey),
+      details: "Врач открыл карту пациента"
+    });
+    await writeDb(db);
+    return send(res, 200, { ok: true });
   }
 
   if (req.method === "POST" && url.pathname === "/api/doctor/visits") {
@@ -1100,6 +1182,20 @@ async function handleApi(req, res, url) {
       createdAt: new Date().toISOString()
     };
     db.doctorVisits.push(visit);
+    const doctor = db.doctors.find((item) => item.id === session.userId);
+    const survey = db.nurseSurveys.find((item) => item.id === visit.surveyId);
+    const drugsCount = (visit.diabetesDrugs || []).length + (visit.hypertensionDrugs || []).length;
+    appendActivity(db, {
+      type: "doctor_visit_created",
+      actorRole: "doctor",
+      actorId: session.userId,
+      actorName: doctor?.fullName || "",
+      clinic: doctor?.clinic || survey?.patient?.clinic || "",
+      surveyId: visit.surveyId,
+      visitId: visit.id,
+      patientName: patientNameFromSurvey(survey),
+      details: drugsCount ? `Осмотр сохранен, назначено препаратов: ${drugsCount}` : "Осмотр сохранен без препаратов"
+    });
     await writeDb(db);
     return send(res, 201, { visit });
   }
@@ -1463,6 +1559,188 @@ function buildInvestorDashboard(db) {
   };
 }
 
+function hasDoctorAction(visit) {
+  return Boolean(
+    (visit.referrals || []).length ||
+    String(visit.treatmentPlan || "").trim() ||
+    (visit.diabetesDrugs || []).length ||
+    (visit.hypertensionDrugs || []).length ||
+    (visit.laboratoryTests || []).length ||
+    Number(visit.followUpDays || 0) > 0
+  );
+}
+
+function monitorDateTime(value) {
+  return value ? new Date(value).toISOString() : "";
+}
+
+function matchesMonitorFilters(item, filters = {}) {
+  const clinic = filters.clinic || "all";
+  const nurse = filters.nurse || "all";
+  const doctor = filters.doctor || "all";
+  const date = filters.date || "";
+  if (clinic !== "all" && item.clinic !== clinic) return false;
+  if (nurse !== "all" && item.nurseName !== nurse) return false;
+  if (doctor !== "all" && item.doctorName !== doctor) return false;
+  if (date && dateKey(item.createdAt) !== date) return false;
+  return true;
+}
+
+function buildOperationsMonitorRows(db) {
+  const doctorsById = Object.fromEntries((db.doctors || []).map((doctor) => [doctor.id, doctor]));
+  const visitsBySurvey = {};
+  for (const visit of db.doctorVisits || []) {
+    (visitsBySurvey[visit.surveyId] ||= []).push(visit);
+  }
+  const surveyRows = (db.nurseSurveys || []).map((survey) => {
+    const visits = visitsBySurvey[survey.id] || [];
+    const createdByDoctor = survey.createdByDoctorId ? doctorsById[survey.createdByDoctorId] : null;
+    return {
+      id: survey.id,
+      createdAt: survey.createdAt,
+      clinic: survey.patient?.clinic || survey.clinic || "Не указано",
+      patientName: patientNameFromSurvey(survey) || "Пациент",
+      nurseName: survey.nurse?.fullName || (createdByDoctor ? "Добавил врач" : "Медсестра не указана"),
+      doctorName: createdByDoctor?.fullName || "",
+      needsDoctor: Boolean(survey.needsDoctor),
+      findrisc: survey.findrisc?.score || 0,
+      score2: survey.score2?.percent || 0,
+      viewedByDoctors: new Set((db.activityEvents || []).filter((event) => event.type === "doctor_survey_viewed" && event.surveyId === survey.id).map((event) => event.actorId || event.actorName)).size,
+      visits: visits.length,
+      visitsWithActions: visits.filter(hasDoctorAction).length,
+      drugs: visits.reduce((sum, visit) => sum + (visit.diabetesDrugs || []).length + (visit.hypertensionDrugs || []).length, 0)
+    };
+  });
+  const visitRows = (db.doctorVisits || []).map((visit) => {
+    const doctor = doctorsById[visit.doctorId];
+    const survey = (db.nurseSurveys || []).find((item) => item.id === visit.surveyId);
+    return {
+      id: visit.id,
+      createdAt: visit.createdAt,
+      clinic: doctor?.clinic || survey?.patient?.clinic || "Не указано",
+      doctorName: doctor?.fullName || "Врач не указан",
+      nurseName: survey?.nurse?.fullName || "Медсестра не указана",
+      patientName: patientNameFromSurvey(survey) || "Пациент",
+      diagnosis: visit.diagnosis || "",
+      hasAction: hasDoctorAction(visit),
+      referrals: (visit.referrals || []).join(", "),
+      drugs: [...(visit.diabetesDrugs || []), ...(visit.hypertensionDrugs || [])].join("; "),
+      labs: (visit.laboratoryTests || []).map((item) => `${item.name || ""}: ${item.result || ""}`).filter(Boolean).join("; "),
+      followUpDays: visit.followUpDays || 0
+    };
+  });
+  const eventRows = (db.activityEvents || []).map((event) => ({
+    id: event.id,
+    createdAt: event.createdAt,
+    type: event.type,
+    clinic: event.clinic || "Не указано",
+    actorRole: event.actorRole,
+    actorName: event.actorName || "",
+    nurseName: event.actorRole === "nurse" ? event.actorName : "all",
+    doctorName: event.actorRole === "doctor" ? event.actorName : "all",
+    patientName: event.patientName || "",
+    details: event.details || ""
+  }));
+  return { surveyRows, visitRows, eventRows };
+}
+
+function groupMonitor(items, keyFn, seed = {}) {
+  const map = {};
+  for (const item of items) {
+    const key = keyFn(item) || "Не указано";
+    map[key] ||= { label: key, ...seed };
+  }
+  return map;
+}
+
+function buildOperationsMonitor(db, filters = {}) {
+  const { surveyRows, visitRows, eventRows } = buildOperationsMonitorRows(db);
+  const filteredSurveys = surveyRows.filter((row) => matchesMonitorFilters(row, filters));
+  const filteredVisits = visitRows.filter((row) => matchesMonitorFilters(row, filters));
+  const filteredEvents = eventRows.filter((row) => matchesMonitorFilters(row, filters));
+  const clinicMap = groupMonitor([...filteredSurveys, ...filteredVisits], (row) => row.clinic, { surveys: 0, visits: 0, visitsWithActions: 0, needsDoctor: 0 });
+  for (const row of filteredSurveys) {
+    clinicMap[row.clinic].surveys += 1;
+    if (row.needsDoctor) clinicMap[row.clinic].needsDoctor += 1;
+  }
+  for (const row of filteredVisits) {
+    clinicMap[row.clinic].visits += 1;
+    if (row.hasAction) clinicMap[row.clinic].visitsWithActions += 1;
+  }
+  const nurseMap = groupMonitor(filteredSurveys, (row) => row.nurseName, { surveys: 0, needsDoctor: 0, lastAction: "" });
+  for (const row of filteredSurveys) {
+    nurseMap[row.nurseName].surveys += 1;
+    if (row.needsDoctor) nurseMap[row.nurseName].needsDoctor += 1;
+    nurseMap[row.nurseName].lastAction = [nurseMap[row.nurseName].lastAction, row.createdAt].filter(Boolean).sort().at(-1) || "";
+  }
+  const doctorMap = groupMonitor(filteredVisits, (row) => row.doctorName, { views: 0, visits: 0, visitsWithActions: 0, drugs: 0, lastAction: "" });
+  for (const event of filteredEvents.filter((event) => event.type === "doctor_survey_viewed")) {
+    doctorMap[event.actorName] ||= { label: event.actorName, views: 0, visits: 0, visitsWithActions: 0, drugs: 0, lastAction: "" };
+    doctorMap[event.actorName].views += 1;
+    doctorMap[event.actorName].lastAction = [doctorMap[event.actorName].lastAction, event.createdAt].filter(Boolean).sort().at(-1) || "";
+  }
+  for (const row of filteredVisits) {
+    doctorMap[row.doctorName].visits += 1;
+    if (row.hasAction) doctorMap[row.doctorName].visitsWithActions += 1;
+    doctorMap[row.doctorName].drugs += row.drugs ? row.drugs.split(";").filter(Boolean).length : 0;
+    doctorMap[row.doctorName].lastAction = [doctorMap[row.doctorName].lastAction, row.createdAt].filter(Boolean).sort().at(-1) || "";
+  }
+  const byDate = {};
+  for (const row of filteredSurveys) {
+    const key = dateKey(row.createdAt);
+    byDate[key] ||= { label: key, surveys: 0, visits: 0, actions: 0 };
+    byDate[key].surveys += 1;
+  }
+  for (const row of filteredVisits) {
+    const key = dateKey(row.createdAt);
+    byDate[key] ||= { label: key, surveys: 0, visits: 0, actions: 0 };
+    byDate[key].visits += 1;
+    if (row.hasAction) byDate[key].actions += 1;
+  }
+  const clinics = [...new Set([...surveyRows.map((row) => row.clinic), ...visitRows.map((row) => row.clinic)])].sort((a, b) => clinicKey(a).localeCompare(clinicKey(b), "ru"));
+  const nurses = [...new Set(surveyRows.map((row) => row.nurseName))].sort((a, b) => a.localeCompare(b, "ru"));
+  const doctors = [...new Set([...(db.doctors || []).map((doctor) => doctor.fullName), ...visitRows.map((row) => row.doctorName)])].filter(Boolean).sort((a, b) => a.localeCompare(b, "ru"));
+  return {
+    generatedAt: new Date().toISOString(),
+    filters: { clinics, nurses, doctors },
+    summary: {
+      surveys: filteredSurveys.length,
+      nursesActive: new Set(filteredSurveys.map((row) => row.nurseName)).size,
+      doctorViews: filteredEvents.filter((event) => event.type === "doctor_survey_viewed").length,
+      visits: filteredVisits.length,
+      visitsWithActions: filteredVisits.filter((row) => row.hasAction).length,
+      needsDoctor: filteredSurveys.filter((row) => row.needsDoctor).length
+    },
+    clinics: Object.values(clinicMap).sort((a, b) => clinicKey(a.label).localeCompare(clinicKey(b.label), "ru")),
+    nurses: Object.values(nurseMap).sort((a, b) => b.surveys - a.surveys),
+    doctors: Object.values(doctorMap).sort((a, b) => (b.visits + b.views) - (a.visits + a.views)),
+    byDate: Object.values(byDate).sort((a, b) => a.label.localeCompare(b.label)),
+    events: filteredEvents.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 200),
+    surveys: filteredSurveys.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 300),
+    visits: filteredVisits.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 300)
+  };
+}
+
+function csvCell(value) {
+  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+}
+
+function buildOperationsReportCsv(db, filters = {}) {
+  const data = buildOperationsMonitor(db, filters);
+  const lines = [];
+  lines.push(["Раздел", "Дата", "Поликлиника", "Сотрудник", "Пациент", "Действие", "Детали"].map(csvCell).join(";"));
+  for (const event of data.events) {
+    lines.push(["Журнал", monitorDateTime(event.createdAt), event.clinic, event.actorName, event.patientName, event.type, event.details].map(csvCell).join(";"));
+  }
+  for (const survey of data.surveys) {
+    lines.push(["Анкета", monitorDateTime(survey.createdAt), survey.clinic, survey.nurseName, survey.patientName, "Анкета пациента", `FINDRISC ${survey.findrisc}; СС риск ${survey.score2}%; нужен врач: ${survey.needsDoctor ? "да" : "нет"}`].map(csvCell).join(";"));
+  }
+  for (const visit of data.visits) {
+    lines.push(["Осмотр", monitorDateTime(visit.createdAt), visit.clinic, visit.doctorName, visit.patientName, visit.hasAction ? "Осмотр с действиями" : "Осмотр без назначений", `Диагноз: ${visit.diagnosis}; направления: ${visit.referrals}; препараты: ${visit.drugs}; лаборатория: ${visit.labs}; повтор: ${visit.followUpDays}`].map(csvCell).join(";"));
+  }
+  return `\uFEFF${lines.join("\n")}`;
+}
+
 async function serveStatic(req, res, url) {
   const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(":")[0].toLowerCase();
   const appRoutes = {
@@ -1472,7 +1750,8 @@ async function serveStatic(req, res, url) {
     [SURVEY_APP_PATH]: "/survey.html",
     [TRAINING_APP_PATH]: "/training.html",
     [NURSE_TRAINING_APP_PATH]: "/nurse-training.html",
-    [INVESTOR_APP_PATH]: "/investor.html"
+    [INVESTOR_APP_PATH]: "/investor.html",
+    [MONITOR_APP_PATH]: "/monitor.html"
   };
   const hostHomeRoutes = {
     "admin.e-clinic-control.ru": "/admin.html",
@@ -1480,7 +1759,8 @@ async function serveStatic(req, res, url) {
     "survey.e-clinic-control.ru": "/survey.html",
     "training.e-clinic-control.ru": "/training.html",
     "nurse.e-clinic-control.ru": "/nurse-training.html",
-    "investor.e-clinic-control.ru": "/investor.html"
+    "investor.e-clinic-control.ru": "/investor.html",
+    "monitor.e-clinic-control.ru": "/monitor.html"
   };
   const route = url.pathname === "/" && hostHomeRoutes[host] ? hostHomeRoutes[host] : appRoutes[url.pathname] || url.pathname;
   const safePath = normalize(route).replace(/^(\.\.[/\\])+/, "");
@@ -1525,6 +1805,7 @@ createServer(async (req, res) => {
     console.log(`  Training:     ${baseUrl}${TRAINING_APP_PATH}`);
     console.log(`  Nurse test:   ${baseUrl}${NURSE_TRAINING_APP_PATH}`);
     console.log(`  Investor:     ${baseUrl}${INVESTOR_APP_PATH}`);
+    console.log(`  Monitor:      ${baseUrl}${MONITOR_APP_PATH}`);
   }
   console.log("Admin: admin / Admin123!");
   console.log("View only: admin2 / View123!, admin3 / View123!");

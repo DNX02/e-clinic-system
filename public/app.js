@@ -18,16 +18,24 @@ const initialState = () => ({
   nurseTrainingDateFilter: "",
   nurseTrainingRegistrationDateFilter: "",
   investor: null,
-  investorTab: "overview"
+  investorTab: "overview",
+  monitor: null,
+  monitorTab: "overview",
+  monitorClinicFilter: "all",
+  monitorNurseFilter: "all",
+  monitorDoctorFilter: "all",
+  monitorDateFilter: ""
 });
 let state = initialState();
 let offlineSurveyOnlineListenerBound = false;
+let monitorRefreshTimer = null;
 const ADMIN_APP_PATH = "/app-1-admin-panel";
 const DOCTOR_APP_PATH = "/app-2-doctor";
 const SURVEY_APP_PATH = "/app-3-patient-survey";
 const TRAINING_APP_PATH = "/app-4-doctor-knowledge";
 const NURSE_TRAINING_APP_PATH = "/app-5-nurse-knowledge";
 const INVESTOR_APP_PATH = "/app-6-investor-dashboard";
+const MONITOR_APP_PATH = "/app-7-operations-monitor";
 
 const api = async (url, options = {}) => {
   const response = await fetch(url, {
@@ -851,6 +859,7 @@ function route() {
   if (appMode === "training" || path === TRAINING_APP_PATH) return loadTrainingPretest();
   if (appMode === "nurse-training" || path === NURSE_TRAINING_APP_PATH) return loadNurseTraining();
   if (appMode === "investor" || path === INVESTOR_APP_PATH) return loadInvestorDashboard();
+  if (appMode === "monitor" || path === MONITOR_APP_PATH) return state.me?.type === "admin" ? loadMonitorDashboard() : renderAdminLogin();
   if (appMode === "doctor" || path === DOCTOR_APP_PATH) return state.me?.type === "doctor" ? loadDoctor() : renderDoctorLogin();
   if (appMode === "admin" || path === ADMIN_APP_PATH) return state.me?.type === "admin" ? loadAdmin() : renderAdminLogin();
   renderHome();
@@ -907,6 +916,16 @@ document.addEventListener("click", async (event) => {
     state.investorTab = event.target.dataset.tab;
     renderInvestorDashboard();
   }
+  if (action === "monitor-tab") {
+    state.monitorTab = event.target.dataset.tab;
+    renderMonitorDashboard();
+  }
+  if (action === "monitor-refresh") {
+    await loadMonitorDashboard(false);
+  }
+  if (action === "monitor-report") {
+    window.location.href = `/api/monitor/report.csv?${monitorQuery()}`;
+  }
   if (action === "delete-doctor") {
     if (!confirm("Удалить профиль врача?")) return;
     await api(`/api/admin/doctors/${event.target.dataset.id}`, { method: "DELETE", body: "{}" });
@@ -925,6 +944,7 @@ document.addEventListener("click", async (event) => {
   }
   if (action === "select-survey") {
     state.selectedSurvey = state.doctor.surveys.find((item) => item.id === event.target.dataset.id);
+    api("/api/doctor/survey-view", { method: "POST", body: JSON.stringify({ surveyId: event.target.dataset.id }) }).catch(() => {});
     state.doctorMode = "visit";
     state.doctorSection = "patients";
     renderDoctor();
@@ -977,6 +997,7 @@ function renderHome() {
   const trainingUrl = `${location.origin}${TRAINING_APP_PATH}`;
   const nurseTrainingUrl = `${location.origin}${NURSE_TRAINING_APP_PATH}`;
   const investorUrl = `${location.origin}${INVESTOR_APP_PATH}`;
+  const monitorUrl = `${location.origin}${MONITOR_APP_PATH}`;
   setPage(html`
     <main class="login">
       <section class="panel">
@@ -992,6 +1013,8 @@ function renderHome() {
           <input id="homeNurseTrainingUrl" readonly value="${nurseTrainingUrl}" />
           <a href="${INVESTOR_APP_PATH}"><button>№6 Для инвесторов</button></a>
           <input id="homeInvestorUrl" readonly value="${investorUrl}" />
+          <a href="${MONITOR_APP_PATH}"><button>№7 Экран наблюдения</button></a>
+          <input id="homeMonitorUrl" readonly value="${monitorUrl}" />
         </div>
         <p class="muted">Ссылка №1 администратора не показывается здесь, чтобы врачи случайно не открывали админку.</p>
       </section>
@@ -1003,6 +1026,7 @@ function renderHome() {
     if (apps.training) document.querySelector("#homeTrainingUrl").value = apps.training;
     if (apps.nurseTraining) document.querySelector("#homeNurseTrainingUrl").value = apps.nurseTraining;
     if (apps.investor) document.querySelector("#homeInvestorUrl").value = apps.investor;
+    if (apps.monitor) document.querySelector("#homeMonitorUrl").value = apps.monitor;
   }).catch(() => {});
 }
 
@@ -1263,6 +1287,311 @@ function renderInvestorDashboard() {
   `);
 }
 
+function monitorQuery() {
+  const params = new URLSearchParams();
+  if (state.monitorClinicFilter !== "all") params.set("clinic", state.monitorClinicFilter);
+  if (state.monitorNurseFilter !== "all") params.set("nurse", state.monitorNurseFilter);
+  if (state.monitorDoctorFilter !== "all") params.set("doctor", state.monitorDoctorFilter);
+  if (state.monitorDateFilter) params.set("date", state.monitorDateFilter);
+  return params.toString();
+}
+
+async function loadMonitorDashboard(resetTimer = true) {
+  state.monitor = await api(`/api/monitor/dashboard?${monitorQuery()}`);
+  renderMonitorDashboard();
+  if (resetTimer) {
+    clearInterval(monitorRefreshTimer);
+    monitorRefreshTimer = setInterval(() => loadMonitorDashboard(false).catch(() => {}), 15000);
+  }
+}
+
+function monitorNumber(value, suffix = "") {
+  return `${Number(value || 0).toLocaleString("ru-RU")}${suffix}`;
+}
+
+function monitorKpi(label, value, note, tone = "") {
+  return html`
+    <div class="monitor-kpi ${tone}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <small>${escapeHtml(note || "")}</small>
+    </div>
+  `;
+}
+
+function monitorBarChart(items, keys, colors) {
+  const max = Math.max(1, ...items.flatMap((item) => keys.map((key) => Number(item[key] || 0))));
+  return html`
+    <div class="monitor-bars">
+      ${items.slice(0, 12).map((item) => html`
+        <div class="monitor-bar-line">
+          <span>${escapeHtml(item.label)}</span>
+          <div>
+            ${keys.map((key, index) => `<i style="width:${Math.max(4, (Number(item[key] || 0) / max) * 100)}%; background:${colors[index]}"></i>`).join("")}
+          </div>
+          <strong>${keys.map((key) => monitorNumber(item[key])).join(" / ")}</strong>
+        </div>
+      `).join("") || `<p class="muted">Пока нет данных</p>`}
+    </div>
+  `;
+}
+
+function monitorSparkline(items, key) {
+  const values = (items || []).map((item) => Number(item[key] || 0));
+  const max = Math.max(1, ...values);
+  const points = values.length
+    ? values.map((value, index) => `${values.length === 1 ? 100 : (index / (values.length - 1)) * 300},${110 - (value / max) * 95}`).join(" ")
+    : "0,110 300,110";
+  return html`
+    <svg class="monitor-spark" viewBox="0 0 320 130" role="img">
+      <polyline points="${points}"></polyline>
+    </svg>
+  `;
+}
+
+function monitorFilters() {
+  const data = state.monitor || { filters: { clinics: [], nurses: [], doctors: [] } };
+  const optionList = (items, selected) => items.map((item) => `<option value="${escapeHtml(item)}" ${selected === item ? "selected" : ""}>${escapeHtml(item)}</option>`).join("");
+  return html`
+    <section class="monitor-filters">
+      <div class="form-row">
+        <label>Поликлиника</label>
+        <select id="monitorClinic"><option value="all">Все поликлиники</option>${optionList(data.filters.clinics || [], state.monitorClinicFilter)}</select>
+      </div>
+      <div class="form-row">
+        <label>Медсестра</label>
+        <select id="monitorNurse"><option value="all">Все медсестры</option>${optionList(data.filters.nurses || [], state.monitorNurseFilter)}</select>
+      </div>
+      <div class="form-row">
+        <label>Врач</label>
+        <select id="monitorDoctor"><option value="all">Все врачи</option>${optionList(data.filters.doctors || [], state.monitorDoctorFilter)}</select>
+      </div>
+      <div class="form-row">
+        <label>День</label>
+        <input id="monitorDate" type="date" value="${escapeHtml(state.monitorDateFilter)}" />
+      </div>
+      <button type="button" data-action="monitor-refresh">Обновить</button>
+      <button type="button" class="secondary" data-action="monitor-report">Скачать отчет</button>
+    </section>
+  `;
+}
+
+function monitorOverview() {
+  const data = state.monitor;
+  return html`
+    <section class="monitor-grid">
+      ${monitorKpi("Анкеты сегодня/по фильтру", monitorNumber(data.summary.surveys), "Сколько пациентов внесено в систему", "")}
+      ${monitorKpi("Активные медсестры", monitorNumber(data.summary.nursesActive), "Кто реально вводит пациентов", "mint")}
+      ${monitorKpi("Просмотры врачей", monitorNumber(data.summary.doctorViews), "Сколько карт открыли врачи", "blue")}
+      ${monitorKpi("Осмотры с действиями", monitorNumber(data.summary.visitsWithActions), "Назначения, план, лаборатория или повтор", "red")}
+    </section>
+    <section class="monitor-split">
+      <div class="monitor-card wide">
+        <h2>Динамика работы</h2>
+        ${monitorSparkline(data.byDate, "surveys")}
+        <div class="monitor-legend"><span>Анкеты</span><span>Осмотры</span><span>Действия</span></div>
+        ${monitorBarChart(data.byDate, ["surveys", "visits", "actions"], ["#0f766e", "#2563eb", "#dc2626"])}
+      </div>
+      <div class="monitor-card">
+        <h2>Маршрутизация</h2>
+        <div class="monitor-ring" style="--value:${Math.min(100, Math.round((data.summary.needsDoctor / Math.max(1, data.summary.surveys)) * 100))}">
+          <strong>${monitorNumber(Math.round((data.summary.needsDoctor / Math.max(1, data.summary.surveys)) * 100), "%")}</strong>
+          <span>к врачу</span>
+        </div>
+        <p class="muted">Показывает долю анкет, где программа рекомендовала направление к врачу.</p>
+      </div>
+    </section>
+    <section class="monitor-split">
+      <div class="monitor-card">
+        <h2>Поликлиники</h2>
+        ${monitorBarChart(data.clinics, ["surveys", "visitsWithActions"], ["#0f766e", "#dc2626"])}
+      </div>
+      <div class="monitor-card">
+        <h2>Последние действия</h2>
+        ${monitorEventList(data.events.slice(0, 8))}
+      </div>
+    </section>
+  `;
+}
+
+function monitorEventLabel(type) {
+  const labels = {
+    nurse_survey_created: "Анкета отправлена",
+    doctor_patient_created: "Врач добавил пациента",
+    doctor_survey_viewed: "Врач открыл карту",
+    doctor_visit_created: "Осмотр сохранен"
+  };
+  return labels[type] || type;
+}
+
+function monitorEventList(events) {
+  return html`
+    <div class="monitor-feed">
+      ${events.map((event) => html`
+        <div class="monitor-feed-item">
+          <time>${new Date(event.createdAt).toLocaleString("ru-RU")}</time>
+          <strong>${escapeHtml(monitorEventLabel(event.type))}</strong>
+          <span>${escapeHtml(event.actorName || "-")} • ${escapeHtml(event.clinic || "-")}</span>
+          <p>${escapeHtml(event.patientName || "-")} — ${escapeHtml(event.details || "")}</p>
+        </div>
+      `).join("") || `<p class="muted">Пока нет действий</p>`}
+    </div>
+  `;
+}
+
+function monitorTable(headers, rows) {
+  return html`
+    <div class="table-wrap monitor-table">
+      <table>
+        <thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
+        <tbody>${rows.join("") || `<tr><td colspan="${headers.length}">Нет данных</td></tr>`}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function monitorNursesPanel() {
+  const rows = (state.monitor.nurses || []).map((item) => html`
+    <tr>
+      <td>${escapeHtml(item.label)}</td>
+      <td>${escapeHtml(item.surveys)}</td>
+      <td>${escapeHtml(item.needsDoctor)}</td>
+      <td>${item.lastAction ? new Date(item.lastAction).toLocaleString("ru-RU") : "-"}</td>
+    </tr>
+  `);
+  return html`
+    <section class="monitor-split">
+      <div class="monitor-card">
+        <h2>Активность медсестер</h2>
+        ${monitorBarChart(state.monitor.nurses, ["surveys", "needsDoctor"], ["#0f766e", "#f59e0b"])}
+      </div>
+      <div class="monitor-card wide">
+        <h2>Таблица медсестер</h2>
+        ${monitorTable(["Медсестра", "Анкет", "К врачу", "Последнее действие"], rows)}
+      </div>
+    </section>
+  `;
+}
+
+function monitorDoctorsPanel() {
+  const rows = (state.monitor.doctors || []).map((item) => html`
+    <tr>
+      <td>${escapeHtml(item.label)}</td>
+      <td>${escapeHtml(item.views)}</td>
+      <td>${escapeHtml(item.visits)}</td>
+      <td>${escapeHtml(item.visitsWithActions)}</td>
+      <td>${escapeHtml(item.drugs)}</td>
+      <td>${item.lastAction ? new Date(item.lastAction).toLocaleString("ru-RU") : "-"}</td>
+    </tr>
+  `);
+  return html`
+    <section class="monitor-split">
+      <div class="monitor-card">
+        <h2>Работа врачей</h2>
+        ${monitorBarChart(state.monitor.doctors, ["views", "visitsWithActions"], ["#2563eb", "#dc2626"])}
+      </div>
+      <div class="monitor-card wide">
+        <h2>Таблица врачей</h2>
+        ${monitorTable(["Врач", "Открыл карт", "Осмотров", "С действиями", "Препаратов", "Последнее действие"], rows)}
+      </div>
+    </section>
+  `;
+}
+
+function monitorTablesPanel() {
+  const surveyRows = (state.monitor.surveys || []).map((survey) => html`
+    <tr>
+      <td>${new Date(survey.createdAt).toLocaleString("ru-RU")}</td>
+      <td>${escapeHtml(survey.clinic)}</td>
+      <td>${escapeHtml(survey.nurseName)}</td>
+      <td>${escapeHtml(survey.patientName)}</td>
+      <td>${survey.findrisc}</td>
+      <td>${survey.score2}%</td>
+      <td>${survey.needsDoctor ? "Да" : "Нет"}</td>
+      <td>${survey.viewedByDoctors}</td>
+      <td>${survey.visitsWithActions}</td>
+    </tr>
+  `);
+  const visitRows = (state.monitor.visits || []).map((visit) => html`
+    <tr>
+      <td>${new Date(visit.createdAt).toLocaleString("ru-RU")}</td>
+      <td>${escapeHtml(visit.clinic)}</td>
+      <td>${escapeHtml(visit.doctorName)}</td>
+      <td>${escapeHtml(visit.patientName)}</td>
+      <td>${visit.hasAction ? "Да" : "Нет"}</td>
+      <td>${escapeHtml(visit.diagnosis || "-")}</td>
+      <td>${escapeHtml(visit.drugs || "-")}</td>
+      <td>${visit.followUpDays || "-"}</td>
+    </tr>
+  `);
+  return html`
+    <section class="monitor-card">
+      <h2>Анкеты пациентов</h2>
+      ${monitorTable(["Дата", "Поликлиника", "Медсестра", "Пациент", "FINDRISC", "СС риск", "К врачу", "Открыли", "Действия"], surveyRows)}
+    </section>
+    <section class="monitor-card">
+      <h2>Осмотры врачей</h2>
+      ${monitorTable(["Дата", "Поликлиника", "Врач", "Пациент", "С действиями", "Диагноз", "Препараты", "Повтор"], visitRows)}
+    </section>
+  `;
+}
+
+function renderMonitorDashboard() {
+  const data = state.monitor;
+  if (!data) return;
+  const tabs = [
+    ["overview", "Обзор"],
+    ["nurses", "Медсестры"],
+    ["doctors", "Врачи"],
+    ["events", "Лента действий"],
+    ["tables", "Таблицы"]
+  ];
+  const content = state.monitorTab === "nurses"
+    ? monitorNursesPanel()
+    : state.monitorTab === "doctors"
+      ? monitorDoctorsPanel()
+      : state.monitorTab === "events"
+        ? `<section class="monitor-card"><h2>Живая лента действий</h2>${monitorEventList(data.events)}</section>`
+        : state.monitorTab === "tables"
+          ? monitorTablesPanel()
+          : monitorOverview();
+  setPage(html`
+    <main class="monitor-shell">
+      <section class="monitor-hero">
+        <div>
+          <span class="monitor-eyebrow">E-Clinic Control • приложение №7</span>
+          <h1>Экран наблюдения</h1>
+          <p>Оперативный контроль работы медсестер и врачей: анкеты, просмотры карт, осмотры, назначения, лаборатория и повторные обращения.</p>
+        </div>
+        <div class="monitor-live-card">
+          <span>Обновлено</span>
+          <strong>${new Date(data.generatedAt).toLocaleTimeString("ru-RU")}</strong>
+          <small>Автообновление каждые 15 секунд</small>
+        </div>
+      </section>
+      ${monitorFilters()}
+      <nav class="monitor-tabs">
+        ${tabs.map(([tab, label]) => `<button data-action="monitor-tab" data-tab="${tab}" class="${state.monitorTab === tab ? "active" : ""}">${label}</button>`).join("")}
+      </nav>
+      <section class="monitor-view">${content}</section>
+    </main>
+  `);
+  bindMonitorFilters();
+}
+
+function bindMonitorFilters() {
+  const bind = (id, key) => {
+    document.querySelector(id)?.addEventListener("change", async (event) => {
+      state[key] = event.target.value;
+      await loadMonitorDashboard(false);
+    });
+  };
+  bind("#monitorClinic", "monitorClinicFilter");
+  bind("#monitorNurse", "monitorNurseFilter");
+  bind("#monitorDoctor", "monitorDoctorFilter");
+  bind("#monitorDate", "monitorDateFilter");
+}
+
 function renderAdminLogin() {
   setPage(html`
     <main class="login">
@@ -1279,7 +1608,7 @@ function renderAdminLogin() {
     event.preventDefault();
     try {
       await api("/api/login/admin", { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(event.target))) });
-      window.location.href = ADMIN_APP_PATH;
+      window.location.href = document.body.dataset.app === "monitor" ? MONITOR_APP_PATH : ADMIN_APP_PATH;
     } catch (error) {
       alert(error.message);
     }
@@ -1838,6 +2167,7 @@ function renderQrAdmin() {
   const trainingQr = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(trainingUrl)}`;
   const nurseTrainingQr = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(nurseTrainingUrl)}`;
   const investorQr = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(investorUrl)}`;
+  const monitorQr = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(monitorUrl)}`;
   return html`
     <section class="panel">
       <h2>Отдельные ссылки приложений</h2>
@@ -1866,6 +2196,11 @@ function renderQrAdmin() {
           <h3>№6 Для инвесторов</h3>
           <img alt="QR-код инвесторской аналитики" src="${investorQr}" />
           <input readonly value="${investorUrl}" />
+        </div>
+        <div class="qr-box">
+          <h3>№7 Экран наблюдения</h3>
+          <img alt="QR-код экрана наблюдения" src="${monitorQr}" />
+          <input readonly value="${monitorUrl}" />
         </div>
       </div>
       <div class="form-row" style="margin-top:16px">
@@ -1997,6 +2332,7 @@ function renderNurseSurvey() {
       <form class="panel form" id="surveyForm">
         <h1>${escapeHtml(t("Опросник медсестры"))}</h1>
         ${surveyLanguageControl()}
+        <div class="form-row"><label>${escapeHtml(t("ФИО медсестры"))}</label><input name="nurseName" required /></div>
         <h3>${escapeHtml(t("Паспортная часть"))}</h3>
         <section class="grid two">
           ${input(t("Фамилия"), "lastName", true)}
