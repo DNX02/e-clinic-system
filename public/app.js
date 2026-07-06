@@ -14,6 +14,7 @@ const initialState = () => ({
   trainingClinicFilter: ["all"],
   trainingDateFilter: "",
   trainingRegistrationDateFilter: "",
+  trainingNameSort: "default",
   nurseTrainingClinicFilter: ["all"],
   nurseTrainingDateFilter: "",
   nurseTrainingRegistrationDateFilter: "",
@@ -2680,7 +2681,7 @@ function renderTrainingParticipantList() {
     (acc[attempt.participantId] ||= []).push(attempt);
     return acc;
   }, {});
-  const rows = (state.training?.participants || []).map((participant) => {
+  const personCard = (participant) => {
     const attempts = attemptsByParticipant[participant.id] || [];
     const pre = attempts.find((attempt) => attempt.type === "pre");
     const taskCount = attempts.filter((attempt) => attempt.type === "task").length;
@@ -2693,7 +2694,12 @@ function renderTrainingParticipantList() {
       </div>
       <button data-action="select-training-participant" data-id="${participant.id}">Открыть</button>
     </div>
-  `}).join("");
+  `};
+  const sortTrainingParticipants = (participants) => state.trainingNameSort === "az"
+    ? [...participants].sort((a, b) => String(a.fullName || "").localeCompare(String(b.fullName || ""), "ru"))
+    : [...participants];
+  const renderTrainingRows = (participants) => sortTrainingParticipants(participants).map(personCard).join("");
+  const rows = renderTrainingRows(state.training?.participants || []);
   setPage(html`
     <main class="container">
       <section class="panel">
@@ -2701,24 +2707,29 @@ function renderTrainingParticipantList() {
         ${languageControl()}
         <h2>Пре-тест до обучения</h2>
         <p class="muted">Найдите свое имя в списке. Сначала сдайте тест до обучения, после семинара сдайте Инструменты 2-6.</p>
-        <input id="trainingSearch" placeholder="Введите фамилию или имя" />
+        <div class="grid two">
+          <input id="trainingSearch" placeholder="Введите фамилию или имя" />
+          <select id="trainingNameSort" aria-label="Сортировка списка врачей">
+            <option value="default" ${state.trainingNameSort === "default" ? "selected" : ""}>По регистрации</option>
+            <option value="az" ${state.trainingNameSort === "az" ? "selected" : ""}>От А до Я</option>
+          </select>
+        </div>
         <div id="trainingList" class="training-list">${rows || "<p class='muted'>Администратор еще не зарегистрировал участников обучения.</p>"}</div>
       </section>
     </main>
   `);
   bindLanguageControl(renderTrainingParticipantList);
+  const refreshTrainingList = () => {
+    const query = document.querySelector("#trainingSearch")?.value.toLowerCase() || "";
+    const participants = (state.training.participants || []).filter((item) => item.fullName.toLowerCase().includes(query));
+    document.querySelector("#trainingList").innerHTML = renderTrainingRows(participants) || "<p class='muted'>Участник не найден</p>";
+  };
   document.querySelector("#trainingSearch")?.addEventListener("input", (event) => {
-    const query = event.target.value.toLowerCase();
-    const participants = state.training.participants.filter((item) => item.fullName.toLowerCase().includes(query));
-    document.querySelector("#trainingList").innerHTML = participants.map((participant) => html`
-      <div class="card training-person">
-        <div>
-          <strong>${escapeHtml(participant.fullName)}</strong>
-          <div class="muted">${escapeHtml(participant.clinic || "")}${participant.specialty ? ` / ${escapeHtml(participant.specialty)}` : ""}</div>
-        </div>
-        <button data-action="select-training-participant" data-id="${participant.id}">Открыть</button>
-      </div>
-    `).join("") || "<p class='muted'>Участник не найден</p>";
+    refreshTrainingList();
+  });
+  document.querySelector("#trainingNameSort")?.addEventListener("change", (event) => {
+    state.trainingNameSort = event.target.value;
+    refreshTrainingList();
   });
 }
 
