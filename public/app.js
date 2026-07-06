@@ -3123,6 +3123,13 @@ async function renderPostTrainingTests(participantId) {
               <table>
                 <thead><tr><th>Тест</th><th>Баллы</th><th>Процент</th></tr></thead>
                 <tbody>${resultRows}</tbody>
+                <tfoot>
+                  <tr class="total-row">
+                    <td>Общий процент</td>
+                    <td>${correct}/${total}</td>
+                    <td>${percent}% ${passed ? `<span class="pill ok">${escapeHtml(translateTestText("Пройден"))}</span>` : `<span class="pill danger">${escapeHtml(translateTestText("Не пройден"))}</span>`}</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
             <button data-action="select-training-participant" data-id="${participantId}">${escapeHtml(translateTestText("Вернуться"))}</button>

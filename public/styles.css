@@ -351,6 +351,11 @@ th {
   font-weight: 600;
 }
 
+.total-row td {
+  background: rgba(17, 106, 91, 0.07);
+  font-weight: 800;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
