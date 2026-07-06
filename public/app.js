@@ -3078,19 +3078,32 @@ async function renderPostTrainingTests(participantId) {
   bindLanguageControl(() => renderPostTrainingTests(participantId));
   document.querySelector("#postTrainingTestsForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    const form = event.target;
+    const submitButton = form.querySelector('button[type="submit"], button:not([type])');
+    if (submitButton?.disabled) return;
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = translateTestText("Отправка...");
+    }
     const formData = new FormData(event.target);
     try {
       const results = [];
       for (const [index, task] of tasks.entries()) {
         const answers = collectPostTrainingTaskAnswers(task, formData, `task${index}_`);
-        const result = await api(`/api/training/tasks/${participantId}/${task.id}/submit`, { method: "POST", body: JSON.stringify({ answers }) });
-        results.push(result.attempt);
+        try {
+          const result = await api(`/api/training/tasks/${participantId}/${task.id}/submit`, { method: "POST", body: JSON.stringify({ answers }) });
+          results.push(result.attempt);
+        } catch (error) {
+          if (!String(error.message || "").includes("уже отправлено")) throw error;
+        }
       }
-      const correct = results.reduce((sum, attempt) => sum + Number(attempt.correct || 0), 0);
-      const total = results.reduce((sum, attempt) => sum + Number(attempt.total || attempt.maxScore || 0), 0);
+      const freshData = await api(`/api/training/participant/${participantId}`);
+      const allResults = freshData.attempts.filter((attempt) => attempt.type === "task");
+      const correct = allResults.reduce((sum, attempt) => sum + Number(attempt.correct || 0), 0);
+      const total = allResults.reduce((sum, attempt) => sum + Number(attempt.total || attempt.maxScore || 0), 0);
       const percent = total ? Math.round((correct / total) * 100) : 0;
       const passed = percent >= 70;
-      const resultRows = results.map((attempt) => html`
+      const resultRows = allResults.map((attempt) => html`
         <tr>
           <td>${escapeHtml(attempt.instrument || "")}. ${escapeHtml(attempt.title || "")}</td>
           <td>${attempt.correct}/${attempt.total || attempt.maxScore}</td>
@@ -3116,8 +3129,13 @@ async function renderPostTrainingTests(participantId) {
           </section>
         </main>
       `);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       alert(error.message);
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = translateTestText("Отправить тесты после обучения");
+      }
     }
   });
 }
