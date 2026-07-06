@@ -15,6 +15,8 @@ const initialState = () => ({
   trainingDateFilter: "",
   trainingRegistrationDateFilter: "",
   trainingNameSort: "default",
+  trainingPreStatusFilter: "all",
+  trainingPostStatusFilter: "all",
   nurseTrainingClinicFilter: ["all"],
   nurseTrainingDateFilter: "",
   nurseTrainingRegistrationDateFilter: "",
@@ -2698,8 +2700,19 @@ function renderTrainingParticipantList() {
   const sortTrainingParticipants = (participants) => state.trainingNameSort === "az"
     ? [...participants].sort((a, b) => String(a.fullName || "").localeCompare(String(b.fullName || ""), "ru"))
     : [...participants];
+  const participantMatchesTrainingStatus = (participant) => {
+    const attempts = attemptsByParticipant[participant.id] || [];
+    const hasPre = attempts.some((attempt) => attempt.type === "pre");
+    const hasPost = attempts.filter((attempt) => attempt.type === "task").length >= 5;
+    const preOk = state.trainingPreStatusFilter === "all" || (state.trainingPreStatusFilter === "done" ? hasPre : !hasPre);
+    const postOk = state.trainingPostStatusFilter === "all" || (state.trainingPostStatusFilter === "done" ? hasPost : !hasPost);
+    return preOk && postOk;
+  };
+  const filterTrainingParticipants = (participants, query = "") => participants.filter((item) =>
+    item.fullName.toLowerCase().includes(query) && participantMatchesTrainingStatus(item)
+  );
   const renderTrainingRows = (participants) => sortTrainingParticipants(participants).map(personCard).join("");
-  const rows = renderTrainingRows(state.training?.participants || []);
+  const rows = renderTrainingRows(filterTrainingParticipants(state.training?.participants || []));
   setPage(html`
     <main class="container">
       <section class="panel">
@@ -2713,6 +2726,16 @@ function renderTrainingParticipantList() {
             <option value="default" ${state.trainingNameSort === "default" ? "selected" : ""}>По регистрации</option>
             <option value="az" ${state.trainingNameSort === "az" ? "selected" : ""}>От А до Я</option>
           </select>
+          <select id="trainingPreStatusFilter" aria-label="Фильтр теста до обучения">
+            <option value="all" ${state.trainingPreStatusFilter === "all" ? "selected" : ""}>До обучения: все</option>
+            <option value="done" ${state.trainingPreStatusFilter === "done" ? "selected" : ""}>До обучения: сдали</option>
+            <option value="missing" ${state.trainingPreStatusFilter === "missing" ? "selected" : ""}>До обучения: не сдали</option>
+          </select>
+          <select id="trainingPostStatusFilter" aria-label="Фильтр теста после обучения">
+            <option value="all" ${state.trainingPostStatusFilter === "all" ? "selected" : ""}>После обучения: все</option>
+            <option value="done" ${state.trainingPostStatusFilter === "done" ? "selected" : ""}>После обучения: сдали</option>
+            <option value="missing" ${state.trainingPostStatusFilter === "missing" ? "selected" : ""}>После обучения: не сдали</option>
+          </select>
         </div>
         <div id="trainingList" class="training-list">${rows || "<p class='muted'>Администратор еще не зарегистрировал участников обучения.</p>"}</div>
       </section>
@@ -2721,7 +2744,7 @@ function renderTrainingParticipantList() {
   bindLanguageControl(renderTrainingParticipantList);
   const refreshTrainingList = () => {
     const query = document.querySelector("#trainingSearch")?.value.toLowerCase() || "";
-    const participants = (state.training.participants || []).filter((item) => item.fullName.toLowerCase().includes(query));
+    const participants = filterTrainingParticipants(state.training.participants || [], query);
     document.querySelector("#trainingList").innerHTML = renderTrainingRows(participants) || "<p class='muted'>Участник не найден</p>";
   };
   document.querySelector("#trainingSearch")?.addEventListener("input", (event) => {
@@ -2729,6 +2752,14 @@ function renderTrainingParticipantList() {
   });
   document.querySelector("#trainingNameSort")?.addEventListener("change", (event) => {
     state.trainingNameSort = event.target.value;
+    refreshTrainingList();
+  });
+  document.querySelector("#trainingPreStatusFilter")?.addEventListener("change", (event) => {
+    state.trainingPreStatusFilter = event.target.value;
+    refreshTrainingList();
+  });
+  document.querySelector("#trainingPostStatusFilter")?.addEventListener("change", (event) => {
+    state.trainingPostStatusFilter = event.target.value;
     refreshTrainingList();
   });
 }
