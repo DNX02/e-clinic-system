@@ -947,6 +947,13 @@ document.addEventListener("click", async (event) => {
     await api(`/api/admin/training-participants/${event.target.dataset.id}`, { method: "DELETE", body: "{}" });
     await loadAdmin();
   }
+  if (action === "reset-training-attempts") {
+    const phase = event.target.dataset.phase;
+    const label = phase === "pre" ? "тест до обучения" : "тесты после обучения";
+    if (!confirm(`Разрешить врачу заново пройти ${label}? Старый результат будет удален.`)) return;
+    await api(`/api/admin/training-participants/${event.target.dataset.id}/attempts/${phase}`, { method: "DELETE", body: "{}" });
+    await loadAdmin();
+  }
   if (action === "delete-nurse-training-participant") {
     if (!confirm("Удалить медсестру и результаты тестов?")) return;
     await api(`/api/admin/nurse-training-participants/${event.target.dataset.id}`, { method: "DELETE", body: "{}" });
@@ -1749,8 +1756,18 @@ function renderTrainingAdmin() {
         <td>${escapeHtml(participant.fullName)}</td>
         <td>${escapeHtml(participant.clinic || "")}</td>
         <td>${escapeHtml(participant.specialty || "")}</td>
-        <td>${pre ? `${pre.correct}/${pre.total} (${pre.percent}%)` : "<span class='pill warn'>Не сдал</span>"}</td>
-        <td>${postSummary.label}</td>
+        <td>
+          <div class="result-cell">
+            <span>${pre ? `${pre.correct}/${pre.total} (${pre.percent}%)` : "<span class='pill warn'>Не сдал</span>"}</span>
+            ${pre ? `<button type="button" class="secondary mini" data-action="reset-training-attempts" data-id="${participant.id}" data-phase="pre" ${state.admin.canEdit ? "" : "disabled"}>Перепройти</button>` : ""}
+          </div>
+        </td>
+        <td>
+          <div class="result-cell">
+            <span>${postSummary.label}</span>
+            ${tasks.length ? `<button type="button" class="secondary mini" data-action="reset-training-attempts" data-id="${participant.id}" data-phase="post" ${state.admin.canEdit ? "" : "disabled"}>Перепройти</button>` : ""}
+          </div>
+        </td>
         <td><button class="danger" data-action="delete-training-participant" data-id="${participant.id}" ${state.admin.canEdit ? "" : "disabled"}>Удалить</button></td>
       </tr>
       ${visibleAttempts.length ? `<tr><td colspan="6">${trainingParticipantAdminDetails(visibleAttempts)}</td></tr>` : ""}
