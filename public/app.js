@@ -975,6 +975,11 @@ document.addEventListener("click", async (event) => {
     await api(`/api/admin/nurse-training-participants/${event.target.dataset.id}`, { method: "DELETE", body: "{}" });
     await loadAdmin();
   }
+  if (action === "delete-admin-access") {
+    if (!confirm("Удалить доступ администратора?")) return;
+    await api(`/api/admin/admins/${event.target.dataset.id}`, { method: "DELETE", body: "{}" });
+    await loadAdmin();
+  }
   if (action === "select-survey") {
     state.selectedSurvey = state.doctor.surveys.find((item) => item.id === event.target.dataset.id);
     api("/api/doctor/survey-view", { method: "POST", body: JSON.stringify({ surveyId: event.target.dataset.id }) }).catch(() => {});
@@ -1680,8 +1685,8 @@ async function loadAdmin() {
 }
 
 function renderAdmin() {
-  const nav = ["stats", "doctors", "training", "nurseTraining", "surveys", "visits", "qr"].map((tab) => {
-    const names = { stats: "Статистика", doctors: "Врачи", training: "Обучение №4", nurseTraining: "Медсестры №5", surveys: "Анкеты", visits: "Назначения", qr: "QR" };
+  const nav = ["stats", "doctors", "training", "nurseTraining", "surveys", "visits", "access", "qr"].map((tab) => {
+    const names = { stats: "Статистика", doctors: "Врачи", training: "Обучение №4", nurseTraining: "Медсестры №5", surveys: "Анкеты", visits: "Назначения", access: "Доступы", qr: "QR" };
     return `<button data-action="admin-tab" data-tab="${tab}" class="${state.tab === tab ? "active" : ""}">${names[tab]}</button>`;
   }).join("");
   setPage(html`
@@ -1699,6 +1704,7 @@ function adminTab() {
   if (state.tab === "nurseTraining") return renderNurseTrainingAdmin();
   if (state.tab === "surveys") return renderSurveyTable(filteredAdminSurveys());
   if (state.tab === "visits") return renderVisitsAdmin();
+  if (state.tab === "access") return renderAccessAdmin();
   if (state.tab === "qr") return renderQrAdmin();
   return renderStatsAdmin();
 }
@@ -2268,6 +2274,92 @@ function doctorLabSummary(labs = []) {
   }).join("; ");
 }
 
+function adminRoleOptions(selected = "observer") {
+  const roles = [
+    ["owner", "Главный администратор"],
+    ["manager", "Администратор"],
+    ["observer", "Наблюдатель"]
+  ];
+  return roles.map(([value, text]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${text}</option>`).join("");
+}
+
+function renderAccessAdmin() {
+  const canManage = Boolean(state.admin.canManageAdmins);
+  const admins = (state.admin.admins || []).slice().sort((a, b) => {
+    const rank = { owner: 0, manager: 1, observer: 2 };
+    return (rank[a.role] ?? 9) - (rank[b.role] ?? 9) || String(a.name || "").localeCompare(String(b.name || ""), "ru");
+  });
+  const roleHint = {
+    owner: "Все права: данные, врачи, анкеты, обучение, статистика и управление доступами.",
+    manager: "Может работать с данными системы, но не может управлять администраторами.",
+    observer: "Только просмотр. Изменять и удалять данные нельзя."
+  };
+  const rows = admins.map((admin) => html`
+    <tr>
+      <td>
+        <strong>${escapeHtml(admin.name)}</strong>
+        ${admin.id === state.me?.id ? "<span class='pill ok'>Вы</span>" : ""}
+        <div class="muted">${escapeHtml(roleHint[admin.role] || "")}</div>
+      </td>
+      <td><span class="pill">${escapeHtml(admin.roleLabel || admin.role)}</span></td>
+      <td><code>${escapeHtml(admin.username)}</code></td>
+      <td><code>${escapeHtml(admin.passwordVisible || "Пароль не сохранен в открытом виде")}</code></td>
+      <td>${admin.createdAt ? new Date(admin.createdAt).toLocaleDateString("ru-RU") : ""}</td>
+      <td>
+        <details class="compact-admin-form">
+          <summary>Изменить</summary>
+          <form class="form admin-access-form" data-id="${admin.id}">
+            <section class="grid two">
+              <div class="form-row"><label>ФИО</label><input name="name" value="${escapeHtml(admin.name)}" required /></div>
+              <div class="form-row"><label>Логин</label><input name="username" value="${escapeHtml(admin.username)}" required /></div>
+              <div class="form-row"><label>Новый пароль</label><input name="password" placeholder="Оставьте пустым, если не менять" /></div>
+              <div class="form-row"><label>Роль</label><select name="role">${adminRoleOptions(admin.role)}</select></div>
+            </section>
+            <div class="actions">
+              <button ${canManage ? "" : "disabled"}>Сохранить</button>
+              <button type="button" class="danger" data-action="delete-admin-access" data-id="${admin.id}" ${canManage && admin.id !== state.me?.id ? "" : "disabled"}>Удалить</button>
+            </div>
+          </form>
+        </details>
+      </td>
+    </tr>
+  `).join("");
+  return html`
+    <section class="panel">
+      <div class="section-heading">
+        <h2>Иерархия доступа</h2>
+        <span class="pill ok">Главный админ: ${escapeHtml(admins.find((admin) => admin.role === "owner")?.name || "не указан")}</span>
+      </div>
+      <div class="notice ${canManage ? "ok" : "warn"}">
+        ${canManage
+          ? "Вы вошли как главный администратор. Вам доступно создание, изменение и удаление других доступов."
+          : "Вы можете просматривать список доступов, но управлять ими может только главный администратор."}
+      </div>
+      <details class="compact-admin-form" ${canManage ? "open" : ""}>
+        <summary>+ Добавить администратора</summary>
+        <form class="form" id="adminAccessForm">
+          <section class="grid two">
+            <div class="form-row"><label>ФИО</label><input name="name" required /></div>
+            <div class="form-row"><label>Логин</label><input name="username" required /></div>
+            <div class="form-row"><label>Пароль</label><input name="password" required /></div>
+            <div class="form-row"><label>Роль</label><select name="role">${adminRoleOptions("observer")}</select></div>
+          </section>
+          <div class="actions">
+            <button ${canManage ? "" : "disabled"}>Добавить доступ</button>
+            <span class="muted">Для будущих сотрудников лучше начинать с роли “Наблюдатель”.</span>
+          </div>
+        </form>
+      </details>
+      <div class="table-wrap" style="margin-top:16px">
+        <table>
+          <thead><tr><th>Пользователь</th><th>Роль</th><th>Логин</th><th>Пароль</th><th>Создан</th><th></th></tr></thead>
+          <tbody>${rows || "<tr><td colspan='6'>Администраторы не найдены</td></tr>"}</tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
 function renderQrAdmin() {
   const adminUrl = `${location.origin}${ADMIN_APP_PATH}`;
   const doctorUrl = `${location.origin}${DOCTOR_APP_PATH}`;
@@ -2387,6 +2479,30 @@ function bindAdminForms() {
     } catch (error) {
       alert(error.message);
     }
+  });
+  const adminAccessForm = document.querySelector("#adminAccessForm");
+  if (adminAccessForm) adminAccessForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const data = Object.fromEntries(new FormData(adminAccessForm));
+      await api("/api/admin/admins", { method: "POST", body: JSON.stringify(data) });
+      adminAccessForm.reset();
+      await loadAdmin();
+    } catch (error) {
+      alert(error.message);
+    }
+  });
+  document.querySelectorAll(".admin-access-form").forEach((accessForm) => {
+    accessForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        const data = Object.fromEntries(new FormData(accessForm));
+        await api(`/api/admin/admins/${accessForm.dataset.id}`, { method: "PUT", body: JSON.stringify(data) });
+        await loadAdmin();
+      } catch (error) {
+        alert(error.message);
+      }
+    });
   });
   document.querySelectorAll(".score-form").forEach((scoreForm) => {
     scoreForm.addEventListener("submit", async (event) => {

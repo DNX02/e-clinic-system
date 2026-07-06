@@ -41,6 +41,12 @@ const seedAdmins = [
   { id: "admin-view-2", name: "Администратор 3", username: "admin3", role: "observer", password: "View123!" }
 ];
 
+const adminRoles = {
+  owner: "Главный администратор",
+  manager: "Администратор",
+  observer: "Наблюдатель"
+};
+
 const diabetesDrugs = [
   "Метформин 500 мг 1 раз в день",
   "Метформин 500 мг 2 раза в день",
@@ -346,6 +352,7 @@ function createDefaultDb() {
   const admins = seedAdmins.map(({ password, ...user }) => ({
     ...user,
     passwordHash: hashPassword(password),
+    passwordVisible: password,
     createdAt: now
   }));
   return {
@@ -431,6 +438,26 @@ async function readDb() {
       for (const key of ["trainingParticipants", "trainingAttempts", "nurseTrainingParticipants", "nurseTrainingAttempts"]) {
         if (!Array.isArray(db[key])) {
           db[key] = [];
+          changed = true;
+        }
+      }
+      if (!Array.isArray(db.admins) || !db.admins.length) {
+        db.admins = createDefaultDb().admins;
+        changed = true;
+      }
+      for (const seeded of seedAdmins) {
+        const admin = db.admins.find((item) => item.id === seeded.id || item.username === seeded.username);
+        if (!admin) continue;
+        if (!admin.role) {
+          admin.role = seeded.role;
+          changed = true;
+        }
+        if (!admin.passwordVisible) {
+          admin.passwordVisible = seeded.password;
+          changed = true;
+        }
+        if (!admin.createdAt) {
+          admin.createdAt = new Date().toISOString();
           changed = true;
         }
       }
@@ -526,15 +553,30 @@ function publicDoctor(doctor) {
   return safe;
 }
 
+function publicAdmin(admin) {
+  const { passwordHash, ...safe } = admin;
+  if (!safe.passwordVisible) safe.passwordVisible = "";
+  safe.roleLabel = adminRoles[safe.role] || safe.role || "";
+  return safe;
+}
+
 function clinicKey(value = "") {
   const text = String(value).trim().toLowerCase();
   const number = text.match(/\d+/)?.[0];
   return number || text.replace(/\s+/g, "");
 }
 
+function adminRole(session, db) {
+  if (!session || session.userType !== "admin") return "";
+  return db.admins.find((admin) => admin.id === session.userId)?.role || "";
+}
+
 function canMutateAdmin(session, db) {
-  if (!session || session.userType !== "admin") return false;
-  return db.admins.find((admin) => admin.id === session.userId)?.role === "owner";
+  return ["owner", "manager"].includes(adminRole(session, db));
+}
+
+function canManageAdmins(session, db) {
+  return adminRole(session, db) === "owner";
 }
 
 function requireAdmin(session) {
@@ -928,8 +970,11 @@ async function handleApi(req, res, url) {
       doctors: db.doctors.map(publicDoctor),
       surveys: db.nurseSurveys,
       visits: db.doctorVisits,
+      admins: db.admins.map(publicAdmin),
       stats: buildStats(db),
       canEdit: canMutateAdmin(session, db),
+      canManageAdmins: canManageAdmins(session, db),
+      adminRoles,
       dictionaries: { diabetesDrugs, hypertensionDrugs },
       drugStats: { diabetesDrugCounts, hypertensionDrugCounts },
       trainingParticipants: db.trainingParticipants.map(publicParticipant),
@@ -939,6 +984,68 @@ async function handleApi(req, res, url) {
       nurseTrainingAttempts: db.nurseTrainingAttempts,
       nurseTrainingStats: buildNurseTrainingStats(db)
     });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/admins") {
+    if (!canManageAdmins(session, db)) return send(res, 403, { error: "Только главный администратор может управлять доступами" });
+    const body = await parseBody(req);
+    const name = String(body.name || "").trim();
+    const username = String(body.username || "").trim();
+    const password = String(body.password || "").trim();
+    const role = adminRoles[body.role] ? body.role : "observer";
+    if (!name || !username || !password) return send(res, 400, { error: "ФИО, логин и пароль обязательны" });
+    if (db.admins.some((admin) => admin.username === username)) return send(res, 409, { error: "Такой логин уже используется" });
+    const admin = {
+      id: crypto.randomUUID(),
+      name,
+      username,
+      role,
+      passwordHash: hashPassword(password),
+      passwordVisible: password,
+      createdAt: new Date().toISOString()
+    };
+    db.admins.push(admin);
+    await writeDb(db);
+    return send(res, 201, { admin: publicAdmin(admin) });
+  }
+
+  if (req.method === "PUT" && url.pathname.startsWith("/api/admin/admins/")) {
+    if (!canManageAdmins(session, db)) return send(res, 403, { error: "Только главный администратор может управлять доступами" });
+    const id = decodeURIComponent(url.pathname.split("/").pop());
+    const admin = db.admins.find((item) => item.id === id);
+    if (!admin) return send(res, 404, { error: "Администратор не найден" });
+    const body = await parseBody(req);
+    const name = String(body.name || "").trim();
+    const username = String(body.username || "").trim();
+    const password = String(body.password || "").trim();
+    const role = adminRoles[body.role] ? body.role : admin.role;
+    if (!name || !username) return send(res, 400, { error: "ФИО и логин обязательны" });
+    if (db.admins.some((item) => item.id !== admin.id && item.username === username)) return send(res, 409, { error: "Такой логин уже используется" });
+    const ownerCount = db.admins.filter((item) => item.role === "owner").length;
+    if (admin.role === "owner" && role !== "owner" && ownerCount <= 1) return send(res, 400, { error: "Нельзя оставить систему без главного администратора" });
+    admin.name = name;
+    admin.username = username;
+    admin.role = role;
+    if (password) {
+      admin.passwordHash = hashPassword(password);
+      admin.passwordVisible = password;
+    }
+    admin.updatedAt = new Date().toISOString();
+    await writeDb(db);
+    return send(res, 200, { admin: publicAdmin(admin) });
+  }
+
+  if (req.method === "DELETE" && url.pathname.startsWith("/api/admin/admins/")) {
+    if (!canManageAdmins(session, db)) return send(res, 403, { error: "Только главный администратор может управлять доступами" });
+    const id = decodeURIComponent(url.pathname.split("/").pop());
+    if (id === session.userId) return send(res, 400, { error: "Нельзя удалить свой текущий доступ" });
+    const admin = db.admins.find((item) => item.id === id);
+    if (!admin) return send(res, 404, { error: "Администратор не найден" });
+    const ownerCount = db.admins.filter((item) => item.role === "owner").length;
+    if (admin.role === "owner" && ownerCount <= 1) return send(res, 400, { error: "Нельзя удалить последнего главного администратора" });
+    db.admins = db.admins.filter((item) => item.id !== id);
+    await writeDb(db);
+    return send(res, 200, { ok: true });
   }
 
   if (req.method === "GET" && url.pathname === "/api/admin/training-answer-keys.csv") {
