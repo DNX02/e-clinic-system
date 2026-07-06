@@ -2686,13 +2686,14 @@ function renderTrainingParticipantList() {
   const personCard = (participant) => {
     const attempts = attemptsByParticipant[participant.id] || [];
     const pre = attempts.find((attempt) => attempt.type === "pre");
-    const taskCount = attempts.filter((attempt) => attempt.type === "task").length;
+    const tasks = attempts.filter((attempt) => attempt.type === "task");
+    const postSummary = tasks.length ? postTrainingSummary(tasks) : null;
     return html`
     <div class="card training-person">
       <div>
         <strong>${escapeHtml(participant.fullName)}</strong>
         <div class="muted">${escapeHtml(participant.clinic || "")}${participant.specialty ? ` / ${escapeHtml(participant.specialty)}` : ""}</div>
-        <div class="muted">Тест до обучения: ${pre ? `${pre.percent}%` : "не сдан"} / После обучения: ${taskCount}/5</div>
+        <div class="muted">Тест до обучения: ${pre ? `${pre.percent}%` : "не сдан"} / После обучения: ${postSummary ? postSummary.label : "не сдан"}</div>
       </div>
       <button data-action="select-training-participant" data-id="${participant.id}">Открыть</button>
     </div>
