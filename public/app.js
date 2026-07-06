@@ -47,8 +47,10 @@ const api = async (url, options = {}) => {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options
   });
-  const data = await response.json();
+  const contentType = response.headers.get("content-type") || "";
+  const data = contentType.includes("application/json") ? await response.json() : { error: await response.text() };
   if (!response.ok) throw new Error(data.error || "Ошибка запроса");
+  if (!contentType.includes("application/json")) throw new Error("Сервер вернул не JSON. Обновите страницу и попробуйте еще раз.");
   return data;
 };
 
@@ -3155,47 +3157,16 @@ async function renderPostTrainingTests(participantId) {
           if (!String(error.message || "").includes("уже отправлено")) throw error;
         }
       }
-      const freshData = await api(`/api/training/participant/${participantId}`);
-      const allResults = freshData.attempts.filter((attempt) => attempt.type === "task");
-      const correct = allResults.reduce((sum, attempt) => sum + Number(attempt.correct || 0), 0);
-      const total = allResults.reduce((sum, attempt) => sum + Number(attempt.total || attempt.maxScore || 0), 0);
-      const percent = total ? Math.round((correct / total) * 100) : 0;
-      const passed = percent >= 70;
-      const resultRows = allResults.map((attempt) => html`
-        <tr>
-          <td>${escapeHtml(attempt.instrument || "")}. ${escapeHtml(attempt.title || "")}</td>
-          <td>${attempt.correct}/${attempt.total || attempt.maxScore}</td>
-          <td>${attempt.percent}%</td>
-        </tr>
-      `).join("");
-      setPage(html`
-        <main class="container">
-          <section class="panel">
-            <h1>${escapeHtml(translateTestText("Тесты после обучения отправлены"))}</h1>
-            <div class="notice ${passed ? "ok" : "danger"}">
-              Ваш результат: <strong>${correct}/${total} (${percent}%)</strong>.
-              ${passed ? "<strong>Тест пройден.</strong>" : "<strong>Тест не пройден. Нужно 70% и выше.</strong>"}
-              Ответы сохранены и отправлены администратору.
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>Тест</th><th>Баллы</th><th>Процент</th></tr></thead>
-                <tbody>${resultRows}</tbody>
-                <tfoot>
-                  <tr class="total-row">
-                    <td>Общий процент</td>
-                    <td>${correct}/${total}</td>
-                    <td>${percent}% ${passed ? `<span class="pill ok">${escapeHtml(translateTestText("Пройден"))}</span>` : `<span class="pill danger">${escapeHtml(translateTestText("Не пройден"))}</span>`}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-            <button data-action="select-training-participant" data-id="${participantId}">${escapeHtml(translateTestText("Вернуться"))}</button>
-          </section>
-        </main>
-      `);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      await showPostTrainingResult(participantId);
     } catch (error) {
+      try {
+        const freshData = await api(`/api/training/participant/${participantId}`);
+        const savedTasks = freshData.attempts.filter((attempt) => attempt.type === "task");
+        if (savedTasks.length >= freshData.tasks.length) {
+          await showPostTrainingResult(participantId, freshData);
+          return;
+        }
+      } catch {}
       alert(error.message);
       if (submitButton) {
         submitButton.disabled = false;
@@ -3203,6 +3174,49 @@ async function renderPostTrainingTests(participantId) {
       }
     }
   });
+}
+
+async function showPostTrainingResult(participantId, data = null) {
+  const freshData = data || await api(`/api/training/participant/${participantId}`);
+  const allResults = freshData.attempts.filter((attempt) => attempt.type === "task");
+  const correct = allResults.reduce((sum, attempt) => sum + Number(attempt.correct || 0), 0);
+  const total = allResults.reduce((sum, attempt) => sum + Number(attempt.total || attempt.maxScore || 0), 0);
+  const percent = total ? Math.round((correct / total) * 100) : 0;
+  const passed = percent >= 70;
+  const resultRows = allResults.map((attempt) => html`
+    <tr>
+      <td>${escapeHtml(attempt.instrument || "")}. ${escapeHtml(attempt.title || "")}</td>
+      <td>${attempt.correct}/${attempt.total || attempt.maxScore}</td>
+      <td>${attempt.percent}%</td>
+    </tr>
+  `).join("");
+  setPage(html`
+    <main class="container">
+      <section class="panel">
+        <h1>${escapeHtml(translateTestText("Тесты после обучения отправлены"))}</h1>
+        <div class="notice ${passed ? "ok" : "danger"}">
+          Ваш результат: <strong>${correct}/${total} (${percent}%)</strong>.
+          ${passed ? "<strong>Тест пройден.</strong>" : "<strong>Тест не пройден. Нужно 70% и выше.</strong>"}
+          Ответы сохранены и отправлены администратору.
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Тест</th><th>Баллы</th><th>Процент</th></tr></thead>
+            <tbody>${resultRows}</tbody>
+            <tfoot>
+              <tr class="total-row">
+                <td>Общий процент</td>
+                <td>${correct}/${total}</td>
+                <td>${percent}% ${passed ? `<span class="pill ok">${escapeHtml(translateTestText("Пройден"))}</span>` : `<span class="pill danger">${escapeHtml(translateTestText("Не пройден"))}</span>`}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <button data-action="select-training-participant" data-id="${participantId}">${escapeHtml(translateTestText("Вернуться"))}</button>
+      </section>
+    </main>
+  `);
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function collectPostTrainingTaskAnswers(task, formData, prefix = "") {
