@@ -941,6 +941,14 @@ async function handleApi(req, res, url) {
     });
   }
 
+  if (req.method === "GET" && url.pathname === "/api/admin/training-answer-keys.csv") {
+    if (!requireAdmin(session)) return send(res, 403, { error: "Нет доступа" });
+    return send(res, 200, buildTrainingAnswerKeysCsv(), {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="doctor-training-answer-keys-${new Date().toISOString().slice(0, 10)}.csv"`
+    });
+  }
+
   if (req.method === "GET" && url.pathname === "/api/investor/dashboard") {
     return send(res, 200, buildInvestorDashboard(db));
   }
@@ -1737,6 +1745,54 @@ function buildOperationsReportCsv(db, filters = {}) {
   }
   for (const visit of data.visits) {
     lines.push(["Осмотр", monitorDateTime(visit.createdAt), visit.clinic, visit.doctorName, visit.patientName, visit.hasAction ? "Осмотр с действиями" : "Осмотр без назначений", `Диагноз: ${visit.diagnosis}; направления: ${visit.referrals}; препараты: ${visit.drugs}; лаборатория: ${visit.labs}; повтор: ${visit.followUpDays}`].map(csvCell).join(";"));
+  }
+  return `\uFEFF${lines.join("\n")}`;
+}
+
+function buildTrainingAnswerKeysCsv() {
+  const lines = [];
+  lines.push(["Раздел", "Тест/задача", "Вопрос/ситуация", "Правильный ответ", "Текст правильного ответа", "Критерии"].map(csvCell).join(";"));
+  for (const question of preTestQuestions) {
+    lines.push([
+      "До обучения",
+      "Пре-тест",
+      `${question.id}. ${question.text}`,
+      question.answer,
+      question.options?.[question.answer] || "",
+      "1 балл за правильный ответ"
+    ].map(csvCell).join(";"));
+  }
+  for (const task of postTrainingTasks) {
+    const criteria = (task.criteria || []).join(" | ");
+    if (task.mode === "findrisc") {
+      for (const [field, label, expected] of task.fields || []) {
+        lines.push(["После обучения", task.title, `${field}: ${label}`, expected, expected, criteria].map(csvCell).join(";"));
+      }
+      if (task.key) lines.push(["После обучения", task.title, "Ключ/разбор", "", task.key, criteria].map(csvCell).join(";"));
+    } else if (task.mode === "singleCases") {
+      for (const [index, item] of (task.cases || []).entries()) {
+        const [caseText, expected] = item;
+        lines.push(["После обучения", task.title, `${index + 1}. ${caseText}`, expected, expected, criteria].map(csvCell).join(";"));
+      }
+    } else if (task.mode === "routing") {
+      for (const [index, item] of (task.cases || []).entries()) {
+        const [caseText, specialist, urgency] = item;
+        lines.push(["После обучения", task.title, `${index + 1}. ${caseText}`, `${specialist}; ${urgency}`, `Специалист: ${specialist}; срочность: ${urgency}`, criteria].map(csvCell).join(";"));
+      }
+    } else if (task.mode === "mcq") {
+      for (const [index, question] of (task.questions || []).entries()) {
+        lines.push([
+          "После обучения",
+          task.title,
+          `${index + 1}. ${question.text}`,
+          question.answer,
+          question.options?.[question.answer] || "",
+          criteria
+        ].map(csvCell).join(";"));
+      }
+    } else {
+      lines.push(["После обучения", task.title, task.description || "", "", task.key || "", criteria].map(csvCell).join(";"));
+    }
   }
   return `\uFEFF${lines.join("\n")}`;
 }

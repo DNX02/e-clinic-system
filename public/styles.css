@@ -742,6 +742,18 @@ th {
   margin-top: 10px;
 }
 
+.section-heading {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.section-heading h2 {
+  margin: 0;
+}
+
 .language-modal {
   align-items: center;
   background: rgba(15, 23, 42, 0.56);

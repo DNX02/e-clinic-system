@@ -1751,7 +1751,10 @@ function renderTrainingAdmin() {
         <p class="muted">После добавления врач откроет ссылку №4, найдет свое имя и пройдет тест до обучения, а после семинара - тесты после обучения.</p>
       </form>
       <section class="panel">
-        <h2>Результаты обучения</h2>
+        <div class="section-heading">
+          <h2>Результаты обучения</h2>
+          <a href="/api/admin/training-answer-keys.csv"><button type="button" class="secondary">Скачать ключи ответов №4</button></a>
+        </div>
         ${adminTrainingFilters("training")}
         <div class="muted">Показано участников: ${participants.length} из ${(state.admin.trainingParticipants || []).length}</div>
         ${trainingRegistrationSummary(participants, "врачей")}
