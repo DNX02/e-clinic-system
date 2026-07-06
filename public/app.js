@@ -1871,12 +1871,12 @@ function postTrainingSummary(tasks) {
   const total = tasks.reduce((sum, attempt) => sum + Number(attempt.total || attempt.maxScore || 0), 0);
   const percent = total ? Math.round((correct / total) * 100) : 0;
   const completed = tasks.length >= 5;
-  if (!completed) return { percent, passed: false, label: `${tasks.length}/5` };
+  if (!completed) return { percent, passed: false, label: `${percent}% (${tasks.length}/5)` };
   const passed = percent >= 70;
   return {
     percent,
     passed,
-    label: `${percent}% ${passed ? '<span class="pill ok">Пройден</span>' : '<span class="pill danger">Не пройден</span>'}`
+    label: `${percent}% (${tasks.length}/5) ${passed ? '<span class="pill ok">Пройден</span>' : '<span class="pill danger">Не пройден</span>'}`
   };
 }
 
