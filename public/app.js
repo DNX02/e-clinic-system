@@ -21,6 +21,7 @@ const initialState = () => ({
   nurseTrainingClinicFilter: ["all"],
   nurseTrainingDateFilter: "",
   nurseTrainingRegistrationDateFilter: "",
+  nurseTrainingAdminPage: 1,
   investor: null,
   investorTab: "overview",
   monitor: null,
@@ -897,6 +898,7 @@ document.addEventListener("click", async (event) => {
   if (action === "admin-tab") {
     state.tab = event.target.dataset.tab;
     state.trainingAdminPage = 1;
+    state.nurseTrainingAdminPage = 1;
     renderAdmin();
   }
   if (action === "doctor-tab") {
@@ -921,6 +923,11 @@ document.addEventListener("click", async (event) => {
     state.trainingAdminPage = Math.max(1, Number(event.target.dataset.page || 1));
     renderAdmin();
     document.querySelector("#trainingAdminResults")?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+  if (action === "nurse-training-admin-page") {
+    state.nurseTrainingAdminPage = Math.max(1, Number(event.target.dataset.page || 1));
+    renderAdmin();
+    document.querySelector("#nurseTrainingAdminResults")?.scrollIntoView({ block: "start", behavior: "smooth" });
   }
   if (action === "investor-tab") {
     state.investorTab = event.target.dataset.tab;
@@ -952,6 +959,13 @@ document.addEventListener("click", async (event) => {
     const label = phase === "pre" ? "тест до обучения" : "тесты после обучения";
     if (!confirm(`Разрешить врачу заново пройти ${label}? Старый результат будет удален.`)) return;
     await api(`/api/admin/training-participants/${event.target.dataset.id}/attempts/${phase}`, { method: "DELETE", body: "{}" });
+    await loadAdmin();
+  }
+  if (action === "reset-nurse-training-attempts") {
+    const phase = event.target.dataset.phase;
+    const label = phase === "pre" ? "тест до обучения" : "тест после обучения";
+    if (!confirm(`Разрешить медсестре заново пройти ${label}? Старый результат будет удален.`)) return;
+    await api(`/api/admin/nurse-training-participants/${event.target.dataset.id}/attempts/${phase}`, { method: "DELETE", body: "{}" });
     await loadAdmin();
   }
   if (action === "delete-nurse-training-participant") {
@@ -2000,7 +2014,14 @@ function renderNurseTrainingAdmin() {
   const participants = (state.admin.nurseTrainingParticipants || []).filter((participant) =>
     trainingParticipantMatchesFilters(participant, attemptsByParticipant[participant.id] || [], "nurseTraining")
   );
-  const rows = participants.map((participant) => {
+  const pageSize = 20;
+  const totalPages = Math.max(1, Math.ceil(participants.length / pageSize));
+  state.nurseTrainingAdminPage = Math.min(Math.max(1, state.nurseTrainingAdminPage || 1), totalPages);
+  const start = (state.nurseTrainingAdminPage - 1) * pageSize;
+  const pageParticipants = participants.slice(start, start + pageSize);
+  const from = participants.length ? start + 1 : 0;
+  const to = Math.min(start + pageSize, participants.length);
+  const rows = pageParticipants.map((participant) => {
     const attempts = attemptsByParticipant[participant.id] || [];
     const visibleAttempts = filterAttemptsByDate(attempts, state.nurseTrainingDateFilter);
     const pre = attempts.find((attempt) => attempt.type === "pre");
@@ -2010,27 +2031,45 @@ function renderNurseTrainingAdmin() {
         <td>${escapeHtml(participant.fullName)}</td>
         <td>${escapeHtml(participant.clinic || "")}</td>
         <td>${escapeHtml(participant.position || "")}</td>
-        <td>${pre ? `${pre.percent}%` : "<span class='pill warn'>Не сдан</span>"}</td>
-        <td>${post ? `${post.percent}% ${post.passed ? '<span class="pill ok">Пройден</span>' : '<span class="pill danger">Не пройден</span>'}` : "<span class='pill warn'>Не сдан</span>"}</td>
+        <td>
+          <div class="result-cell">
+            <span>${pre ? `${pre.percent}%` : "<span class='pill warn'>Не сдан</span>"}</span>
+            ${pre ? `<button type="button" class="secondary mini" data-action="reset-nurse-training-attempts" data-id="${participant.id}" data-phase="pre" ${state.admin.canEdit ? "" : "disabled"}>Перепройти</button>` : ""}
+          </div>
+        </td>
+        <td>
+          <div class="result-cell">
+            <span>${post ? `${post.percent}% ${post.passed ? '<span class="pill ok">Пройден</span>' : '<span class="pill danger">Не пройден</span>'}` : "<span class='pill warn'>Не сдан</span>"}</span>
+            ${post ? `<button type="button" class="secondary mini" data-action="reset-nurse-training-attempts" data-id="${participant.id}" data-phase="post" ${state.admin.canEdit ? "" : "disabled"}>Перепройти</button>` : ""}
+          </div>
+        </td>
         <td><button class="danger" data-action="delete-nurse-training-participant" data-id="${participant.id}" ${state.admin.canEdit ? "" : "disabled"}>Удалить</button></td>
       </tr>
       ${visibleAttempts.length ? `<tr><td colspan="6">${nurseTrainingAttemptDetails(visibleAttempts)}</td></tr>` : ""}
     `;
   }).join("");
   return html`
-    <section class="grid two">
-      <form class="panel form" id="nurseTrainingParticipantForm">
-        <h2>Регистрация медсестры на обучение</h2>
-        <div class="form-row"><label>ФИО медсестры</label><input name="fullName" required /></div>
-        ${select("Поликлиника/ГЦЗ", "clinic", clinicOptions)}
-        <div class="form-row"><label>Должность</label><input name="position" value="Медсестра" /></div>
-        <div class="form-row"><label>Телефон</label><input name="phone" /></div>
-        <button ${state.admin.canEdit ? "" : "disabled"}>Добавить в №5</button>
-      </form>
-      <section class="panel">
-        <h2>Результаты №5</h2>
+      <section class="panel" id="nurseTrainingAdminResults">
+        <div class="section-heading">
+          <h2>Результаты №5</h2>
+        </div>
+        <details class="compact-admin-form">
+          <summary>+ Добавить медсестру на обучение</summary>
+          <form class="form" id="nurseTrainingParticipantForm">
+            <section class="grid two">
+              <div class="form-row"><label>ФИО медсестры</label><input name="fullName" required /></div>
+              ${select("Поликлиника/ГЦЗ", "clinic", clinicOptions)}
+              <div class="form-row"><label>Должность</label><input name="position" value="Медсестра" /></div>
+              <div class="form-row"><label>Телефон</label><input name="phone" /></div>
+            </section>
+            <div class="actions">
+              <button ${state.admin.canEdit ? "" : "disabled"}>Добавить в №5</button>
+              <span class="muted">После добавления медсестра найдет свое имя по ссылке №5.</span>
+            </div>
+          </form>
+        </details>
         ${adminTrainingFilters("nurseTraining")}
-        <div class="muted">Показано участников: ${participants.length} из ${(state.admin.nurseTrainingParticipants || []).length}</div>
+        <div class="muted">Показано участников: ${participants.length} из ${(state.admin.nurseTrainingParticipants || []).length}. На странице: ${from}-${to}</div>
         ${trainingRegistrationSummary(participants, "медсестер")}
         <div class="table-wrap">
           <table>
@@ -2038,8 +2077,23 @@ function renderNurseTrainingAdmin() {
             <tbody>${rows || "<tr><td colspan='6'>Пока нет медсестер</td></tr>"}</tbody>
           </table>
         </div>
+        ${adminNurseTrainingPagination(participants.length, state.nurseTrainingAdminPage, totalPages)}
       </section>
-    </section>
+  `;
+}
+
+function adminNurseTrainingPagination(total, page, totalPages) {
+  if (total <= 20) return "";
+  const start = (page - 1) * 20 + 1;
+  const end = Math.min(page * 20, total);
+  return html`
+    <div class="patient-pagination">
+      <span>${start}-${end} / ${total}</span>
+      <div class="actions">
+        <button type="button" class="secondary" data-action="nurse-training-admin-page" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>Назад</button>
+        <button type="button" class="secondary" data-action="nurse-training-admin-page" data-page="${page + 1}" ${page >= totalPages ? "disabled" : ""}>Далее</button>
+      </div>
+    </div>
   `;
 }
 
@@ -2325,6 +2379,7 @@ function bindAdminForms() {
       const data = Object.fromEntries(new FormData(nurseTrainingForm));
       const result = await api("/api/admin/nurse-training-participants", { method: "POST", body: JSON.stringify(data) });
       state.admin.nurseTrainingParticipants.push(result.participant);
+      state.nurseTrainingAdminPage = 1;
       nurseTrainingForm.reset();
       renderAdmin();
     } catch (error) {
@@ -2372,14 +2427,17 @@ function bindAdminTrainingFilters() {
   nurseClinic?.addEventListener("change", (event) => {
     const values = selectedFilterValues(event.target);
     state.nurseTrainingClinicFilter = values.includes("all") || values.length === 0 ? ["all"] : values;
+    state.nurseTrainingAdminPage = 1;
     renderAdmin();
   });
   nurseDate?.addEventListener("change", (event) => {
     state.nurseTrainingDateFilter = event.target.value;
+    state.nurseTrainingAdminPage = 1;
     renderAdmin();
   });
   nurseRegistrationDate?.addEventListener("change", (event) => {
     state.nurseTrainingRegistrationDateFilter = event.target.value;
+    state.nurseTrainingAdminPage = 1;
     renderAdmin();
   });
 }

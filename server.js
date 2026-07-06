@@ -1023,6 +1023,19 @@ async function handleApi(req, res, url) {
     return send(res, 201, { participant: publicNurseParticipant(participant) });
   }
 
+  if (req.method === "DELETE" && url.pathname.startsWith("/api/admin/nurse-training-participants/") && url.pathname.includes("/attempts/")) {
+    if (!canMutateAdmin(session, db)) return send(res, 403, { error: "Недостаточно прав для изменения данных" });
+    const [, , , , participantId, , phase] = url.pathname.split("/");
+    const participant = db.nurseTrainingParticipants.find((item) => item.id === participantId);
+    if (!participant) return send(res, 404, { error: "Участник не найден" });
+    if (!["pre", "post"].includes(phase)) return send(res, 400, { error: "Неверный тип теста" });
+    db.nurseTrainingAttempts = db.nurseTrainingAttempts.filter((attempt) =>
+      attempt.participantId !== participantId || attempt.type !== phase
+    );
+    await writeDb(db);
+    return send(res, 200, { ok: true });
+  }
+
   if (req.method === "DELETE" && url.pathname.startsWith("/api/admin/nurse-training-participants/")) {
     if (!canMutateAdmin(session, db)) return send(res, 403, { error: "Недостаточно прав для удаления данных" });
     const id = url.pathname.split("/").pop();
