@@ -18,6 +18,9 @@ const initialState = () => ({
   trainingPreStatusFilter: "all",
   trainingPostStatusFilter: "all",
   trainingAdminPage: 1,
+  nurseTrainingNameSort: "default",
+  nurseTrainingPreStatusFilter: "all",
+  nurseTrainingPostStatusFilter: "all",
   nurseTrainingClinicFilter: ["all"],
   nurseTrainingDateFilter: "",
   nurseTrainingRegistrationDateFilter: "",
@@ -687,7 +690,15 @@ const TAJIK_TEXT = {
   "Пациент наблюдается только у узких специалистов": "Бемор танҳо назди мутахассисони маҳдуд назорат мешавад",
   "Пациент не теряется после направления: есть контроль выполнения, дата возврата и фиксация результатов": "Бемор баъди равона гум намешавад: иҷро назорат мешавад, санаи бозгашт ва натиҷаҳо сабт мешаванд",
   "Наблюдение пациента только 1 раз в год": "Назорати бемор танҳо 1 маротиба дар сол",
-  "Непрерывный прием всех назначенных препаратов": "Қабули пайвастаи ҳамаи доруҳои таъиншуда"
+  "Непрерывный прием всех назначенных препаратов": "Қабули пайвастаи ҳамаи доруҳои таъиншуда",
+  "По регистрации": "Аз рӯи бақайдгирӣ",
+  "От А до Я": "Аз А то Я",
+  "До обучения: все": "Пеш аз омӯзиш: ҳама",
+  "До обучения: сдали": "Пеш аз омӯзиш: супоридаанд",
+  "До обучения: не сдали": "Пеш аз омӯзиш: насупоридаанд",
+  "После обучения: все": "Баъди омӯзиш: ҳама",
+  "После обучения: сдали": "Баъди омӯзиш: супоридаанд",
+  "После обучения: не сдали": "Баъди омӯзиш: насупоридаанд"
 };
 
 function testLanguage() {
@@ -3441,23 +3452,69 @@ function renderNurseTrainingList() {
       </div>
     `;
   };
-  const rows = (state.nurseTraining.participants || []).map(personCard).join("");
+  const sortNurseTrainingParticipants = (participants) => state.nurseTrainingNameSort === "az"
+    ? [...participants].sort((a, b) => String(a.fullName || "").localeCompare(String(b.fullName || ""), "ru"))
+    : [...participants];
+  const participantMatchesNurseTrainingStatus = (participant) => {
+    const attempts = attemptsByParticipant[participant.id] || [];
+    const hasPre = attempts.some((attempt) => attempt.type === "pre");
+    const hasPost = attempts.some((attempt) => attempt.type === "post");
+    const preOk = state.nurseTrainingPreStatusFilter === "all" || (state.nurseTrainingPreStatusFilter === "done" ? hasPre : !hasPre);
+    const postOk = state.nurseTrainingPostStatusFilter === "all" || (state.nurseTrainingPostStatusFilter === "done" ? hasPost : !hasPost);
+    return preOk && postOk;
+  };
+  const filterNurseTrainingParticipants = (participants, query = "") => participants.filter((item) =>
+    String(item.fullName || "").toLowerCase().includes(query) && participantMatchesNurseTrainingStatus(item)
+  );
+  const renderNurseTrainingRows = (participants) => sortNurseTrainingParticipants(participants).map(personCard).join("");
+  const rows = renderNurseTrainingRows(filterNurseTrainingParticipants(state.nurseTraining.participants || []));
   setPage(html`
     <main class="container">
       <section class="panel">
         <h1>${escapeHtml(translateTestText("№5 Тесты медсестер"))}</h1>
         ${languageControl()}
         <p class="muted">${escapeHtml(translateTestText("Найдите свое имя. Сначала пройдите тест до обучения, после семинара - тест после обучения. Порог 70% действует только для теста после обучения."))}</p>
-        <input id="nurseTrainingSearch" placeholder="${escapeHtml(translateTestText("Введите фамилию или имя"))}" />
+        <div class="grid two">
+          <input id="nurseTrainingSearch" placeholder="${escapeHtml(translateTestText("Введите фамилию или имя"))}" />
+          <select id="nurseTrainingNameSort" aria-label="${escapeHtml(translateTestText("Сортировка списка медсестер"))}">
+            <option value="default" ${state.nurseTrainingNameSort === "default" ? "selected" : ""}>${escapeHtml(translateTestText("По регистрации"))}</option>
+            <option value="az" ${state.nurseTrainingNameSort === "az" ? "selected" : ""}>${escapeHtml(translateTestText("От А до Я"))}</option>
+          </select>
+          <select id="nurseTrainingPreStatusFilter" aria-label="${escapeHtml(translateTestText("Фильтр теста до обучения"))}">
+            <option value="all" ${state.nurseTrainingPreStatusFilter === "all" ? "selected" : ""}>${escapeHtml(translateTestText("До обучения: все"))}</option>
+            <option value="done" ${state.nurseTrainingPreStatusFilter === "done" ? "selected" : ""}>${escapeHtml(translateTestText("До обучения: сдали"))}</option>
+            <option value="missing" ${state.nurseTrainingPreStatusFilter === "missing" ? "selected" : ""}>${escapeHtml(translateTestText("До обучения: не сдали"))}</option>
+          </select>
+          <select id="nurseTrainingPostStatusFilter" aria-label="${escapeHtml(translateTestText("Фильтр теста после обучения"))}">
+            <option value="all" ${state.nurseTrainingPostStatusFilter === "all" ? "selected" : ""}>${escapeHtml(translateTestText("После обучения: все"))}</option>
+            <option value="done" ${state.nurseTrainingPostStatusFilter === "done" ? "selected" : ""}>${escapeHtml(translateTestText("После обучения: сдали"))}</option>
+            <option value="missing" ${state.nurseTrainingPostStatusFilter === "missing" ? "selected" : ""}>${escapeHtml(translateTestText("После обучения: не сдали"))}</option>
+          </select>
+        </div>
         <div id="nurseTrainingList" class="training-list">${rows || `<p class='muted'>${escapeHtml(translateTestText("Администратор еще не зарегистрировал медсестер."))}</p>`}</div>
       </section>
     </main>
   `);
   bindLanguageControl(renderNurseTrainingList);
-  document.querySelector("#nurseTrainingSearch")?.addEventListener("input", (event) => {
-    const query = event.target.value.toLowerCase();
-    const participants = state.nurseTraining.participants.filter((item) => item.fullName.toLowerCase().includes(query));
-    document.querySelector("#nurseTrainingList").innerHTML = participants.map(personCard).join("") || `<p class='muted'>${escapeHtml(translateTestText("Участник не найден"))}</p>`;
+  const refreshNurseTrainingList = () => {
+    const query = document.querySelector("#nurseTrainingSearch")?.value.toLowerCase() || "";
+    const participants = filterNurseTrainingParticipants(state.nurseTraining.participants || [], query);
+    document.querySelector("#nurseTrainingList").innerHTML = renderNurseTrainingRows(participants) || `<p class='muted'>${escapeHtml(translateTestText("Участник не найден"))}</p>`;
+  };
+  document.querySelector("#nurseTrainingSearch")?.addEventListener("input", () => {
+    refreshNurseTrainingList();
+  });
+  document.querySelector("#nurseTrainingNameSort")?.addEventListener("change", (event) => {
+    state.nurseTrainingNameSort = event.target.value;
+    refreshNurseTrainingList();
+  });
+  document.querySelector("#nurseTrainingPreStatusFilter")?.addEventListener("change", (event) => {
+    state.nurseTrainingPreStatusFilter = event.target.value;
+    refreshNurseTrainingList();
+  });
+  document.querySelector("#nurseTrainingPostStatusFilter")?.addEventListener("change", (event) => {
+    state.nurseTrainingPostStatusFilter = event.target.value;
+    refreshNurseTrainingList();
   });
 }
 
