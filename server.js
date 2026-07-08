@@ -566,6 +566,13 @@ function clinicKey(value = "") {
   return number || text.replace(/\s+/g, "");
 }
 
+function personNameKey(value = "") {
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
 function adminRole(session, db) {
   if (!session || session.userType !== "admin") return "";
   return db.admins.find((admin) => admin.id === session.userId)?.role || "";
@@ -1796,6 +1803,7 @@ function groupMonitor(items, keyFn, seed = {}) {
 
 function buildOperationsMonitor(db, filters = {}) {
   const { surveyRows, visitRows, eventRows } = buildOperationsMonitorRows(db);
+  const registeredNurseNames = new Set((db.nurseTrainingParticipants || []).map((participant) => personNameKey(participant.fullName)).filter(Boolean));
   const filteredSurveys = surveyRows.filter((row) => matchesMonitorFilters(row, filters));
   const filteredVisits = visitRows.filter((row) => matchesMonitorFilters(row, filters));
   const filteredEvents = eventRows.filter((row) => matchesMonitorFilters(row, filters));
@@ -1808,10 +1816,11 @@ function buildOperationsMonitor(db, filters = {}) {
     clinicMap[row.clinic].visits += 1;
     if (row.hasAction) clinicMap[row.clinic].visitsWithActions += 1;
   }
-  const nurseMap = groupMonitor(filteredSurveys, (row) => row.nurseName, { surveys: 0, needsDoctor: 0, lastAction: "" });
+  const nurseMap = groupMonitor(filteredSurveys, (row) => row.nurseName, { surveys: 0, needsDoctor: 0, lastAction: "", registered: false });
   for (const row of filteredSurveys) {
     nurseMap[row.nurseName].surveys += 1;
     if (row.needsDoctor) nurseMap[row.nurseName].needsDoctor += 1;
+    nurseMap[row.nurseName].registered = registeredNurseNames.has(personNameKey(row.nurseName));
     nurseMap[row.nurseName].lastAction = [nurseMap[row.nurseName].lastAction, row.createdAt].filter(Boolean).sort().at(-1) || "";
   }
   const doctorMap = groupMonitor(filteredVisits, (row) => row.doctorName, { views: 0, visits: 0, visitsWithActions: 0, drugs: 0, lastAction: "" });

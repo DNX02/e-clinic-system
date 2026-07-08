@@ -1512,20 +1512,21 @@ function monitorNursesPanel() {
       <td>${escapeHtml(item.label)}</td>
       <td>${escapeHtml(item.surveys)}</td>
       <td>${escapeHtml(item.needsDoctor)}</td>
+      <td><span class="pill ${item.registered ? "ok" : "warn"}">${item.registered ? "Зарегистрирована в №5" : "Не найдена в №5"}</span></td>
       <td>${item.lastAction ? new Date(item.lastAction).toLocaleString("ru-RU") : "-"}</td>
     </tr>
   `);
   return html`
     <section class="monitor-split">
       <div class="monitor-card">
-        <h2>Активность медсестер</h2>
+        <h2>Кто внес анкеты</h2>
         ${monitorBarChart(state.monitor.nurses, ["surveys", "needsDoctor"], ["#0f766e", "#f59e0b"])}
-        ${monitorExplain("Первое число — сколько пациентов внесла медсестра, второе — сколько из этих пациентов система направила к врачу.")}
+        ${monitorExplain("Здесь показаны имена, которые были указаны в анкете пациента как заполнивший сотрудник. Первое число — сколько пациентов внесено, второе — сколько из них система направила к врачу.")}
       </div>
       <div class="monitor-card wide">
-        <h2>Таблица медсестер</h2>
-        ${monitorTable(["Медсестра", "Анкет", "К врачу", "Последнее действие"], rows)}
-        ${monitorExplain("Таблица помогает быстро увидеть, кто работает сейчас активнее и когда было последнее внесение пациента.")}
+        <h2>Таблица внесения анкет</h2>
+        ${monitorTable(["Имя в анкете", "Анкет", "К врачу", "Статус", "Последнее действие"], rows)}
+        ${monitorExplain("Если стоит «Не найдена в №5», значит такое имя есть в заполненных анкетах, но среди зарегистрированных медсестер для тестов №5 оно не найдено. Возможно, имя введено с ошибкой или вместо медсестры указали другого человека.")}
       </div>
     </section>
   `;
