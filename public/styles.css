@@ -1690,6 +1690,17 @@ th {
   margin-bottom: 10px;
 }
 
+.monitor-explain {
+  background: rgba(15, 118, 110, 0.08);
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 8px;
+  color: #31524d;
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 14px 0 0;
+  padding: 10px 12px;
+}
+
 .monitor-ring {
   align-items: center;
   background: conic-gradient(#dc2626 calc(var(--value) * 1%), #e2e8f0 0);

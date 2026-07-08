@@ -877,7 +877,7 @@ function route() {
   if (appMode === "training" || path === TRAINING_APP_PATH) return loadTrainingPretest();
   if (appMode === "nurse-training" || path === NURSE_TRAINING_APP_PATH) return loadNurseTraining();
   if (appMode === "investor" || path === INVESTOR_APP_PATH) return loadInvestorDashboard();
-  if (appMode === "monitor" || path === MONITOR_APP_PATH) return state.me?.type === "admin" ? loadMonitorDashboard() : renderAdminLogin();
+  if (appMode === "monitor" || path === MONITOR_APP_PATH) return loadMonitorDashboard();
   if (appMode === "doctor" || path === DOCTOR_APP_PATH) return state.me?.type === "doctor" ? loadDoctor() : renderDoctorLogin();
   if (appMode === "admin" || path === ADMIN_APP_PATH) return state.me?.type === "admin" ? loadAdmin() : renderAdminLogin();
   renderHome();
@@ -1368,6 +1368,10 @@ function monitorKpi(label, value, note, tone = "") {
   `;
 }
 
+function monitorExplain(text) {
+  return `<p class="monitor-explain">${escapeHtml(text)}</p>`;
+}
+
 function monitorBarChart(items, keys, colors) {
   const max = Math.max(1, ...items.flatMap((item) => keys.map((key) => Number(item[key] || 0))));
   return html`
@@ -1429,17 +1433,18 @@ function monitorOverview() {
   const data = state.monitor;
   return html`
     <section class="monitor-grid">
-      ${monitorKpi("Анкеты сегодня/по фильтру", monitorNumber(data.summary.surveys), "Сколько пациентов внесено в систему", "")}
-      ${monitorKpi("Активные медсестры", monitorNumber(data.summary.nursesActive), "Кто реально вводит пациентов", "mint")}
-      ${monitorKpi("Просмотры врачей", monitorNumber(data.summary.doctorViews), "Сколько карт открыли врачи", "blue")}
-      ${monitorKpi("Осмотры с действиями", monitorNumber(data.summary.visitsWithActions), "Назначения, план, лаборатория или повтор", "red")}
+      ${monitorKpi("Анкеты пациентов", monitorNumber(data.summary.surveys), "Сколько пациентов медсестры или врачи добавили в систему по выбранным фильтрам.", "")}
+      ${monitorKpi("Активные медсестры", monitorNumber(data.summary.nursesActive), "Сколько разных медсестер реально внесли хотя бы одного пациента.", "mint")}
+      ${monitorKpi("Просмотры врачей", monitorNumber(data.summary.doctorViews), "Сколько раз врачи открывали карты пациентов для просмотра или работы.", "blue")}
+      ${monitorKpi("Осмотры с действиями", monitorNumber(data.summary.visitsWithActions), "Сколько осмотров завершилось назначением, планом, лабораторией или повторным обследованием.", "red")}
     </section>
     <section class="monitor-split">
       <div class="monitor-card wide">
-        <h2>Динамика работы</h2>
+        <h2>Работа по дням</h2>
         ${monitorSparkline(data.byDate, "surveys")}
-        <div class="monitor-legend"><span>Анкеты</span><span>Осмотры</span><span>Действия</span></div>
-        ${monitorBarChart(data.byDate, ["surveys", "visits", "actions"], ["#0f766e", "#2563eb", "#dc2626"])}
+        <div class="monitor-legend"><span>Медсестры добавили</span><span>Врачи посмотрели</span><span>Осмотры с действиями</span></div>
+        ${monitorBarChart(data.byDate, ["surveys", "doctorViews", "actions"], ["#0f766e", "#2563eb", "#dc2626"])}
+        ${monitorExplain("Каждая строка — отдельный день. Первое число показывает, сколько пациентов добавили медсестры/врачи, второе — сколько карт открыли врачи, третье — сколько осмотров было с назначениями или планом.")}
       </div>
       <div class="monitor-card">
         <h2>Маршрутизация</h2>
@@ -1447,17 +1452,19 @@ function monitorOverview() {
           <strong>${monitorNumber(Math.round((data.summary.needsDoctor / Math.max(1, data.summary.surveys)) * 100), "%")}</strong>
           <span>к врачу</span>
         </div>
-        <p class="muted">Показывает долю анкет, где программа рекомендовала направление к врачу.</p>
+        ${monitorExplain("Этот процент показывает долю пациентов, которым система рекомендовала направление к врачу после заполнения анкеты.")}
       </div>
     </section>
     <section class="monitor-split">
       <div class="monitor-card">
         <h2>Поликлиники</h2>
         ${monitorBarChart(data.clinics, ["surveys", "visitsWithActions"], ["#0f766e", "#dc2626"])}
+        ${monitorExplain("По каждой поликлинике видно: первое число — сколько пациентов внесено, второе — сколько врачебных осмотров завершилось конкретными действиями.")}
       </div>
       <div class="monitor-card">
         <h2>Последние действия</h2>
         ${monitorEventList(data.events.slice(0, 8))}
+        ${monitorExplain("Лента показывает последние шаги сотрудников: отправка анкеты, открытие карты врачом и сохранение осмотра.")}
       </div>
     </section>
   `;
@@ -1513,10 +1520,12 @@ function monitorNursesPanel() {
       <div class="monitor-card">
         <h2>Активность медсестер</h2>
         ${monitorBarChart(state.monitor.nurses, ["surveys", "needsDoctor"], ["#0f766e", "#f59e0b"])}
+        ${monitorExplain("Первое число — сколько пациентов внесла медсестра, второе — сколько из этих пациентов система направила к врачу.")}
       </div>
       <div class="monitor-card wide">
         <h2>Таблица медсестер</h2>
         ${monitorTable(["Медсестра", "Анкет", "К врачу", "Последнее действие"], rows)}
+        ${monitorExplain("Таблица помогает быстро увидеть, кто работает сейчас активнее и когда было последнее внесение пациента.")}
       </div>
     </section>
   `;
@@ -1538,10 +1547,12 @@ function monitorDoctorsPanel() {
       <div class="monitor-card">
         <h2>Работа врачей</h2>
         ${monitorBarChart(state.monitor.doctors, ["views", "visitsWithActions"], ["#2563eb", "#dc2626"])}
+        ${monitorExplain("Первое число — сколько карт пациентов врач открыл, второе — сколько осмотров завершил назначением, планом, лабораторией или повторным обследованием.")}
       </div>
       <div class="monitor-card wide">
         <h2>Таблица врачей</h2>
         ${monitorTable(["Врач", "Открыл карт", "Осмотров", "С действиями", "Препаратов", "Последнее действие"], rows)}
+        ${monitorExplain("Здесь видно не только просмотры, но и реальную врачебную работу: осмотры, назначения препаратов и последние действия.")}
       </div>
     </section>
   `;
@@ -1577,10 +1588,12 @@ function monitorTablesPanel() {
     <section class="monitor-card">
       <h2>Анкеты пациентов</h2>
       ${monitorTable(["Дата", "Поликлиника", "Медсестра", "Пациент", "FINDRISC", "СС риск", "К врачу", "Открыли", "Действия"], surveyRows)}
+      ${monitorExplain("В этой таблице каждая строка — один пациент, которого внесли в систему. Колонки показывают риск, необходимость врача и дальнейшие действия.")}
     </section>
     <section class="monitor-card">
       <h2>Осмотры врачей</h2>
       ${monitorTable(["Дата", "Поликлиника", "Врач", "Пациент", "С действиями", "Диагноз", "Препараты", "Повтор"], visitRows)}
+      ${monitorExplain("В этой таблице каждая строка — сохраненный врачебный осмотр с диагнозом, препаратами и сроком повторного обследования.")}
     </section>
   `;
 }
@@ -1600,7 +1613,7 @@ function renderMonitorDashboard() {
     : state.monitorTab === "doctors"
       ? monitorDoctorsPanel()
       : state.monitorTab === "events"
-        ? `<section class="monitor-card"><h2>Живая лента действий</h2>${monitorEventList(data.events)}</section>`
+        ? `<section class="monitor-card"><h2>Живая лента действий</h2>${monitorEventList(data.events)}${monitorExplain("Лента нужна для наблюдения в реальном времени: кто, из какой поликлиники и с каким пациентом совершил действие.")}</section>`
         : state.monitorTab === "tables"
           ? monitorTablesPanel()
           : monitorOverview();

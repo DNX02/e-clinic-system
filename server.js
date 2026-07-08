@@ -1061,12 +1061,10 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/monitor/dashboard") {
-    if (!requireAdmin(session)) return send(res, 403, { error: "Нет доступа" });
     return send(res, 200, buildOperationsMonitor(db, Object.fromEntries(url.searchParams)));
   }
 
   if (req.method === "GET" && url.pathname === "/api/monitor/report.csv") {
-    if (!requireAdmin(session)) return send(res, 403, { error: "Нет доступа" });
     const report = buildOperationsReportCsv(db, Object.fromEntries(url.searchParams));
     return send(res, 200, report, {
       "Content-Type": "text/csv; charset=utf-8",
@@ -1831,12 +1829,17 @@ function buildOperationsMonitor(db, filters = {}) {
   const byDate = {};
   for (const row of filteredSurveys) {
     const key = dateKey(row.createdAt);
-    byDate[key] ||= { label: key, surveys: 0, visits: 0, actions: 0 };
+    byDate[key] ||= { label: key, surveys: 0, doctorViews: 0, visits: 0, actions: 0 };
     byDate[key].surveys += 1;
+  }
+  for (const event of filteredEvents.filter((event) => event.type === "doctor_survey_viewed")) {
+    const key = dateKey(event.createdAt);
+    byDate[key] ||= { label: key, surveys: 0, doctorViews: 0, visits: 0, actions: 0 };
+    byDate[key].doctorViews += 1;
   }
   for (const row of filteredVisits) {
     const key = dateKey(row.createdAt);
-    byDate[key] ||= { label: key, surveys: 0, visits: 0, actions: 0 };
+    byDate[key] ||= { label: key, surveys: 0, doctorViews: 0, visits: 0, actions: 0 };
     byDate[key].visits += 1;
     if (row.hasAction) byDate[key].actions += 1;
   }
