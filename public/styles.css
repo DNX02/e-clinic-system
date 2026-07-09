@@ -1771,6 +1771,15 @@ th {
   max-height: 520px;
 }
 
+.monitor-table-note {
+  margin: -4px 0 12px;
+}
+
+.monitor-table .pill {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 @media (max-width: 900px) {
   .monitor-shell {
     padding: 14px;

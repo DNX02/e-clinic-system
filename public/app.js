@@ -1512,7 +1512,7 @@ function monitorNursesPanel() {
       <td>${escapeHtml(item.label)}</td>
       <td>${escapeHtml(item.surveys)}</td>
       <td>${escapeHtml(item.needsDoctor)}</td>
-      <td><span class="pill ${item.registered ? "ok" : "warn"}">${item.registered ? "Зарегистрирована в №5" : "Не найдена в №5"}</span></td>
+      <td><span class="pill ${item.registered ? "ok" : "warn"}">${item.registered ? "Есть в №5" : "Нет в №5"}</span></td>
       <td>${item.lastAction ? new Date(item.lastAction).toLocaleString("ru-RU") : "-"}</td>
     </tr>
   `);
@@ -1525,8 +1525,8 @@ function monitorNursesPanel() {
       </div>
       <div class="monitor-card wide">
         <h2>Таблица внесения анкет</h2>
+        <p class="muted monitor-table-note">Статус показывает, найдено ли имя из анкеты среди зарегистрированных медсестер №5.</p>
         ${monitorTable(["Имя в анкете", "Анкет", "К врачу", "Статус", "Последнее действие"], rows)}
-        ${monitorExplain("Если стоит «Не найдена в №5», значит такое имя есть в заполненных анкетах, но среди зарегистрированных медсестер для тестов №5 оно не найдено. Возможно, имя введено с ошибкой или вместо медсестры указали другого человека.")}
       </div>
     </section>
   `;
