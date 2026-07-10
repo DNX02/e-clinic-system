@@ -1537,7 +1537,7 @@ th {
   align-items: end;
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(4, minmax(150px, 1fr)) auto auto;
+  grid-template-columns: repeat(3, minmax(150px, 1fr)) auto auto;
   margin-bottom: 14px;
   padding: 14px;
 }

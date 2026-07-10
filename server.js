@@ -566,13 +566,6 @@ function clinicKey(value = "") {
   return number || text.replace(/\s+/g, "");
 }
 
-function personNameKey(value = "") {
-  return String(value)
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-}
-
 function adminRole(session, db) {
   if (!session || session.userType !== "admin") return "";
   return db.admins.find((admin) => admin.id === session.userId)?.role || "";
@@ -1803,7 +1796,6 @@ function groupMonitor(items, keyFn, seed = {}) {
 
 function buildOperationsMonitor(db, filters = {}) {
   const { surveyRows, visitRows, eventRows } = buildOperationsMonitorRows(db);
-  const registeredNurseNames = new Set((db.nurseTrainingParticipants || []).map((participant) => personNameKey(participant.fullName)).filter(Boolean));
   const filteredSurveys = surveyRows.filter((row) => matchesMonitorFilters(row, filters));
   const filteredVisits = visitRows.filter((row) => matchesMonitorFilters(row, filters));
   const filteredEvents = eventRows.filter((row) => matchesMonitorFilters(row, filters));
@@ -1816,12 +1808,13 @@ function buildOperationsMonitor(db, filters = {}) {
     clinicMap[row.clinic].visits += 1;
     if (row.hasAction) clinicMap[row.clinic].visitsWithActions += 1;
   }
-  const nurseMap = groupMonitor(filteredSurveys, (row) => row.nurseName, { surveys: 0, needsDoctor: 0, lastAction: "", registered: false });
+  const clinicSurveyDayMap = {};
   for (const row of filteredSurveys) {
-    nurseMap[row.nurseName].surveys += 1;
-    if (row.needsDoctor) nurseMap[row.nurseName].needsDoctor += 1;
-    nurseMap[row.nurseName].registered = registeredNurseNames.has(personNameKey(row.nurseName));
-    nurseMap[row.nurseName].lastAction = [nurseMap[row.nurseName].lastAction, row.createdAt].filter(Boolean).sort().at(-1) || "";
+    const day = dateKey(row.createdAt) || "Не указано";
+    const key = `${row.clinic}||${day}`;
+    clinicSurveyDayMap[key] ||= { label: `${row.clinic} / ${day}`, clinic: row.clinic, date: day, surveys: 0, needsDoctor: 0 };
+    clinicSurveyDayMap[key].surveys += 1;
+    if (row.needsDoctor) clinicSurveyDayMap[key].needsDoctor += 1;
   }
   const doctorMap = groupMonitor(filteredVisits, (row) => row.doctorName, { views: 0, visits: 0, visitsWithActions: 0, drugs: 0, lastAction: "" });
   for (const event of filteredEvents.filter((event) => event.type === "doctor_survey_viewed")) {
@@ -1853,11 +1846,18 @@ function buildOperationsMonitor(db, filters = {}) {
     if (row.hasAction) byDate[key].actions += 1;
   }
   const clinics = [...new Set([...surveyRows.map((row) => row.clinic), ...visitRows.map((row) => row.clinic)])].sort((a, b) => clinicKey(a).localeCompare(clinicKey(b), "ru"));
-  const nurses = [...new Set(surveyRows.map((row) => row.nurseName))].sort((a, b) => a.localeCompare(b, "ru"));
   const doctors = [...new Set([...(db.doctors || []).map((doctor) => doctor.fullName), ...visitRows.map((row) => row.doctorName)])].filter(Boolean).sort((a, b) => a.localeCompare(b, "ru"));
+  const publicEvents = filteredEvents
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 200)
+    .map((event) => event.actorRole === "nurse" ? { ...event, actorName: "Медсестра", nurseName: "" } : event);
+  const publicSurveys = filteredSurveys
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 300)
+    .map(({ nurseName, ...row }) => row);
   return {
     generatedAt: new Date().toISOString(),
-    filters: { clinics, nurses, doctors },
+    filters: { clinics, nurses: [], doctors },
     summary: {
       surveys: filteredSurveys.length,
       nursesActive: new Set(filteredSurveys.map((row) => row.nurseName)).size,
@@ -1867,11 +1867,14 @@ function buildOperationsMonitor(db, filters = {}) {
       needsDoctor: filteredSurveys.filter((row) => row.needsDoctor).length
     },
     clinics: Object.values(clinicMap).sort((a, b) => clinicKey(a.label).localeCompare(clinicKey(b.label), "ru")),
-    nurses: Object.values(nurseMap).sort((a, b) => b.surveys - a.surveys),
+    nurses: [],
+    clinicSurveyDays: Object.values(clinicSurveyDayMap).sort((a, b) =>
+      clinicKey(a.clinic).localeCompare(clinicKey(b.clinic), "ru") || a.date.localeCompare(b.date)
+    ),
     doctors: Object.values(doctorMap).sort((a, b) => (b.visits + b.views) - (a.visits + a.views)),
     byDate: Object.values(byDate).sort((a, b) => a.label.localeCompare(b.label)),
-    events: filteredEvents.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 200),
-    surveys: filteredSurveys.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 300),
+    events: publicEvents,
+    surveys: publicSurveys,
     visits: filteredVisits.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 300)
   };
 }

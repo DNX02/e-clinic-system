@@ -30,7 +30,6 @@ const initialState = () => ({
   monitor: null,
   monitorTab: "overview",
   monitorClinicFilter: "all",
-  monitorNurseFilter: "all",
   monitorDoctorFilter: "all",
   monitorDateFilter: ""
 });
@@ -1339,7 +1338,6 @@ function renderInvestorDashboard() {
 function monitorQuery() {
   const params = new URLSearchParams();
   if (state.monitorClinicFilter !== "all") params.set("clinic", state.monitorClinicFilter);
-  if (state.monitorNurseFilter !== "all") params.set("nurse", state.monitorNurseFilter);
   if (state.monitorDoctorFilter !== "all") params.set("doctor", state.monitorDoctorFilter);
   if (state.monitorDateFilter) params.set("date", state.monitorDateFilter);
   return params.toString();
@@ -1410,10 +1408,6 @@ function monitorFilters() {
       <div class="form-row">
         <label>Поликлиника</label>
         <select id="monitorClinic"><option value="all">Все поликлиники</option>${optionList(data.filters.clinics || [], state.monitorClinicFilter)}</select>
-      </div>
-      <div class="form-row">
-        <label>Медсестра</label>
-        <select id="monitorNurse"><option value="all">Все медсестры</option>${optionList(data.filters.nurses || [], state.monitorNurseFilter)}</select>
       </div>
       <div class="form-row">
         <label>Врач</label>
@@ -1487,7 +1481,7 @@ function monitorEventList(events) {
         <div class="monitor-feed-item">
           <time>${new Date(event.createdAt).toLocaleString("ru-RU")}</time>
           <strong>${escapeHtml(monitorEventLabel(event.type))}</strong>
-          <span>${escapeHtml(event.actorName || "-")} • ${escapeHtml(event.clinic || "-")}</span>
+          <span>${escapeHtml(event.actorRole === "nurse" ? "Медсестра" : (event.actorName || "-"))} • ${escapeHtml(event.clinic || "-")}</span>
           <p>${escapeHtml(event.patientName || "-")} — ${escapeHtml(event.details || "")}</p>
         </div>
       `).join("") || `<p class="muted">Пока нет действий</p>`}
@@ -1507,26 +1501,25 @@ function monitorTable(headers, rows) {
 }
 
 function monitorNursesPanel() {
-  const rows = (state.monitor.nurses || []).map((item) => html`
+  const rows = (state.monitor.clinicSurveyDays || []).map((item) => html`
     <tr>
-      <td>${escapeHtml(item.label)}</td>
+      <td>${escapeHtml(item.clinic)}</td>
+      <td>${escapeHtml(item.date)}</td>
       <td>${escapeHtml(item.surveys)}</td>
       <td>${escapeHtml(item.needsDoctor)}</td>
-      <td><span class="pill ${item.registered ? "ok" : "warn"}">${item.registered ? "Есть в №5" : "Нет в №5"}</span></td>
-      <td>${item.lastAction ? new Date(item.lastAction).toLocaleString("ru-RU") : "-"}</td>
     </tr>
   `);
   return html`
     <section class="monitor-split">
       <div class="monitor-card">
-        <h2>Кто внес анкеты</h2>
-        ${monitorBarChart(state.monitor.nurses, ["surveys", "needsDoctor"], ["#0f766e", "#f59e0b"])}
-        ${monitorExplain("Здесь показаны имена, которые были указаны в анкете пациента как заполнивший сотрудник. Первое число — сколько пациентов внесено, второе — сколько из них система направила к врачу.")}
+        <h2>Анкеты по поликлиникам и дням</h2>
+        ${monitorBarChart(state.monitor.clinicSurveyDays || [], ["surveys", "needsDoctor"], ["#0f766e", "#f59e0b"])}
+        ${monitorExplain("Имена сотрудников скрыты. Первая цифра показывает, сколько анкет заполнила поликлиника в конкретный день, вторая — сколько из этих пациентов система направила к врачу.")}
       </div>
       <div class="monitor-card wide">
-        <h2>Таблица внесения анкет</h2>
-        <p class="muted monitor-table-note">Статус показывает, найдено ли имя из анкеты среди зарегистрированных медсестер №5.</p>
-        ${monitorTable(["Имя в анкете", "Анкет", "К врачу", "Статус", "Последнее действие"], rows)}
+        <h2>Сводка по дням</h2>
+        <p class="muted monitor-table-note">Показывает только поликлинику и дату, без имен медсестер.</p>
+        ${monitorTable(["Поликлиника", "День", "Анкет", "К врачу"], rows)}
       </div>
     </section>
   `;
@@ -1564,7 +1557,6 @@ function monitorTablesPanel() {
     <tr>
       <td>${new Date(survey.createdAt).toLocaleString("ru-RU")}</td>
       <td>${escapeHtml(survey.clinic)}</td>
-      <td>${escapeHtml(survey.nurseName)}</td>
       <td>${escapeHtml(survey.patientName)}</td>
       <td>${survey.findrisc}</td>
       <td>${survey.score2}%</td>
@@ -1588,8 +1580,8 @@ function monitorTablesPanel() {
   return html`
     <section class="monitor-card">
       <h2>Анкеты пациентов</h2>
-      ${monitorTable(["Дата", "Поликлиника", "Медсестра", "Пациент", "FINDRISC", "СС риск", "К врачу", "Открыли", "Действия"], surveyRows)}
-      ${monitorExplain("В этой таблице каждая строка — один пациент, которого внесли в систему. Колонки показывают риск, необходимость врача и дальнейшие действия.")}
+      ${monitorTable(["Дата", "Поликлиника", "Пациент", "FINDRISC", "СС риск", "К врачу", "Открыли", "Действия"], surveyRows)}
+      ${monitorExplain("В этой таблице каждая строка — один пациент, которого внесли в систему. Имена медсестер скрыты; анализ ведется по поликлиникам и датам.")}
     </section>
     <section class="monitor-card">
       <h2>Осмотры врачей</h2>
@@ -1604,7 +1596,7 @@ function renderMonitorDashboard() {
   if (!data) return;
   const tabs = [
     ["overview", "Обзор"],
-    ["nurses", "Медсестры"],
+    ["nurses", "Анкеты по дням"],
     ["doctors", "Врачи"],
     ["events", "Лента действий"],
     ["tables", "Таблицы"]
@@ -1650,7 +1642,6 @@ function bindMonitorFilters() {
     });
   };
   bind("#monitorClinic", "monitorClinicFilter");
-  bind("#monitorNurse", "monitorNurseFilter");
   bind("#monitorDoctor", "monitorDoctorFilter");
   bind("#monitorDate", "monitorDateFilter");
 }
