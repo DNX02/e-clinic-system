@@ -13,6 +13,7 @@ const dbPath = join(dataDir, "db.json");
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "0.0.0.0";
 const DATABASE_URL = process.env.DATABASE_URL || "";
+const PG_TIMEOUT_MS = Number(process.env.PG_TIMEOUT_MS || 8000);
 const ADMIN_APP_PATH = "/app-1-admin-panel";
 const DOCTOR_APP_PATH = "/app-2-doctor";
 const SURVEY_APP_PATH = "/app-3-patient-survey";
@@ -374,7 +375,12 @@ async function pgPool() {
   if (!pgPoolPromise) {
     pgPoolPromise = import("pg").then(({ Pool }) => new Pool({
       connectionString: DATABASE_URL,
-      ssl: process.env.PGSSLMODE === "disable" ? false : { rejectUnauthorized: false }
+      ssl: process.env.PGSSLMODE === "disable" ? false : { rejectUnauthorized: false },
+      max: Number(process.env.PG_POOL_MAX || 5),
+      connectionTimeoutMillis: PG_TIMEOUT_MS,
+      idleTimeoutMillis: 30000,
+      query_timeout: PG_TIMEOUT_MS,
+      statement_timeout: PG_TIMEOUT_MS
     }));
   }
   return pgPoolPromise;
@@ -382,7 +388,10 @@ async function pgPool() {
 
 async function ensureDb() {
   if (!dbReadyPromise) {
-    dbReadyPromise = DATABASE_URL ? ensureCloudDb() : ensureFileDb();
+    dbReadyPromise = (DATABASE_URL ? ensureCloudDb() : ensureFileDb()).catch((error) => {
+      dbReadyPromise = null;
+      throw error;
+    });
   }
   return dbReadyPromise;
 }
@@ -500,6 +509,30 @@ async function readCloudDb() {
   const result = await pool.query("select data from app_state where id = $1", ["main"]);
   if (!result.rowCount) return createDefaultDb();
   return result.rows[0].data;
+}
+
+async function databaseHealth() {
+  if (!DATABASE_URL) return { mode: "file", ok: true };
+  const startedAt = Date.now();
+  const pool = await pgPool();
+  await pool.query("select 1");
+  return { mode: "postgres", ok: true, latencyMs: Date.now() - startedAt };
+}
+
+function isDatabaseError(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return [
+    "timeout",
+    "database",
+    "postgres",
+    "connection",
+    "econn",
+    "enotfound",
+    "authentication",
+    "remaining connection slots",
+    "terminating connection",
+    "neon"
+  ].some((part) => message.includes(part));
 }
 
 function send(res, status, payload, headers = {}) {
@@ -907,6 +940,27 @@ function scorePostTask(task, answers = {}) {
 }
 
 async function handleApi(req, res, url) {
+  if (req.method === "GET" && url.pathname === "/api/health") {
+    try {
+      return send(res, 200, {
+        ok: true,
+        server: true,
+        database: await databaseHealth()
+      });
+    } catch (error) {
+      console.error("Health check failed:", error);
+      return send(res, 503, {
+        ok: false,
+        server: true,
+        database: {
+          mode: DATABASE_URL ? "postgres" : "file",
+          ok: false,
+          error: error.message || "Database unavailable"
+        }
+      });
+    }
+  }
+
   const session = await getSession(req);
   const db = await readDb();
 
@@ -2000,6 +2054,9 @@ createServer(async (req, res) => {
     return await serveStatic(req, res, url);
   } catch (error) {
     console.error(error);
+    if (isDatabaseError(error)) {
+      return send(res, 503, { error: "База данных временно недоступна", details: error.message || String(error) });
+    }
     return send(res, 500, { error: "Ошибка сервера" });
   }
 }).listen(PORT, HOST, () => {
