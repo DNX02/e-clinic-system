@@ -1051,7 +1051,7 @@ document.addEventListener("click", async (event) => {
     await loadMonitorDashboard(false);
   }
   if (action === "monitor-report") {
-    window.location.href = `/api/monitor/report.csv?${monitorQuery()}`;
+    window.location.href = "/api/monitor/weekly-report.docx";
   }
   if (action === "delete-doctor") {
     if (!confirm("Удалить профиль врача?")) return;
@@ -1516,7 +1516,7 @@ function monitorFilters() {
         <input id="monitorDate" type="date" value="${escapeHtml(state.monitorDateFilter)}" />
       </div>
       <button type="button" data-action="monitor-refresh">Обновить</button>
-      <button type="button" class="secondary" data-action="monitor-report">Скачать отчет</button>
+      <button type="button" class="secondary" data-action="monitor-report">Скачать недельный отчет Word</button>
     </section>
   `;
 }

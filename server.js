@@ -5,6 +5,7 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { networkInterfaces } from "node:os";
 import crypto from "node:crypto";
+import { buildWeeklyMonitorReportDocx, monitorReportPeriod } from "./weekly-monitor-report.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "public");
@@ -538,9 +539,10 @@ function isDatabaseError(error) {
 }
 
 function send(res, status, payload, headers = {}) {
-  const body = typeof payload === "string" ? payload : JSON.stringify(payload);
+  const isBinary = Buffer.isBuffer(payload) || payload instanceof Uint8Array;
+  const body = typeof payload === "string" || isBinary ? payload : JSON.stringify(payload);
   res.writeHead(status, {
-    "Content-Type": typeof payload === "string" ? "text/plain; charset=utf-8" : "application/json; charset=utf-8",
+    "Content-Type": typeof payload === "string" || isBinary ? "text/plain; charset=utf-8" : "application/json; charset=utf-8",
     ...headers
   });
   res.end(body);
@@ -1223,6 +1225,20 @@ async function handleApi(req, res, url) {
     return send(res, 200, report, {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="e-clinic-monitor-${new Date().toISOString().slice(0, 10)}.csv"`
+    });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/monitor/weekly-report.docx") {
+    const period = monitorReportPeriod(Object.fromEntries(url.searchParams));
+    const report = await buildWeeklyMonitorReportDocx(db, period, {
+      buildRows: buildOperationsMonitorRows,
+      dateKey,
+      clinicKey
+    });
+    return send(res, 200, report, {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "Content-Disposition": `attachment; filename="e-clinic-weekly-${period.from}-${period.to}.docx"`,
+      "Cache-Control": "no-store"
     });
   }
 

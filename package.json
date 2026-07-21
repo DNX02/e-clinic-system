@@ -9,6 +9,7 @@
     "upload-db": "node scripts/upload-db-to-postgres.mjs"
   },
   "dependencies": {
+    "docx": "^9.7.1",
     "pg": "^8.13.1"
   }
 }
