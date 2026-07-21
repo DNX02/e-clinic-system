@@ -32,6 +32,8 @@ const initialState = () => ({
   monitorClinicFilter: "all",
   monitorDoctorFilter: "all",
   monitorDateFilter: "",
+  monitorReportFrom: "",
+  monitorReportTo: "",
   assistantOpen: false,
   assistantLoading: false,
   assistantMessages: [
@@ -1051,7 +1053,20 @@ document.addEventListener("click", async (event) => {
     await loadMonitorDashboard(false);
   }
   if (action === "monitor-report") {
-    window.location.href = "/api/monitor/weekly-report.docx";
+    const from = document.querySelector("#monitorReportFrom")?.value || "";
+    const to = document.querySelector("#monitorReportTo")?.value || "";
+    if (!from || !to) {
+      alert("Выберите дату начала и дату окончания отчета.");
+      return;
+    }
+    if (from > to) {
+      alert("Дата начала не может быть позже даты окончания.");
+      return;
+    }
+    state.monitorReportFrom = from;
+    state.monitorReportTo = to;
+    const params = new URLSearchParams({ from, to });
+    window.location.href = `/api/monitor/weekly-report.docx?${params}`;
   }
   if (action === "delete-doctor") {
     if (!confirm("Удалить профиль врача?")) return;
@@ -1501,6 +1516,20 @@ function monitorSparkline(items, key) {
 function monitorFilters() {
   const data = state.monitor || { filters: { clinics: [], nurses: [], doctors: [] } };
   const optionList = (items, selected) => items.map((item) => `<option value="${escapeHtml(item)}" ${selected === item ? "selected" : ""}>${escapeHtml(item)}</option>`).join("");
+  if (!state.monitorReportFrom || !state.monitorReportTo) {
+    const today = new Date();
+    const previousMonday = new Date(today);
+    const daysSinceMonday = (today.getDay() + 6) % 7;
+    previousMonday.setDate(today.getDate() - daysSinceMonday - 7);
+    const previousSaturday = new Date(previousMonday);
+    previousSaturday.setDate(previousMonday.getDate() + 5);
+    const localDate = (value) => {
+      const offset = value.getTimezoneOffset();
+      return new Date(value.getTime() - offset * 60000).toISOString().slice(0, 10);
+    };
+    state.monitorReportFrom = localDate(previousMonday);
+    state.monitorReportTo = localDate(previousSaturday);
+  }
   return html`
     <section class="monitor-filters">
       <div class="form-row">
@@ -1516,7 +1545,17 @@ function monitorFilters() {
         <input id="monitorDate" type="date" value="${escapeHtml(state.monitorDateFilter)}" />
       </div>
       <button type="button" data-action="monitor-refresh">Обновить</button>
-      <button type="button" class="secondary" data-action="monitor-report">Скачать недельный отчет Word</button>
+      <div class="monitor-report-period">
+        <div class="form-row">
+          <label>Отчет с</label>
+          <input id="monitorReportFrom" type="date" value="${escapeHtml(state.monitorReportFrom)}" />
+        </div>
+        <div class="form-row">
+          <label>По</label>
+          <input id="monitorReportTo" type="date" value="${escapeHtml(state.monitorReportTo)}" />
+        </div>
+        <button type="button" class="secondary" data-action="monitor-report">Скачать отчет Word</button>
+      </div>
     </section>
   `;
 }

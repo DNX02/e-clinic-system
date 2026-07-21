@@ -1537,9 +1537,20 @@ th {
   align-items: end;
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(3, minmax(150px, 1fr)) auto auto;
+  grid-template-columns: repeat(3, minmax(150px, 1fr)) auto minmax(420px, 1.6fr);
   margin-bottom: 14px;
   padding: 14px;
+}
+
+.monitor-report-period {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(130px, 1fr) minmax(130px, 1fr) auto;
+}
+
+.monitor-report-period button {
+  white-space: nowrap;
 }
 
 .monitor-tabs {
@@ -1916,6 +1927,15 @@ th {
   .monitor-grid,
   .monitor-split {
     grid-template-columns: 1fr;
+  }
+
+  .monitor-report-period {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .monitor-report-period button {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 
   .monitor-hero h1 {
