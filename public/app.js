@@ -31,7 +31,15 @@ const initialState = () => ({
   monitorTab: "overview",
   monitorClinicFilter: "all",
   monitorDoctorFilter: "all",
-  monitorDateFilter: ""
+  monitorDateFilter: "",
+  assistantOpen: false,
+  assistantLoading: false,
+  assistantMessages: [
+    {
+      role: "assistant",
+      content: "Здравствуйте. Я могу помочь разобраться с разделами платформы, статистикой, анкетами, обучением и показателями риска."
+    }
+  ]
 });
 let state = initialState();
 let offlineSurveyOnlineListenerBound = false;
@@ -867,6 +875,96 @@ async function boot() {
   const { user } = await api("/api/me");
   state.me = user;
   route();
+  initAssistantWidget();
+}
+
+function assistantEnabledForCurrentApp() {
+  const appMode = document.body.dataset.app || "";
+  return ["admin", "doctor", "monitor", "investor"].includes(appMode);
+}
+
+function currentAssistantApp() {
+  return document.body.dataset.app || "home";
+}
+
+function initAssistantWidget() {
+  if (!assistantEnabledForCurrentApp() || document.querySelector("#assistantWidget")) return;
+  const widget = document.createElement("section");
+  widget.id = "assistantWidget";
+  widget.className = "assistant-widget";
+  widget.innerHTML = renderAssistantWidget();
+  document.body.appendChild(widget);
+  bindAssistantWidget(widget);
+}
+
+function renderAssistantWidget() {
+  const messages = state.assistantMessages.map((message) => html`
+    <div class="assistant-message ${message.role === "assistant" ? "assistant-message-ai" : "assistant-message-user"}">
+      ${escapeHtml(message.content)}
+    </div>
+  `).join("");
+  return html`
+    <button class="assistant-fab" type="button" data-assistant-action="toggle" aria-label="AI-консультант">
+      <span>AI</span>
+    </button>
+    <div class="assistant-panel ${state.assistantOpen ? "open" : ""}" aria-live="polite">
+      <div class="assistant-head">
+        <div>
+          <strong>AI-консультант</strong>
+          <span>Помощь по платформе</span>
+        </div>
+        <button type="button" class="assistant-close" data-assistant-action="toggle" aria-label="Закрыть">×</button>
+      </div>
+      <div class="assistant-body" id="assistantMessages">${messages}</div>
+      <form class="assistant-form" id="assistantForm">
+        <textarea name="message" rows="2" placeholder="Напишите вопрос..." ${state.assistantLoading ? "disabled" : ""}></textarea>
+        <button type="submit" ${state.assistantLoading ? "disabled" : ""}>${state.assistantLoading ? "..." : "Отправить"}</button>
+      </form>
+    </div>
+  `;
+}
+
+function updateAssistantWidget() {
+  const widget = document.querySelector("#assistantWidget");
+  if (!widget) return;
+  widget.innerHTML = renderAssistantWidget();
+  bindAssistantWidget(widget);
+  const body = widget.querySelector("#assistantMessages");
+  if (body) body.scrollTop = body.scrollHeight;
+}
+
+function bindAssistantWidget(widget) {
+  widget.querySelectorAll("[data-assistant-action='toggle']").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.assistantOpen = !state.assistantOpen;
+      updateAssistantWidget();
+    });
+  });
+  widget.querySelector("#assistantForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const message = String(new FormData(form).get("message") || "").trim();
+    if (!message || state.assistantLoading) return;
+    state.assistantOpen = true;
+    state.assistantMessages.push({ role: "user", content: message });
+    state.assistantLoading = true;
+    updateAssistantWidget();
+    try {
+      const result = await api("/api/assistant", {
+        method: "POST",
+        body: JSON.stringify({
+          app: currentAssistantApp(),
+          messages: state.assistantMessages.slice(-8)
+        })
+      });
+      state.assistantMessages.push({ role: "assistant", content: result.answer });
+    } catch (error) {
+      state.assistantMessages.push({ role: "assistant", content: error.message });
+    } finally {
+      state.assistantLoading = false;
+      updateAssistantWidget();
+    }
+  });
 }
 
 function route() {

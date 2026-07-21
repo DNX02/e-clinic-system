@@ -14,6 +14,8 @@ const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "0.0.0.0";
 const DATABASE_URL = process.env.DATABASE_URL || "";
 const PG_TIMEOUT_MS = Number(process.env.PG_TIMEOUT_MS || 8000);
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 const ADMIN_APP_PATH = "/app-1-admin-panel";
 const DOCTOR_APP_PATH = "/app-2-doctor";
 const SURVEY_APP_PATH = "/app-3-patient-survey";
@@ -616,6 +618,79 @@ function requireAdmin(session) {
   return session?.userType === "admin";
 }
 
+function compactCount(value) {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function assistantAppName(app = "") {
+  return {
+    admin: "приложение администратора",
+    doctor: "приложение врача",
+    survey: "опросник пациента",
+    training: "проверка знаний врачей",
+    "nurse-training": "проверка знаний медсестер",
+    investor: "панель инвесторов",
+    monitor: "экран наблюдения"
+  }[app] || "медицинская платформа";
+}
+
+function buildAssistantSystemPrompt(db, session, appName) {
+  const stats = [
+    `врачей зарегистрировано: ${compactCount(db.doctors)}`,
+    `анкет пациентов: ${compactCount(db.nurseSurveys)}`,
+    `осмотров врачей: ${compactCount(db.doctorVisits)}`,
+    `участников обучения врачей: ${compactCount(db.trainingParticipants)}`,
+    `участников обучения медсестер: ${compactCount(db.nurseTrainingParticipants)}`
+  ].join("; ");
+  const userType = session?.userType === "admin" ? "администратор" : session?.userType === "doctor" ? "врач" : "пользователь без входа";
+  return [
+    "Ты AI-консультант платформы E-Clinic Control.",
+    `Текущий раздел: ${appName}. Тип пользователя: ${userType}.`,
+    `Общая статистика без персональных данных: ${stats}.`,
+    "Помогай пользователю пользоваться платформой: где найти пациентов, обучение, статистику, мониторинг, отчеты, фильтры и синхронизацию.",
+    "Можешь кратко объяснять FINDRISC, сердечно-сосудистый риск, индекс массы тела, формулу Rabito, пре-тесты и пост-тесты.",
+    "Не раскрывай персональные данные пациентов, врачей, медсестер, пароли, ключи доступа и скрытые настройки.",
+    "Не ставь окончательный диагноз, не назначай лечение и не заменяй врача. Для медицинских решений говори, что решение принимает врач по клиническим данным и локальным протоколам.",
+    "Отвечай на русском языке, простыми короткими абзацами. Если пользователь просит на таджикском, отвечай на таджикском."
+  ].join("\n");
+}
+
+function extractOpenAiText(payload) {
+  if (typeof payload?.output_text === "string" && payload.output_text.trim()) return payload.output_text.trim();
+  const parts = [];
+  for (const item of payload?.output || []) {
+    for (const content of item?.content || []) {
+      if (typeof content?.text === "string") parts.push(content.text);
+    }
+  }
+  return parts.join("\n").trim() || "Не удалось получить ответ консультанта.";
+}
+
+async function askOpenAiAssistant({ messages, prompt }) {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${OPENAI_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      instructions: prompt,
+      input: messages.map((message) => ({
+        role: message.role === "assistant" ? "assistant" : "user",
+        content: String(message.content || "").slice(0, 2000)
+      })),
+      max_output_tokens: 700
+    })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = payload?.error?.message || "OpenAI API временно недоступен";
+    throw new Error(message);
+  }
+  return extractOpenAiText(payload);
+}
+
 function requestBaseUrl(req) {
   const host = req.headers["x-forwarded-host"] || req.headers.host;
   const proto = req.headers["x-forwarded-proto"] || (String(host || "").includes("localhost") ? "http" : "https");
@@ -963,6 +1038,31 @@ async function handleApi(req, res, url) {
 
   const session = await getSession(req);
   const db = await readDb();
+
+  if (req.method === "POST" && url.pathname === "/api/assistant") {
+    if (!OPENAI_API_KEY) return send(res, 503, { error: "AI-консультант еще не подключен: на сервере не задан OPENAI_API_KEY." });
+    const body = await parseBody(req);
+    const rawMessages = Array.isArray(body.messages) ? body.messages : [];
+    const messages = rawMessages
+      .slice(-8)
+      .map((message) => ({
+        role: message.role === "assistant" ? "assistant" : "user",
+        content: String(message.content || "").trim()
+      }))
+      .filter((message) => message.content);
+    if (!messages.length) return send(res, 400, { error: "Напишите вопрос консультанту." });
+    try {
+      const appName = assistantAppName(body.app || "");
+      const answer = await askOpenAiAssistant({
+        messages,
+        prompt: buildAssistantSystemPrompt(db, session, appName)
+      });
+      return send(res, 200, { answer, model: OPENAI_MODEL });
+    } catch (error) {
+      console.error("Assistant failed:", error);
+      return send(res, 502, { error: "AI-консультант временно недоступен. Попробуйте позже." });
+    }
+  }
 
   if (req.method === "GET" && url.pathname === "/api/server-info") {
     const urls = getLanUrls();
