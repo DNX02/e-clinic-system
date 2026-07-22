@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
+    "test:product": "node scripts/test-product-improvements.mjs",
     "upload-db": "node scripts/upload-db-to-postgres.mjs"
   },
   "dependencies": {
