@@ -19,6 +19,9 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 const INITIAL_ADMIN_PASSWORD = process.env.INITIAL_ADMIN_PASSWORD || "";
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 12 * 60 * 60 * 1000);
+const MAX_JSON_BODY_BYTES = Number(process.env.MAX_JSON_BODY_BYTES || 1024 * 1024);
+const LOGIN_RATE_LIMIT = 5;
+const LOGIN_RATE_WINDOW_MS = 60 * 1000;
 const ADMIN_APP_PATH = "/app-1-admin-panel";
 const DOCTOR_APP_PATH = "/app-2-doctor";
 const SURVEY_APP_PATH = "/app-3-patient-survey";
@@ -31,6 +34,7 @@ let dbLoadPromise = null;
 let dbWritePromise = Promise.resolve();
 let dbReadyPromise = null;
 let pgPoolPromise = null;
+const rateLimits = new Map();
 
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -560,9 +564,58 @@ function send(res, status, payload, headers = {}) {
 
 async function parseBody(req) {
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
+  let size = 0;
+  const contentLength = Number(req.headers["content-length"] || 0);
+  if (contentLength > MAX_JSON_BODY_BYTES) {
+    const error = new Error("Размер запроса превышает допустимый лимит");
+    error.statusCode = 413;
+    throw error;
+  }
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > MAX_JSON_BODY_BYTES) {
+      const error = new Error("Размер запроса превышает допустимый лимит");
+      error.statusCode = 413;
+      throw error;
+    }
+    chunks.push(chunk);
+  }
   if (!chunks.length) return {};
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    const error = new Error("Некорректный JSON");
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+function clientIp(req) {
+  return String(req.headers["cf-connecting-ip"] || req.headers["x-real-ip"] || req.socket.remoteAddress || "unknown").trim();
+}
+
+function consumeRateLimit(key, limit, windowMs) {
+  const now = Date.now();
+  const current = rateLimits.get(key);
+  if (!current || current.resetAt <= now) {
+    rateLimits.set(key, { count: 1, resetAt: now + windowMs });
+    return { allowed: true, retryAfter: 0 };
+  }
+  current.count += 1;
+  if (current.count <= limit) return { allowed: true, retryAfter: 0 };
+  return { allowed: false, retryAfter: Math.max(1, Math.ceil((current.resetAt - now) / 1000)) };
+}
+
+function clearRateLimit(key) {
+  rateLimits.delete(key);
+}
+
+function enforceLoginRateLimit(req, res, loginType) {
+  const key = `login:${loginType}:${clientIp(req)}`;
+  const result = consumeRateLimit(key, LOGIN_RATE_LIMIT, LOGIN_RATE_WINDOW_MS);
+  if (result.allowed) return key;
+  send(res, 429, { error: "Слишком много попыток входа. Повторите через минуту." }, { "Retry-After": String(result.retryAfter) });
+  return "";
 }
 
 function getCookie(req, name) {
@@ -1132,17 +1185,23 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/login/admin") {
+    const rateLimitKey = enforceLoginRateLimit(req, res, "admin");
+    if (!rateLimitKey) return;
     const body = await parseBody(req);
     const admin = db.admins.find((item) => item.username === body.username);
     if (!admin || !verifyPassword(body.password || "", admin.passwordHash)) return send(res, 401, { error: "Неверный логин или пароль" });
+    clearRateLimit(rateLimitKey);
     const sid = await createSession("admin", admin.id);
     return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(req, sid) });
   }
 
   if (req.method === "POST" && url.pathname === "/api/login/doctor") {
+    const rateLimitKey = enforceLoginRateLimit(req, res, "doctor");
+    if (!rateLimitKey) return;
     const body = await parseBody(req);
     const doctor = db.doctors.find((item) => item.login === body.login);
     if (!doctor || !verifyPassword(body.accessKey || "", doctor.accessKeyHash)) return send(res, 401, { error: "Неверный логин или ключ" });
+    clearRateLimit(rateLimitKey);
     const sid = await createSession("doctor", doctor.id);
     return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(req, sid) });
   }
@@ -2220,6 +2279,9 @@ createServer(async (req, res) => {
     return await serveStatic(req, res, url);
   } catch (error) {
     console.error(error);
+    if ([400, 413].includes(error.statusCode)) {
+      return send(res, error.statusCode, { error: error.message });
+    }
     if (isDatabaseError(error)) {
       return send(res, 503, { error: "База данных временно недоступна", details: error.message || String(error) });
     }
