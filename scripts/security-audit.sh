@@ -30,6 +30,7 @@ node --check "$audit_dir/server.js"
 node --check "$audit_dir/public/app.js"
 node --check "$audit_dir/weekly-monitor-report.js"
 npm --prefix "$audit_dir" run test:product
+npm --prefix "$audit_dir" run test:ui
 
 for script in "$audit_dir"/scripts/*.sh; do
   bash -n "$script"

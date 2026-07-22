@@ -48,5 +48,8 @@ jobs:
       - name: Test product workflows
         run: npm run test:product
 
+      - name: Check desktop and mobile UI contracts
+        run: npm run test:ui
+
       - name: Scan tracked files for secrets
         run: node scripts/check-secrets.mjs
