@@ -976,7 +976,7 @@ function route() {
   if (appMode === "survey" || path === SURVEY_APP_PATH) return renderNurseSurvey();
   if (appMode === "training" || path === TRAINING_APP_PATH) return loadTrainingPretest();
   if (appMode === "nurse-training" || path === NURSE_TRAINING_APP_PATH) return loadNurseTraining();
-  if (appMode === "investor" || path === INVESTOR_APP_PATH) return loadInvestorDashboard();
+  if (appMode === "investor" || path === INVESTOR_APP_PATH) return state.me?.type === "admin" ? loadInvestorDashboard() : renderAdminLogin();
   if (appMode === "monitor" || path === MONITOR_APP_PATH) return state.me?.type === "admin" ? loadMonitorDashboard() : renderAdminLogin();
   if (appMode === "doctor" || path === DOCTOR_APP_PATH) return state.me?.type === "doctor" ? loadDoctor() : renderDoctorLogin();
   if (appMode === "admin" || path === ADMIN_APP_PATH) return state.me?.type === "admin" ? loadAdmin() : renderAdminLogin();
@@ -1439,6 +1439,7 @@ function renderInvestorDashboard() {
           <span>Обновлено</span>
           <strong>${new Date(data.generatedAt).toLocaleString("ru-RU")}</strong>
           <small>Данные берутся напрямую из работающей системы</small>
+          <button type="button" class="secondary" data-action="logout">Выйти</button>
         </div>
       </section>
       <nav class="investor-tabs">
@@ -1801,7 +1802,8 @@ function renderAdminLogin() {
     event.preventDefault();
     try {
       await api("/api/login/admin", { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(event.target))) });
-      window.location.href = document.body.dataset.app === "monitor" ? MONITOR_APP_PATH : ADMIN_APP_PATH;
+      const appMode = document.body.dataset.app;
+      window.location.href = appMode === "monitor" ? MONITOR_APP_PATH : appMode === "investor" ? INVESTOR_APP_PATH : ADMIN_APP_PATH;
     } catch (error) {
       alert(error.message);
     }
