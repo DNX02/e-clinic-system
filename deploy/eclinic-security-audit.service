@@ -1,0 +1,13 @@
+[Unit]
+Description=Daily E-Clinic security audit
+After=network-online.target
+Wants=network-online.target
+OnFailure=eclinic-security-audit-notify.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/eclinic-security-audit
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full

@@ -1,0 +1,11 @@
+[Unit]
+Description=Notify about an E-Clinic security audit failure
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/eclinic-security-audit-notify
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
