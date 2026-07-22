@@ -631,6 +631,29 @@ function enforceLoginRateLimit(req, res, loginType) {
   return "";
 }
 
+function enforceUserRateLimit(req, res, session, action, limit, windowMs) {
+  const identity = session ? `${session.userType}:${session.userId}` : clientIp(req);
+  const result = consumeRateLimit(`${action}:${identity}`, limit, windowMs);
+  if (result.allowed) return true;
+  send(res, 429, { error: "Слишком много запросов. Повторите позже." }, { "Retry-After": String(result.retryAfter) });
+  return false;
+}
+
+function isTrustedStateChangingRequest(req) {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method || "GET")) return true;
+  const fetchSite = String(req.headers["sec-fetch-site"] || "").toLowerCase();
+  if (fetchSite === "cross-site") return false;
+  const origin = String(req.headers.origin || "").trim();
+  if (!origin) return true;
+  try {
+    const originHost = new URL(origin).host.toLowerCase();
+    const requestHost = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim().toLowerCase();
+    return Boolean(originHost && requestHost && originHost === requestHost);
+  } catch {
+    return false;
+  }
+}
+
 function getCookie(req, name) {
   const cookies = req.headers.cookie?.split(";").map((item) => item.trim()) || [];
   const cookie = cookies.find((item) => item.startsWith(`${name}=`));
@@ -1253,6 +1276,8 @@ async function handleApi(req, res, url) {
   const db = await readDb();
 
   if (req.method === "POST" && url.pathname === "/api/assistant") {
+    if (!session || !["admin", "doctor"].includes(session.userType)) return send(res, 403, { error: "Требуется вход в систему" });
+    if (!enforceUserRateLimit(req, res, session, "assistant", 20, 60 * 1000)) return;
     if (!OPENAI_API_KEY) return send(res, 503, { error: "AI-консультант еще не подключен: на сервере не задан OPENAI_API_KEY." });
     const body = await parseBody(req);
     const rawMessages = Array.isArray(body.messages) ? body.messages : [];
@@ -1429,6 +1454,7 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/investor/dashboard") {
+    if (!requireAdmin(session)) return send(res, 403, { error: "Требуется вход администратора" });
     return send(res, 200, buildInvestorDashboard(db));
   }
 
@@ -2389,6 +2415,7 @@ function getLanUrls() {
 createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
+    if (!isTrustedStateChangingRequest(req)) return send(res, 403, { error: "Межсайтовый запрос заблокирован" });
     if (url.pathname.startsWith("/api/")) return await handleApi(req, res, url);
     return await serveStatic(req, res, url);
   } catch (error) {
