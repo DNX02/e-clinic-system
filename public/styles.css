@@ -1199,6 +1199,109 @@ th {
   background: #dc2626;
 }
 
+.patient-trends,
+.patient-task-box {
+  border-top: 1px solid var(--line);
+  margin-top: 20px;
+  padding-top: 18px;
+}
+
+.trend-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.trend-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.trend-card > div {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.trend-card > div span {
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.trend-card svg {
+  height: 70px;
+  width: 100%;
+}
+
+.trend-card small,
+.task-item span {
+  color: var(--muted);
+}
+
+.compact-task-form {
+  align-items: end;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(150px, 190px) auto;
+  margin-bottom: 14px;
+}
+
+.task-list {
+  display: grid;
+  gap: 10px;
+}
+
+.task-item {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #dbe6e3;
+  border-left: 4px solid #0f766e;
+  border-radius: 10px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 12px;
+}
+
+.task-item > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.task-item.overdue {
+  background: #fff7ed;
+  border-left-color: #dc2626;
+}
+
+.task-item.completed {
+  opacity: 0.68;
+}
+
+.task-item.completed strong {
+  text-decoration: line-through;
+}
+
+.account-security-panel {
+  margin-bottom: 16px;
+}
+
+.button-link {
+  align-items: center;
+  background: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 10px;
+  color: #0f766e;
+  display: inline-flex;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 42px;
+  padding: 8px 14px;
+  text-decoration: none;
+}
+
 .language-modal__actions {
   display: grid;
   gap: 10px;
@@ -1410,6 +1513,35 @@ th {
   .investor-bar-row {
     grid-template-columns: minmax(92px, 120px) 1fr 48px;
   }
+
+  .trend-grid,
+  .compact-task-form {
+    grid-template-columns: 1fr;
+  }
+
+  .task-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .task-item .actions,
+  .task-item button,
+  .button-link {
+    width: 100%;
+  }
+
+  .doctor-primary-panel,
+  .patient-sidebar,
+  .doctor-tasks-panel {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .investor-tabs,
+  .monitor-tabs {
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
 }
 
 @media (max-width: 520px) {
@@ -1433,6 +1565,24 @@ th {
   .actions,
   .form {
     gap: 10px;
+  }
+
+  .actions:not(.nav) {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .actions:not(.nav) > button,
+  .actions:not(.nav) > a,
+  form > button {
+    width: 100%;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+    max-width: 100%;
   }
 
   .panel h2,

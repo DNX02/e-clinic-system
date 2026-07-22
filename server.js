@@ -1488,7 +1488,7 @@ async function handleApi(req, res, url) {
     const body = await parseBody(req);
     const name = String(body.name || "").trim();
     const username = String(body.username || "").trim();
-    const password = String(body.password || "").trim();
+    const password = validateNewPassword(body.password, "Пароль");
     const role = adminRoles[body.role] ? body.role : "observer";
     if (!name || !username || !password) return send(res, 400, { error: "ФИО, логин и пароль обязательны" });
     if (db.admins.some((admin) => admin.username === username)) return send(res, 409, { error: "Такой логин уже используется" });
@@ -1525,7 +1525,7 @@ async function handleApi(req, res, url) {
     admin.username = username;
     admin.role = role;
     if (password) {
-      admin.passwordHash = hashPassword(password);
+      admin.passwordHash = hashPassword(validateNewPassword(password, "Новый пароль"));
       invalidateUserSessions(db, "admin", admin.id);
     }
     admin.updatedAt = new Date().toISOString();
@@ -1561,6 +1561,14 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/investor/dashboard") {
     if (!requireAdmin(session)) return send(res, 403, { error: "Требуется вход администратора" });
     return send(res, 200, buildInvestorDashboard(db));
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/investor/report.csv") {
+    if (!requireAdmin(session)) return send(res, 403, { error: "Требуется вход администратора" });
+    return send(res, 200, buildInvestorReportCsv(db), {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="e-clinic-investor-${new Date().toISOString().slice(0, 10)}.csv"`
+    });
   }
 
   if (req.method === "GET" && url.pathname === "/api/monitor/dashboard") {
@@ -1673,7 +1681,8 @@ async function handleApi(req, res, url) {
   if (req.method === "POST" && url.pathname === "/api/admin/doctors") {
     if (!canMutateAdmin(session, db)) return send(res, 403, { error: "Недостаточно прав для изменения данных" });
     const body = await parseBody(req);
-    const accessKey = body.accessKey || crypto.randomBytes(9).toString("base64url");
+    if (db.doctors.some((item) => item.login === String(body.login || "").trim())) return send(res, 409, { error: "Такой логин уже используется" });
+    const accessKey = body.accessKey ? validateNewPassword(body.accessKey, "Пароль врача") : `${crypto.randomBytes(6).toString("base64url")}7a`;
     const doctor = {
       id: crypto.randomUUID(),
       fullName: body.fullName,
@@ -1686,6 +1695,8 @@ async function handleApi(req, res, url) {
       createdAt: new Date().toISOString()
     };
     db.doctors.push(doctor);
+    const actor = db.admins.find((item) => item.id === session.userId);
+    appendActivity(db, { type: "doctor_created", actorRole: "admin", actorId: session.userId, actorName: actor?.name || "", clinic: doctor.clinic, details: `Создан профиль врача: ${doctor.fullName}` });
     await writeDb(db);
     return send(res, 201, { doctor: publicDoctor(doctor), accessKey });
   }
@@ -1696,6 +1707,7 @@ async function handleApi(req, res, url) {
     const doctor = db.doctors.find((item) => item.id === id);
     if (!doctor) return send(res, 404, { error: "Врач не найден" });
     const body = await parseBody(req);
+    if (db.doctors.some((item) => item.id !== doctor.id && item.login === String(body.login || "").trim())) return send(res, 409, { error: "Такой логин уже используется" });
     Object.assign(doctor, {
       fullName: body.fullName,
       login: body.login,
@@ -1705,8 +1717,11 @@ async function handleApi(req, res, url) {
       experienceYears: Number(body.experienceYears || 0)
     });
     if (body.accessKey) {
-      doctor.accessKeyHash = hashPassword(body.accessKey);
+      doctor.accessKeyHash = hashPassword(validateNewPassword(body.accessKey, "Новый пароль врача"));
+      invalidateUserSessions(db, "doctor", doctor.id);
     }
+    const actor = db.admins.find((item) => item.id === session.userId);
+    appendActivity(db, { type: "doctor_updated", actorRole: "admin", actorId: session.userId, actorName: actor?.name || "", clinic: doctor.clinic, details: `Изменён профиль врача: ${doctor.fullName}${body.accessKey ? "; пароль сброшен" : ""}` });
     await writeDb(db);
     return send(res, 200, { doctor: publicDoctor(doctor) });
   }
@@ -1714,7 +1729,11 @@ async function handleApi(req, res, url) {
   if (req.method === "DELETE" && url.pathname.startsWith("/api/admin/doctors/")) {
     if (!canMutateAdmin(session, db)) return send(res, 403, { error: "Недостаточно прав для удаления данных" });
     const id = url.pathname.split("/").pop();
-    db.doctors = db.doctors.filter((doctor) => doctor.id !== id);
+    const doctor = db.doctors.find((item) => item.id === id);
+    db.doctors = db.doctors.filter((item) => item.id !== id);
+    invalidateUserSessions(db, "doctor", id);
+    const actor = db.admins.find((item) => item.id === session.userId);
+    appendActivity(db, { type: "doctor_deleted", actorRole: "admin", actorId: session.userId, actorName: actor?.name || "", clinic: doctor?.clinic || "", details: `Удалён профиль врача: ${doctor?.fullName || id}` });
     await writeDb(db);
     return send(res, 200, { ok: true });
   }
@@ -1859,6 +1878,7 @@ async function handleApi(req, res, url) {
       createdAt: new Date().toISOString()
     };
     db.doctorVisits.push(visit);
+    let followUpTask = null;
     if (visit.followUpDays > 0) {
       const dueAt = new Date(Date.now() + visit.followUpDays * 86400000).toISOString();
       const task = {
@@ -1873,6 +1893,7 @@ async function handleApi(req, res, url) {
         completedAt: null
       };
       db.patientTasks.push(task);
+      followUpTask = task;
     }
     const drugsCount = (visit.diabetesDrugs || []).length + (visit.hypertensionDrugs || []).length;
     appendActivity(db, {
@@ -1887,7 +1908,7 @@ async function handleApi(req, res, url) {
       details: drugsCount ? `Осмотр сохранен, назначено препаратов: ${drugsCount}` : "Осмотр сохранен без препаратов"
     });
     await writeDb(db);
-    return send(res, 201, { visit });
+    return send(res, 201, { visit, task: followUpTask });
   }
 
   if (req.method === "POST" && url.pathname === "/api/doctor/tasks") {
@@ -2250,6 +2271,24 @@ function buildInvestorDashboard(db) {
   const visitsByDate = countSelected(db.doctorVisits.map((visit) => dateKey(visit.createdAt)));
   const surveyByDate = countSelected(db.nurseSurveys.map((survey) => dateKey(survey.createdAt)));
   const diagnoses = countSelected(db.doctorVisits.map((visit) => visit.diagnosis || "Без диагноза"));
+  const cutoff30 = Date.now() - 30 * 86400000;
+  const highGlucose = db.nurseSurveys.filter((survey) => Number(survey.measurements?.glucoseLevel || 0) >= 6.1).length;
+  const highPressure = db.nurseSurveys.filter((survey) => Number(survey.measurements?.systolic || 0) >= 140 || Number(survey.measurements?.diastolic || 0) >= 90).length;
+  const clinicNames = [...new Set([
+    ...db.doctors.map((doctor) => doctor.clinic || "Не указано"),
+    ...db.nurseSurveys.map((survey) => survey.patient?.clinic || survey.clinic || "Не указано")
+  ])].sort((a, b) => a.localeCompare(b, "ru"));
+  const clinicPerformance = clinicNames.map((clinic) => {
+    const surveys = db.nurseSurveys.filter((survey) => (survey.patient?.clinic || survey.clinic || "Не указано") === clinic);
+    const surveyIds = new Set(surveys.map((survey) => survey.id));
+    return {
+      label: clinic,
+      doctors: db.doctors.filter((doctor) => (doctor.clinic || "Не указано") === clinic).length,
+      surveys: surveys.length,
+      visits: db.doctorVisits.filter((visit) => surveyIds.has(visit.surveyId)).length,
+      highRisk: surveys.filter((survey) => survey.needsDoctor).length
+    };
+  });
   return {
     generatedAt: new Date().toISOString(),
     summary: {
@@ -2260,7 +2299,11 @@ function buildInvestorDashboard(db) {
       highFindriscPercent: stats.highFindriscPercent,
       highScore2Percent: stats.highScore2Percent,
       doctorTrainingPostAverage: doctorEducation.postAverage,
-      nurseTrainingPostAverage: nurseEducation.postAverage
+      nurseTrainingPostAverage: nurseEducation.postAverage,
+      newPatients30Days: db.nurseSurveys.filter((survey) => Date.parse(survey.createdAt || "") >= cutoff30).length,
+      highGlucosePercent: Math.round((highGlucose / Math.max(1, db.nurseSurveys.length)) * 100),
+      highPressurePercent: Math.round((highPressure / Math.max(1, db.nurseSurveys.length)) * 100),
+      openFollowUps: (db.patientTasks || []).filter((task) => task.status !== "completed").length
     },
     doctors: {
       registeredByClinic: objectToSeries(countSelected(db.doctors.map((doctor) => doctor.clinic || "Не указано"))),
@@ -2273,6 +2316,7 @@ function buildInvestorDashboard(db) {
     clinical: {
       visitsByDate: objectToSeries(visitsByDate),
       diagnoses: objectToSeries(diagnoses),
+      clinicPerformance,
       risk: [
         { label: "Нужно к врачу", value: stats.needsDoctorPercent },
         { label: "FINDRISC повышен", value: stats.highFindriscPercent },
@@ -2284,6 +2328,27 @@ function buildInvestorDashboard(db) {
       nurses: nurseEducation
     }
   };
+}
+
+function buildInvestorReportCsv(db) {
+  const data = buildInvestorDashboard(db);
+  const lines = [["Показатель", "Значение"]];
+  const summaryLabels = {
+    doctorsTotal: "Врачи в системе",
+    surveysTotal: "Анкеты пациентов",
+    visitsTotal: "Осмотры врачей",
+    newPatients30Days: "Новые пациенты за 30 дней",
+    highGlucosePercent: "Повышенный сахар, %",
+    highPressurePercent: "Повышенное давление, %",
+    openFollowUps: "Открытые повторные визиты",
+    riskNeedsDoctorPercent: "Требуют врача, %",
+    doctorTrainingPostAverage: "Пост-тест врачей, %",
+    nurseTrainingPostAverage: "Пост-тест медсестер, %"
+  };
+  for (const [key, label] of Object.entries(summaryLabels)) lines.push([label, data.summary[key] ?? 0]);
+  lines.push([], ["Поликлиника", "Врачи", "Анкеты", "Осмотры", "Высокий риск"]);
+  for (const clinic of data.clinical.clinicPerformance) lines.push([clinic.label, clinic.doctors, clinic.surveys, clinic.visits, clinic.highRisk]);
+  return `\uFEFF${lines.map((row) => row.map(csvCell).join(";")).join("\n")}`;
 }
 
 function hasDoctorAction(visit) {
