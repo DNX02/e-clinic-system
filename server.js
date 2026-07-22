@@ -17,6 +17,7 @@ const DATABASE_URL = process.env.DATABASE_URL || "";
 const PG_TIMEOUT_MS = Number(process.env.PG_TIMEOUT_MS || 8000);
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const INITIAL_ADMIN_PASSWORD = process.env.INITIAL_ADMIN_PASSWORD || "";
 const ADMIN_APP_PATH = "/app-1-admin-panel";
 const DOCTOR_APP_PATH = "/app-2-doctor";
 const SURVEY_APP_PATH = "/app-3-patient-survey";
@@ -40,9 +41,7 @@ const mime = {
 };
 
 const seedAdmins = [
-  { id: "admin-main", name: "Главный администратор", username: "admin", role: "owner", password: "Admin123!" },
-  { id: "admin-view-1", name: "Администратор 2", username: "admin2", role: "observer", password: "View123!" },
-  { id: "admin-view-2", name: "Администратор 3", username: "admin3", role: "observer", password: "View123!" }
+  { id: "admin-main", name: "Главный администратор", username: "admin", role: "owner" }
 ];
 
 const adminRoles = {
@@ -352,11 +351,13 @@ const remappedNursePostQuestions = nursePostQuestions.map((question, index) => {
 });
 
 function createDefaultDb() {
+  if (!INITIAL_ADMIN_PASSWORD) {
+    throw new Error("INITIAL_ADMIN_PASSWORD is required when creating a new database");
+  }
   const now = new Date().toISOString();
-  const admins = seedAdmins.map(({ password, ...user }) => ({
+  const admins = seedAdmins.map((user) => ({
     ...user,
-    passwordHash: hashPassword(password),
-    passwordVisible: password,
+    passwordHash: hashPassword(INITIAL_ADMIN_PASSWORD),
     createdAt: now
   }));
   return {
@@ -464,12 +465,20 @@ async function readDb() {
           admin.role = seeded.role;
           changed = true;
         }
-        if (!admin.passwordVisible) {
-          admin.passwordVisible = seeded.password;
-          changed = true;
-        }
         if (!admin.createdAt) {
           admin.createdAt = new Date().toISOString();
+          changed = true;
+        }
+      }
+      for (const admin of db.admins) {
+        if (Object.hasOwn(admin, "passwordVisible")) {
+          delete admin.passwordVisible;
+          changed = true;
+        }
+      }
+      for (const doctor of db.doctors || []) {
+        if (Object.hasOwn(doctor, "accessKeyVisible")) {
+          delete doctor.accessKeyVisible;
           changed = true;
         }
       }
@@ -585,14 +594,12 @@ async function clearSession(req) {
 }
 
 function publicDoctor(doctor) {
-  const { accessKeyHash, ...safe } = doctor;
-  if (!safe.accessKeyVisible) safe.accessKeyVisible = "";
+  const { accessKeyHash, accessKeyVisible, ...safe } = doctor;
   return safe;
 }
 
 function publicAdmin(admin) {
-  const { passwordHash, ...safe } = admin;
-  if (!safe.passwordVisible) safe.passwordVisible = "";
+  const { passwordHash, passwordVisible, ...safe } = admin;
   safe.roleLabel = adminRoles[safe.role] || safe.role || "";
   return safe;
 }
@@ -1158,7 +1165,6 @@ async function handleApi(req, res, url) {
       username,
       role,
       passwordHash: hashPassword(password),
-      passwordVisible: password,
       createdAt: new Date().toISOString()
     };
     db.admins.push(admin);
@@ -1185,7 +1191,6 @@ async function handleApi(req, res, url) {
     admin.role = role;
     if (password) {
       admin.passwordHash = hashPassword(password);
-      admin.passwordVisible = password;
     }
     admin.updatedAt = new Date().toISOString();
     await writeDb(db);
@@ -1333,7 +1338,6 @@ async function handleApi(req, res, url) {
       fullName: body.fullName,
       login: body.login,
       accessKeyHash: hashPassword(accessKey),
-      accessKeyVisible: accessKey,
       passport: body.passport,
       clinic: body.clinic,
       specialty: body.specialty,
@@ -1361,7 +1365,6 @@ async function handleApi(req, res, url) {
     });
     if (body.accessKey) {
       doctor.accessKeyHash = hashPassword(body.accessKey);
-      doctor.accessKeyVisible = body.accessKey;
     }
     await writeDb(db);
     return send(res, 200, { doctor: publicDoctor(doctor) });
@@ -1417,7 +1420,6 @@ async function handleApi(req, res, url) {
     doctor.login = login;
     if (accessKey) {
       doctor.accessKeyHash = hashPassword(accessKey);
-      doctor.accessKeyVisible = accessKey;
     }
     await writeDb(db);
     return send(res, 200, { doctor: publicDoctor(doctor) });
@@ -2190,6 +2192,4 @@ createServer(async (req, res) => {
     console.log(`  Investor:     ${baseUrl}${INVESTOR_APP_PATH}`);
     console.log(`  Monitor:      ${baseUrl}${MONITOR_APP_PATH}`);
   }
-  console.log("Admin: admin / Admin123!");
-  console.log("View only: admin2 / View123!, admin3 / View123!");
 });

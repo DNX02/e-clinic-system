@@ -1793,7 +1793,7 @@ function renderAdminLogin() {
         <div class="form-row"><label>Логин</label><input name="username" autocomplete="username" required /></div>
         <div class="form-row"><label>Пароль</label><input type="password" name="password" autocomplete="current-password" required /></div>
         <button>Войти</button>
-        <p class="muted">Первый вход: admin / Admin123!</p>
+        <p class="muted">Используйте выданные вам учётные данные.</p>
       </form>
     </main>
   `);
@@ -2297,9 +2297,8 @@ function renderDoctorsAdmin() {
       <td>${escapeHtml(doctor.fullName)}</td>
       <td>${escapeHtml(doctor.login)}</td>
       <td>
-        ${doctor.accessKeyVisible
-          ? `<input readonly value="${escapeHtml(doctor.accessKeyVisible)}" />`
-          : '<span class="pill warn">Ключ не сохранен</span><div class="muted">Задайте новый ключ при редактировании или через кабинет врача.</div>'}
+        <span class="pill ok">Ключ хранится защищённо</span>
+        <div class="muted">Текущий ключ нельзя посмотреть. При необходимости задайте новый.</div>
         <form class="doctor-key-form" data-id="${doctor.id}" style="margin-top:8px">
           <div class="actions">
             <input name="accessKey" placeholder="Новый ключ" ${state.admin.canEdit ? "" : "disabled"} />
@@ -2458,7 +2457,7 @@ function renderAccessAdmin() {
       </td>
       <td><span class="pill">${escapeHtml(admin.roleLabel || admin.role)}</span></td>
       <td><code>${escapeHtml(admin.username)}</code></td>
-      <td><code>${escapeHtml(admin.passwordVisible || "Пароль не сохранен в открытом виде")}</code></td>
+      <td><span class="pill ok">Хранится защищённо</span></td>
       <td>${admin.createdAt ? new Date(admin.createdAt).toLocaleDateString("ru-RU") : ""}</td>
       <td>
         <details class="compact-admin-form">

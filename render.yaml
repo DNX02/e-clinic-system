@@ -12,3 +12,5 @@ services:
         value: require
       - key: DATABASE_URL
         sync: false
+      - key: INITIAL_ADMIN_PASSWORD
+        sync: false
