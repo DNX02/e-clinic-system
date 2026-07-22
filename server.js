@@ -2396,11 +2396,15 @@ async function serveStatic(req, res, url) {
   if (!filePath.startsWith(publicDir)) return send(res, 403, "Нет доступа");
   try {
     const content = await readFile(filePath);
-    res.writeHead(200, { "Content-Type": mime[extname(filePath)] || "application/octet-stream", ...securityHeaders() });
+    res.writeHead(200, {
+      "Content-Type": mime[extname(filePath)] || "application/octet-stream",
+      "Cache-Control": "no-cache",
+      ...securityHeaders()
+    });
     res.end(content);
   } catch {
     const content = await readFile(join(publicDir, "index.html"));
-    res.writeHead(200, { "Content-Type": mime[".html"], ...securityHeaders() });
+    res.writeHead(200, { "Content-Type": mime[".html"], "Cache-Control": "no-cache", ...securityHeaders() });
     res.end(content);
   }
 }
