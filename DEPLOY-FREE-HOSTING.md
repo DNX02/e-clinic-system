@@ -63,7 +63,10 @@ Plan: Free
 DATABASE_URL=строка_из_Neon
 PGSSLMODE=require
 NODE_ENV=production
+INITIAL_ADMIN_PASSWORD=уникальный_длинный_пароль_для_первого_входа
 ```
+
+`INITIAL_ADMIN_PASSWORD` используется только при создании новой пустой базы. Не добавляйте реальный пароль в GitHub.
 
 9. Нажмите Deploy.
 
