@@ -610,6 +610,12 @@ function clinicKey(value = "") {
   return number || text.replace(/\s+/g, "");
 }
 
+function doctorCanAccessSurvey(doctor, survey) {
+  const doctorClinic = clinicKey(doctor?.clinic);
+  const surveyClinic = clinicKey(survey?.patient?.clinic || survey?.clinic);
+  return Boolean(doctorClinic && surveyClinic && doctorClinic === surveyClinic);
+}
+
 function adminRole(session, db) {
   if (!session || session.userType !== "admin") return "";
   return db.admins.find((admin) => admin.id === session.userId)?.role || "";
@@ -1398,6 +1404,7 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/doctor/workspace") {
     if (session?.userType !== "doctor") return send(res, 403, { error: "Нет доступа" });
     const doctor = db.doctors.find((item) => item.id === session.userId);
+    if (!doctor) return send(res, 404, { error: "Врач не найден" });
     const doctorClinicKey = clinicKey(doctor?.clinic);
     return send(res, 200, {
       doctor: doctor ? publicDoctor(doctor) : null,
@@ -1453,6 +1460,8 @@ async function handleApi(req, res, url) {
     if (!doctor) return send(res, 404, { error: "Врач не найден" });
     const body = await parseBody(req);
     const survey = db.nurseSurveys.find((item) => item.id === body.surveyId);
+    if (!survey) return send(res, 404, { error: "Пациент не найден" });
+    if (!doctorCanAccessSurvey(doctor, survey)) return send(res, 403, { error: "Нет доступа к пациенту другой поликлиники" });
     appendActivity(db, {
       type: "doctor_survey_viewed",
       actorRole: "doctor",
@@ -1470,6 +1479,11 @@ async function handleApi(req, res, url) {
   if (req.method === "POST" && url.pathname === "/api/doctor/visits") {
     if (session?.userType !== "doctor") return send(res, 403, { error: "Нет доступа" });
     const body = await parseBody(req);
+    const doctor = db.doctors.find((item) => item.id === session.userId);
+    if (!doctor) return send(res, 404, { error: "Врач не найден" });
+    const survey = db.nurseSurveys.find((item) => item.id === body.surveyId);
+    if (!survey) return send(res, 404, { error: "Пациент не найден" });
+    if (!doctorCanAccessSurvey(doctor, survey)) return send(res, 403, { error: "Нет доступа к пациенту другой поликлиники" });
     const weight = Number(body.weight || 0);
     const height = Number(body.height || 0);
     const heightM = height / 100;
@@ -1499,8 +1513,6 @@ async function handleApi(req, res, url) {
       createdAt: new Date().toISOString()
     };
     db.doctorVisits.push(visit);
-    const doctor = db.doctors.find((item) => item.id === session.userId);
-    const survey = db.nurseSurveys.find((item) => item.id === visit.surveyId);
     const drugsCount = (visit.diabetesDrugs || []).length + (visit.hypertensionDrugs || []).length;
     appendActivity(db, {
       type: "doctor_visit_created",
