@@ -56,6 +56,7 @@ tar \
   --exclude='./.github' \
   -cf - -C "$staging_dir" . | tar -xf - -C "$app_dir"
 chown -R root:root "$app_dir"
+chmod 755 "$app_dir"
 systemctl restart e-clinic
 
 healthy=false
