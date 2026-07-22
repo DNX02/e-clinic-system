@@ -400,6 +400,16 @@ function createDefaultDb() {
   };
 }
 
+function createEmptyDb() {
+  return {
+    admins: [], doctors: [], nurseSurveys: [], doctorVisits: [],
+    trainingParticipants: [], trainingAttempts: [],
+    nurseTrainingParticipants: [], nurseTrainingAttempts: [],
+    patientTasks: [], appointments: [], reminderQueue: [], messageEvents: [],
+    activityEvents: [], sessions: {}, settings: {}
+  };
+}
+
 async function pgPool() {
   if (!pgPoolPromise) {
     pgPoolPromise = import("pg").then(({ Pool }) => new Pool({
@@ -595,7 +605,7 @@ async function writeDb(db) {
 
 async function readCloudDb() {
   const pool = await pgPool();
-  const db = createDefaultDb();
+  const db = createEmptyDb();
   for (const [key, table] of Object.entries(normalizedCollectionTables)) {
     const result = await pool.query(`select data from ${table} order by id`);
     db[key] = result.rows.map((row) => row.data);

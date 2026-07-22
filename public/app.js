@@ -879,7 +879,7 @@ function showDoctorLanguagePrompt(onChoose) {
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js?v=20260723mobile1").catch(() => {});
+  navigator.serviceWorker.register("/sw.js?v=20260723hotfix1").catch(() => {});
 }
 
 async function boot() {
@@ -4733,7 +4733,9 @@ function updateLifestyleRecommendationPanels() {
   });
 }
 
-boot();
+boot().catch((error) => {
+  setPage(`<main class="login"><section class="panel"><h1>Сервис временно недоступен</h1><p>${escapeHtml(error.message || "Не удалось загрузить данные")}</p><button type="button" onclick="location.reload()">Повторить</button></section></main>`);
+});
 
 
 
