@@ -1,0 +1,9 @@
+[Unit]
+Description=Deploy E-Clinic from GitHub main branch
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/eclinic-auto-deploy
+Nice=10
