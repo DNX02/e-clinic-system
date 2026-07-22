@@ -68,6 +68,12 @@ try {
   const createdSurvey = await request(doctor, "/api/doctor/surveys", { method: "POST", expected: 201, body: patient });
   await request(doctor, "/api/doctor/surveys", { method: "POST", expected: 409, body: patient });
   await request(doctor, "/api/doctor/surveys", { method: "POST", expected: 400, body: { ...patient, birthDate: "1981-01-01", systolic: 80, diastolic: 100 } });
+  await request(admin, `/api/admin/patients/${createdSurvey.survey.id}`, { method: "PUT", body: { ...patient, clinic: "Поликлиника №1", reminderConsent: true, reminderChannel: "sms" } });
+  await request(admin, "/api/admin/clinic-targets", { method: "PUT", body: { clinic: "Поликлиника №1", monthlyPatients: 10, monthlyVisits: 20, followUpCompletionPercent: 80 } });
+
+  const appointment = await request(doctor, "/api/doctor/appointments", { method: "POST", expected: 201, body: { surveyId: createdSurvey.survey.id, startsAt: "2030-05-20T09:00:00.000Z", note: "Плановый прием" } });
+  assert.equal(appointment.reminder.status, "queued");
+  await request(doctor, `/api/doctor/appointments/${appointment.appointment.id}`, { method: "PUT", body: { status: "arrived" } });
 
   const visit = await request(doctor, "/api/doctor/visits", {
     method: "POST", expected: 201,
@@ -79,14 +85,21 @@ try {
   const workspace = await request(doctor, "/api/doctor/workspace");
   assert.equal(workspace.tasks.length, 2);
   assert.equal(workspace.visits.length, 1);
+  assert.equal(workspace.appointments.length, 1);
+  const pdfResponse = await fetch(`${baseUrl}/api/doctor/patients/${createdSurvey.survey.id}/report.pdf`, { headers: { Cookie: doctor.cookie } });
+  assert.equal(pdfResponse.status, 200);
+  assert.equal(pdfResponse.headers.get("content-type"), "application/pdf");
+  assert.ok((await pdfResponse.arrayBuffer()).byteLength > 1000);
 
   const investor = await request(admin, "/api/investor/dashboard");
   assert.equal(investor.summary.newPatients30Days, 1);
   assert.ok(Array.isArray(investor.clinical.clinicPerformance));
+  assert.equal(investor.clinical.clinicPerformance[0].targets.monthlyPatients, 10);
   const report = await request(admin, "/api/investor/report.csv");
   assert.match(report, /Новые пациенты за 30 дней/);
   const dashboard = await request(admin, "/api/admin/dashboard");
   assert.ok(dashboard.activityEvents.some((event) => event.type === "patient_task_updated"));
+  assert.equal(dashboard.reminderQueue.length, 1);
 
   await request(doctor, "/api/doctor/account", { method: "PUT", expected: 401, body: { login: "test-doctor", currentAccessKey: "wrong-password", accessKey: doctorNewPassword } });
   await request(doctor, "/api/doctor/account", { method: "PUT", body: { login: "test-doctor", currentAccessKey: doctorPassword, accessKey: doctorNewPassword } });

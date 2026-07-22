@@ -5,6 +5,7 @@ import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { networkInterfaces } from "node:os";
 import crypto from "node:crypto";
+import PDFDocument from "pdfkit";
 import { buildWeeklyMonitorReportDocx, monitorReportPeriod } from "./weekly-monitor-report.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
@@ -35,6 +36,21 @@ let dbWritePromise = Promise.resolve();
 let dbReadyPromise = null;
 let pgPoolPromise = null;
 const rateLimits = new Map();
+const normalizedCollectionTables = {
+  admins: "app_admins",
+  doctors: "app_doctors",
+  nurseSurveys: "app_nurse_surveys",
+  doctorVisits: "app_doctor_visits",
+  trainingParticipants: "app_training_participants",
+  trainingAttempts: "app_training_attempts",
+  nurseTrainingParticipants: "app_nurse_training_participants",
+  nurseTrainingAttempts: "app_nurse_training_attempts",
+  patientTasks: "app_patient_tasks",
+  appointments: "app_appointments",
+  reminderQueue: "app_reminder_queue",
+  messageEvents: "app_message_events",
+  activityEvents: "app_activity_events"
+};
 
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -375,6 +391,9 @@ function createDefaultDb() {
     nurseTrainingParticipants: [],
     nurseTrainingAttempts: [],
     patientTasks: [],
+    appointments: [],
+    reminderQueue: [],
+    messageEvents: [],
     activityEvents: [],
     sessions: {},
     settings: { createdAt: now }
@@ -414,27 +433,68 @@ async function ensureFileDb() {
 
 async function ensureCloudDb() {
   const pool = await pgPool();
-  await pool.query(`
-    create table if not exists app_state (
-      id text primary key,
-      data jsonb not null,
-      updated_at timestamptz not null default now()
-    )
-  `);
-  const existing = await pool.query("select id from app_state where id = $1", ["main"]);
-  if (existing.rowCount) return;
-  let initialDb = createDefaultDb();
-  if (existsSync(dbPath)) {
-    try {
-      initialDb = JSON.parse(await readFile(dbPath, "utf8"));
-    } catch {
-      initialDb = createDefaultDb();
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query(`create table if not exists app_state (id text primary key, data jsonb not null, updated_at timestamptz not null default now())`);
+    await client.query(`create table if not exists app_meta (id text primary key, data jsonb not null, updated_at timestamptz not null default now())`);
+    await client.query(`create table if not exists app_settings (id text primary key, data jsonb not null, updated_at timestamptz not null default now())`);
+    await client.query(`create table if not exists app_sessions (id text primary key, data jsonb not null, updated_at timestamptz not null default now())`);
+    for (const table of Object.values(normalizedCollectionTables)) {
+      await client.query(`create table if not exists ${table} (id text primary key, data jsonb not null, updated_at timestamptz not null default now())`);
     }
+    const schema = await client.query("select data from app_meta where id = $1", ["schema"]);
+    if (!schema.rowCount) {
+      const legacy = await client.query("select data from app_state where id = $1", ["main"]);
+      let initialDb = legacy.rowCount ? legacy.rows[0].data : createDefaultDb();
+      if (!legacy.rowCount && existsSync(dbPath)) {
+        try {
+          initialDb = JSON.parse(await readFile(dbPath, "utf8"));
+        } catch {
+          initialDb = createDefaultDb();
+        }
+      }
+      await syncNormalizedCloudDb(client, initialDb);
+      await client.query(
+        "insert into app_state (id, data, updated_at) values ($1, $2::jsonb, now()) on conflict (id) do update set data = excluded.data, updated_at = now()",
+        ["main", JSON.stringify(initialDb)]
+      );
+      await client.query("insert into app_meta (id, data) values ($1, $2::jsonb)", ["schema", JSON.stringify({ version: 2, migratedAt: new Date().toISOString() })]);
+    }
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
   }
-  await pool.query(
-    "insert into app_state (id, data, updated_at) values ($1, $2::jsonb, now()) on conflict (id) do nothing",
-    ["main", JSON.stringify(initialDb)]
-  );
+}
+
+async function syncCloudCollection(client, table, values, dataSelector = (item) => item) {
+  const rows = (Array.isArray(values) ? values : []).filter((item) => item?.id).map((item) => ({ id: String(item.id), data: dataSelector(item) }));
+  if (rows.length) {
+    await client.query(`
+      insert into ${table} (id, data, updated_at)
+      select item.id, item.data, now()
+      from jsonb_to_recordset($1::jsonb) as item(id text, data jsonb)
+      on conflict (id) do update set data = excluded.data, updated_at = now()
+      where ${table}.data is distinct from excluded.data
+    `, [JSON.stringify(rows)]);
+    await client.query(`delete from ${table} where not (id = any($1::text[]))`, [rows.map((row) => row.id)]);
+  } else {
+    await client.query(`delete from ${table}`);
+  }
+}
+
+async function syncNormalizedCloudDb(client, db) {
+  for (const [key, table] of Object.entries(normalizedCollectionTables)) await syncCloudCollection(client, table, db[key]);
+  const sessions = Object.entries(db.sessions || {}).map(([id, data]) => ({ id, data }));
+  await syncCloudCollection(client, "app_sessions", sessions, (item) => item.data);
+  await client.query(`
+    insert into app_settings (id, data, updated_at) values ('main', $1::jsonb, now())
+    on conflict (id) do update set data = excluded.data, updated_at = now()
+    where app_settings.data is distinct from excluded.data
+  `, [JSON.stringify(db.settings || {})]);
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
@@ -454,7 +514,7 @@ async function readDb() {
     dbLoadPromise = (async () => {
       const db = DATABASE_URL ? await readCloudDb() : JSON.parse(await readFile(dbPath, "utf8"));
       let changed = false;
-      for (const key of ["trainingParticipants", "trainingAttempts", "nurseTrainingParticipants", "nurseTrainingAttempts", "patientTasks", "activityEvents"]) {
+      for (const key of ["trainingParticipants", "trainingAttempts", "nurseTrainingParticipants", "nurseTrainingAttempts", "patientTasks", "appointments", "reminderQueue", "messageEvents", "activityEvents"]) {
         if (!Array.isArray(db[key])) {
           db[key] = [];
           changed = true;
@@ -504,10 +564,21 @@ async function writeDb(db) {
   if (DATABASE_URL) {
     const writeTask = dbWritePromise.catch(() => {}).then(async () => {
       const pool = await pgPool();
-      await pool.query(
-        "update app_state set data = $2::jsonb, updated_at = now() where id = $1",
-        ["main", body]
-      );
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        await syncNormalizedCloudDb(client, db);
+        await client.query(
+          "insert into app_state (id, data, updated_at) values ($1, $2::jsonb, now()) on conflict (id) do update set data = excluded.data, updated_at = now()",
+          ["main", body]
+        );
+        await client.query("commit");
+      } catch (error) {
+        await client.query("rollback").catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
     });
     dbWritePromise = writeTask;
     await writeTask;
@@ -524,9 +595,16 @@ async function writeDb(db) {
 
 async function readCloudDb() {
   const pool = await pgPool();
-  const result = await pool.query("select data from app_state where id = $1", ["main"]);
-  if (!result.rowCount) return createDefaultDb();
-  return result.rows[0].data;
+  const db = createDefaultDb();
+  for (const [key, table] of Object.entries(normalizedCollectionTables)) {
+    const result = await pool.query(`select data from ${table} order by id`);
+    db[key] = result.rows.map((row) => row.data);
+  }
+  const sessions = await pool.query("select id, data from app_sessions");
+  db.sessions = Object.fromEntries(sessions.rows.map((row) => [row.id, row.data]));
+  const settings = await pool.query("select data from app_settings where id = 'main'");
+  db.settings = settings.rowCount ? settings.rows[0].data : {};
+  return db;
 }
 
 async function databaseHealth() {
@@ -950,6 +1028,60 @@ function findDuplicateSurvey(db, input) {
     clinicKey(survey.patient?.clinic || survey.clinic) === clinic &&
     normalizePatientIdentity(survey.patient) === identity
   );
+}
+
+function patientReportPdf(survey, visits, tasks) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    const doc = new PDFDocument({ margin: 46, size: "A4", info: { Title: `Медицинский отчет: ${patientNameFromSurvey(survey)}` } });
+    const fontCandidates = ["C:/Windows/Fonts/arial.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"];
+    const font = fontCandidates.find(existsSync);
+    if (font) doc.font(font);
+    doc.on("data", (chunk) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+    const line = (label, value) => doc.fontSize(10).text(`${label}: ${value ?? "—"}`, { paragraphGap: 4 });
+    doc.fontSize(18).text("Медицинский отчет пациента", { align: "center" }).moveDown();
+    line("Пациент", patientNameFromSurvey(survey));
+    line("Дата рождения", survey.patient?.birthDate);
+    line("Поликлиника", survey.patient?.clinic || survey.clinic);
+    line("Телефон", survey.patient?.phone);
+    doc.moveDown().fontSize(14).text("Последняя анкета").moveDown(0.4);
+    line("Артериальное давление", `${survey.measurements?.systolic || "—"}/${survey.measurements?.diastolic || "—"}`);
+    line("Уровень сахара", survey.measurements?.glucoseLevel);
+    line("FINDRISC", `${survey.findrisc?.score ?? "—"} — ${survey.findrisc?.level || "—"}`);
+    line("Сердечно-сосудистый риск", `${survey.score2?.percent ?? "—"}% — ${survey.score2?.level || "—"}`);
+    doc.moveDown().fontSize(14).text("Осмотры врача").moveDown(0.4);
+    if (!visits.length) doc.fontSize(10).text("Осмотров пока нет.");
+    for (const visit of visits.slice(-20).reverse()) {
+      doc.fontSize(11).text(new Date(visit.createdAt).toLocaleDateString("ru-RU"), { continued: true }).text(` — ${visit.diagnosis || "Диагноз не указан"}`);
+      if (visit.notes) doc.fontSize(9).fillColor("#444").text(visit.notes).fillColor("black");
+    }
+    doc.moveDown().fontSize(14).text("Повторные визиты").moveDown(0.4);
+    if (!tasks.length) doc.fontSize(10).text("Назначенных повторных визитов нет.");
+    for (const task of tasks.slice(-20).reverse()) line(new Date(task.dueAt).toLocaleDateString("ru-RU"), task.status === "completed" ? "Выполнено" : task.title || "Запланировано");
+    doc.moveDown().fontSize(8).fillColor("#666").text(`Сформировано ${new Date().toLocaleString("ru-RU")}. Документ предназначен для медицинского работника.`);
+    doc.end();
+  });
+}
+
+function validatePatientProfileInput(body, existing = {}) {
+  const birthDate = cleanText(body.birthDate ?? existing.birthDate, "Дата рождения", { required: true, max: 10 });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || !Number.isFinite(Date.parse(`${birthDate}T00:00:00Z`)) || birthDate > new Date().toISOString().slice(0, 10)) invalidInput("Дата рождения: недопустимое значение");
+  return {
+    ...existing,
+    lastName: cleanText(body.lastName ?? existing.lastName, "Фамилия", { required: true, max: 100 }),
+    firstName: cleanText(body.firstName ?? existing.firstName, "Имя", { required: true, max: 100 }),
+    middleName: cleanText(body.middleName ?? existing.middleName, "Отчество", { max: 100 }),
+    birthDate,
+    phone: cleanPhone(body.phone ?? existing.phone),
+    address: cleanText(body.address ?? existing.address, "Адрес", { max: 300 }),
+    clinic: cleanText(body.clinic ?? existing.clinic, "Поликлиника", { required: true, max: 100 }),
+    sex: cleanEnum(body.sex ?? existing.sex, "Пол", ["male", "female"]),
+    reminderConsent: body.reminderConsent === true || body.reminderConsent === "true",
+    reminderChannel: cleanEnum(body.reminderChannel ?? existing.reminderChannel ?? "none", "Канал напоминаний", ["none", "sms", "telegram"], "none"),
+    telegramChatId: cleanText(body.telegramChatId ?? existing.telegramChatId, "Telegram Chat ID", { max: 50 })
+  };
 }
 
 function validateNewPassword(value, label = "Новый пароль") {
@@ -1456,6 +1588,10 @@ async function handleApi(req, res, url) {
       nurseTrainingAttempts: db.nurseTrainingAttempts,
       nurseTrainingStats: buildNurseTrainingStats(db),
       patientTasks: db.patientTasks || [],
+      appointments: db.appointments || [],
+      reminderQueue: db.reminderQueue || [],
+      messageEvents: db.messageEvents || [],
+      clinicTargets: db.settings?.clinicTargets || {},
       activityEvents: [...(db.activityEvents || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 1000)
     });
   }
@@ -1481,6 +1617,68 @@ async function handleApi(req, res, url) {
     });
     await writeDb(db);
     return send(res, 200, { ok: true, currentSessionEnded: true }, { "Set-Cookie": sessionCookie(req, "", 0) });
+  }
+
+  if (req.method === "PUT" && url.pathname === "/api/admin/clinic-targets") {
+    if (!canMutateAdmin(session, db)) return send(res, 403, { error: "Недостаточно прав" });
+    const body = await parseBody(req);
+    const clinic = cleanText(body.clinic, "Поликлиника", { required: true, max: 100 });
+    db.settings.clinicTargets ||= {};
+    db.settings.clinicTargets[clinic] = {
+      monthlyPatients: Math.max(0, Number(body.monthlyPatients || 0)),
+      monthlyVisits: Math.max(0, Number(body.monthlyVisits || 0)),
+      followUpCompletionPercent: Math.min(100, Math.max(0, Number(body.followUpCompletionPercent || 0)))
+    };
+    await writeDb(db);
+    return send(res, 200, { targets: db.settings.clinicTargets });
+  }
+
+  if (req.method === "PUT" && url.pathname.startsWith("/api/admin/patients/")) {
+    if (!canMutateAdmin(session, db)) return send(res, 403, { error: "Недостаточно прав для изменения данных" });
+    const id = decodeURIComponent(url.pathname.split("/").pop());
+    const survey = db.nurseSurveys.find((item) => item.id === id);
+    if (!survey) return send(res, 404, { error: "Пациент не найден" });
+    const body = await parseBody(req);
+    survey.patient = validatePatientProfileInput(body, survey.patient || {});
+    survey.updatedAt = new Date().toISOString();
+    const actor = db.admins.find((item) => item.id === session.userId);
+    appendActivity(db, { type: "patient_updated", actorRole: "admin", actorId: session.userId, actorName: actor?.name || "", clinic: survey.patient.clinic, surveyId: survey.id, patientName: patientNameFromSurvey(survey), details: "Обновлена карточка пациента" });
+    await writeDb(db);
+    return send(res, 200, { survey });
+  }
+
+  if (req.method === "POST" && url.pathname.endsWith("/archive") && url.pathname.startsWith("/api/admin/patients/")) {
+    if (!canMutateAdmin(session, db)) return send(res, 403, { error: "Недостаточно прав для изменения данных" });
+    const id = decodeURIComponent(url.pathname.split("/").at(-2));
+    const survey = db.nurseSurveys.find((item) => item.id === id);
+    if (!survey) return send(res, 404, { error: "Пациент не найден" });
+    const body = await parseBody(req);
+    survey.archivedAt = body.archived ? new Date().toISOString() : null;
+    const actor = db.admins.find((item) => item.id === session.userId);
+    appendActivity(db, { type: survey.archivedAt ? "patient_archived" : "patient_restored", actorRole: "admin", actorId: session.userId, actorName: actor?.name || "", clinic: survey.patient?.clinic || "", surveyId: survey.id, patientName: patientNameFromSurvey(survey), details: survey.archivedAt ? "Карточка пациента архивирована" : "Карточка пациента восстановлена" });
+    await writeDb(db);
+    return send(res, 200, { survey });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/patients/merge") {
+    if (!canMutateAdmin(session, db)) return send(res, 403, { error: "Недостаточно прав для изменения данных" });
+    const body = await parseBody(req);
+    const sourceId = cleanText(body.sourceId, "Дубликат", { required: true, max: 100 });
+    const targetId = cleanText(body.targetId, "Основная карточка", { required: true, max: 100 });
+    if (sourceId === targetId) return send(res, 400, { error: "Выберите две разные карточки" });
+    const source = db.nurseSurveys.find((item) => item.id === sourceId);
+    const target = db.nurseSurveys.find((item) => item.id === targetId);
+    if (!source || !target) return send(res, 404, { error: "Одна из карточек не найдена" });
+    if (clinicKey(source.patient?.clinic) !== clinicKey(target.patient?.clinic)) return send(res, 400, { error: "Объединять можно только пациентов одной поликлиники" });
+    for (const collection of [db.doctorVisits, db.patientTasks, db.appointments, db.reminderQueue]) {
+      for (const item of collection || []) if (item.surveyId === sourceId) item.surveyId = targetId;
+    }
+    source.archivedAt = new Date().toISOString();
+    source.mergedIntoId = targetId;
+    const actor = db.admins.find((item) => item.id === session.userId);
+    appendActivity(db, { type: "patient_merged", actorRole: "admin", actorId: session.userId, actorName: actor?.name || "", clinic: target.patient?.clinic || "", surveyId: targetId, patientName: patientNameFromSurvey(target), details: `Объединена карточка-дубликат ${sourceId}` });
+    await writeDb(db);
+    return send(res, 200, { source, target });
   }
 
   if (req.method === "POST" && url.pathname === "/api/admin/admins") {
@@ -1764,11 +1962,56 @@ async function handleApi(req, res, url) {
     const doctorClinicKey = clinicKey(doctor?.clinic);
     return send(res, 200, {
       doctor: doctor ? publicDoctor(doctor) : null,
-      surveys: db.nurseSurveys.filter((survey) => clinicKey(survey.patient?.clinic || survey.clinic) === doctorClinicKey),
+      surveys: db.nurseSurveys.filter((survey) => !survey.archivedAt && clinicKey(survey.patient?.clinic || survey.clinic) === doctorClinicKey),
       visits: db.doctorVisits.filter((visit) => visit.doctorId === session.userId),
       tasks: (db.patientTasks || []).filter((task) => task.doctorId === session.userId),
+      appointments: (db.appointments || []).filter((item) => item.doctorId === session.userId),
       dictionaries: { diabetesDrugs, hypertensionDrugs }
-    });
+  });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/doctor/appointments") {
+    if (session?.userType !== "doctor") return send(res, 403, { error: "Нет доступа" });
+    const doctor = db.doctors.find((item) => item.id === session.userId);
+    const body = await parseBody(req);
+    const survey = db.nurseSurveys.find((item) => item.id === body.surveyId);
+    if (!doctor || !survey || survey.archivedAt) return send(res, 404, { error: "Пациент не найден" });
+    if (!doctorCanAccessSurvey(doctor, survey)) return send(res, 403, { error: "Нет доступа к пациенту другой поликлиники" });
+    const startsAt = new Date(body.startsAt);
+    if (!Number.isFinite(startsAt.getTime()) || startsAt <= new Date()) return send(res, 400, { error: "Укажите будущую дату и время" });
+    const appointment = { id: crypto.randomUUID(), surveyId: survey.id, doctorId: doctor.id, startsAt: startsAt.toISOString(), status: "scheduled", note: cleanText(body.note, "Комментарий", { max: 500 }), createdAt: new Date().toISOString() };
+    db.appointments.push(appointment);
+    const patient = survey.patient || {};
+    const channel = patient.reminderConsent ? patient.reminderChannel : "none";
+    const recipient = channel === "telegram" ? patient.telegramChatId : patient.phone;
+    const reminder = { id: crypto.randomUUID(), surveyId: survey.id, appointmentId: appointment.id, channel, recipientMasked: recipient ? `***${String(recipient).slice(-4)}` : "", message: `Напоминание о приеме ${startsAt.toLocaleString("ru-RU")}`, scheduledAt: new Date(startsAt.getTime() - 86400000).toISOString(), status: channel !== "none" && recipient ? "queued" : "blocked", reason: channel !== "none" && recipient ? "Ожидает подключения поставщика сообщений" : "Нет согласия или контакта", createdAt: new Date().toISOString() };
+    db.reminderQueue.push(reminder);
+    appendActivity(db, { type: "appointment_created", actorRole: "doctor", actorId: doctor.id, actorName: doctor.fullName, clinic: doctor.clinic, surveyId: survey.id, patientName: patientNameFromSurvey(survey), details: `Прием назначен на ${startsAt.toISOString()}` });
+    await writeDb(db);
+    return send(res, 201, { appointment, reminder });
+  }
+
+  if (req.method === "PUT" && url.pathname.startsWith("/api/doctor/appointments/")) {
+    if (session?.userType !== "doctor") return send(res, 403, { error: "Нет доступа" });
+    const id = decodeURIComponent(url.pathname.split("/").pop());
+    const appointment = db.appointments.find((item) => item.id === id && item.doctorId === session.userId);
+    if (!appointment) return send(res, 404, { error: "Запись не найдена" });
+    const body = await parseBody(req);
+    if (!["scheduled", "arrived", "completed", "no_show", "cancelled"].includes(body.status)) return send(res, 400, { error: "Некорректный статус" });
+    appointment.status = body.status;
+    appointment.updatedAt = new Date().toISOString();
+    await writeDb(db);
+    return send(res, 200, { appointment });
+  }
+
+  if (req.method === "GET" && url.pathname.startsWith("/api/doctor/patients/") && url.pathname.endsWith("/report.pdf")) {
+    if (session?.userType !== "doctor") return send(res, 403, { error: "Нет доступа" });
+    const id = decodeURIComponent(url.pathname.split("/").at(-2));
+    const doctor = db.doctors.find((item) => item.id === session.userId);
+    const survey = db.nurseSurveys.find((item) => item.id === id);
+    if (!doctor || !survey || !doctorCanAccessSurvey(doctor, survey)) return send(res, 404, { error: "Пациент не найден" });
+    const pdf = await patientReportPdf(survey, db.doctorVisits.filter((item) => item.surveyId === id), db.patientTasks.filter((item) => item.surveyId === id));
+    return send(res, 200, pdf, { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="patient-${id}.pdf"` });
   }
 
   if (req.method === "PUT" && url.pathname === "/api/doctor/account") {
@@ -2281,12 +2524,20 @@ function buildInvestorDashboard(db) {
   const clinicPerformance = clinicNames.map((clinic) => {
     const surveys = db.nurseSurveys.filter((survey) => (survey.patient?.clinic || survey.clinic || "Не указано") === clinic);
     const surveyIds = new Set(surveys.map((survey) => survey.id));
+    const visits = db.doctorVisits.filter((visit) => surveyIds.has(visit.surveyId));
+    const tasks = (db.patientTasks || []).filter((task) => surveyIds.has(task.surveyId));
+    const target = db.settings?.clinicTargets?.[clinic] || {};
+    const completedTasks = tasks.filter((task) => task.status === "completed").length;
     return {
       label: clinic,
       doctors: db.doctors.filter((doctor) => (doctor.clinic || "Не указано") === clinic).length,
       surveys: surveys.length,
-      visits: db.doctorVisits.filter((visit) => surveyIds.has(visit.surveyId)).length,
-      highRisk: surveys.filter((survey) => survey.needsDoctor).length
+      visits: visits.length,
+      highRisk: surveys.filter((survey) => survey.needsDoctor).length,
+      targets: target,
+      patientTargetPercent: target.monthlyPatients ? Math.min(100, Math.round((surveys.length / target.monthlyPatients) * 100)) : null,
+      visitTargetPercent: target.monthlyVisits ? Math.min(100, Math.round((visits.length / target.monthlyVisits) * 100)) : null,
+      followUpCompletionPercent: tasks.length ? Math.round((completedTasks / tasks.length) * 100) : 0
     };
   });
   return {
