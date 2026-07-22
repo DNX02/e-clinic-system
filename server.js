@@ -1218,10 +1218,12 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/monitor/dashboard") {
+    if (!requireAdmin(session)) return send(res, 403, { error: "Требуется вход администратора" });
     return send(res, 200, buildOperationsMonitor(db, Object.fromEntries(url.searchParams)));
   }
 
   if (req.method === "GET" && url.pathname === "/api/monitor/report.csv") {
+    if (!requireAdmin(session)) return send(res, 403, { error: "Требуется вход администратора" });
     const report = buildOperationsReportCsv(db, Object.fromEntries(url.searchParams));
     return send(res, 200, report, {
       "Content-Type": "text/csv; charset=utf-8",
@@ -1230,6 +1232,7 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/monitor/weekly-report.docx") {
+    if (!requireAdmin(session)) return send(res, 403, { error: "Требуется вход администратора" });
     const period = monitorReportPeriod(Object.fromEntries(url.searchParams));
     const report = await buildWeeklyMonitorReportDocx(db, period, {
       buildRows: buildOperationsMonitorRows,
