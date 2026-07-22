@@ -308,6 +308,7 @@ const TAJIK_TEXT = {
   "Окружность живота/талия, см": "Даври шикам/миён, см",
   "Окружность голени, см": "Даври соқ, см",
   "Расчётный вес Rabito, кг": "Вазни ҳисобии Rabito, кг",
+  "Уровень сахара": "Сатҳи қанд",
   "Отправить анкету": "Фиристодани анкета",
   "Синхронизировать": "Ҳамоҳангсозӣ",
   "Интернет недоступен или сервер не ответил. Анкета сохранена на этом устройстве и будет отправлена через кнопку синхронизации.": "Интернет дастрас нест ё сервер ҷавоб надод. Анкета дар ин дастгоҳ нигоҳ дошта шуд ва тавассути тугмаи ҳамоҳангсозӣ фиристода мешавад.",
@@ -870,7 +871,7 @@ function showDoctorLanguagePrompt(onChoose) {
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js").catch(() => {});
+  navigator.serviceWorker.register("/sw.js?v=20260722sugar1").catch(() => {});
 }
 
 async function boot() {
@@ -4098,6 +4099,7 @@ function doctorPatientSurveyForm() {
         ${input(t("Окружность живота/талия, см"), "rabitoWaist", true, "number")}
         ${input(t("Окружность голени, см"), "calf", true, "number")}
         <div class="form-row"><label>${escapeHtml(t("Расчётный вес Rabito, кг"))}</label><input name="rabitoWeightPreview" inputmode="decimal" readonly /></div>
+        ${input(t("Уровень сахара"), "glucoseLevel", true, "number")}
       </section>
       <div class="actions">
         <button type="submit">${escapeHtml(t("Отправить анкету"))}</button>
@@ -4133,6 +4135,7 @@ function doctorSurveySummary(survey) {
           <div class="muted">FINDRISC: ${survey.findrisc?.score ?? "-"} (${escapeHtml(translateDoctorDynamicText(survey.findrisc?.level || "-"))})</div>
           <div class="muted">${escapeHtml(t("Сердечно-сосудистый риск"))}: ${survey.score2?.percent ?? "-"}% (${escapeHtml(translateDoctorDynamicText(survey.score2?.level || "-"))})</div>
           <div class="muted">${escapeHtml(t("Расчетный вес Rabito"))}: ${measurements.rabitoWeight || "-"} кг</div>
+          <div class="muted">${escapeHtml(t("Уровень сахара"))}: ${measurements.glucoseLevel || "-"}</div>
         </div>
       </div>
       ${survey.needsDoctor ? `<div class="notice warn"><strong>${escapeHtml(t("Причины направления"))}</strong><ul>${reasons}</ul></div>` : ""}
@@ -4377,7 +4380,8 @@ function bindDoctorPatientSurvey() {
           arm: Number(data.arm || 0),
           rabitoWaist: Number(data.rabitoWaist || 0),
           calf: Number(data.calf || 0),
-          rabitoWeight: Number(form.elements.rabitoWeightPreview.value || 0)
+          rabitoWeight: Number(form.elements.rabitoWeightPreview.value || 0),
+          glucoseLevel: Number(data.glucoseLevel || 0)
         },
         findrisc: { score: "-", level: "-" },
         score2: { percent: "-", level: "-" },

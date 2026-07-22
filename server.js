@@ -795,7 +795,8 @@ function buildNurseSurvey(body) {
       waist: Number(body.rabitoWaist || body.waist || 0),
       rabitoWaist: Number(body.rabitoWaist || body.waist || 0),
       calf: Number(body.calf || 0),
-      rabitoWeight
+      rabitoWeight,
+      glucoseLevel: Number(body.glucoseLevel || 0)
     },
     answers: body,
     findrisc,
