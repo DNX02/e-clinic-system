@@ -45,5 +45,8 @@ jobs:
             bash -n "$script"
           done
 
+      - name: Test product workflows
+        run: npm run test:product
+
       - name: Scan tracked files for secrets
         run: node scripts/check-secrets.mjs

@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { extname, join, normalize } from "node:path";
+import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { networkInterfaces } from "node:os";
 import crypto from "node:crypto";
@@ -9,7 +9,7 @@ import { buildWeeklyMonitorReportDocx, monitorReportPeriod } from "./weekly-moni
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "public");
-const dataDir = join(__dirname, "data");
+const dataDir = process.env.DATA_DIR ? resolve(process.env.DATA_DIR) : join(__dirname, "data");
 const dbPath = join(dataDir, "db.json");
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -374,6 +374,7 @@ function createDefaultDb() {
     trainingAttempts: [],
     nurseTrainingParticipants: [],
     nurseTrainingAttempts: [],
+    patientTasks: [],
     activityEvents: [],
     sessions: {},
     settings: { createdAt: now }
@@ -453,7 +454,7 @@ async function readDb() {
     dbLoadPromise = (async () => {
       const db = DATABASE_URL ? await readCloudDb() : JSON.parse(await readFile(dbPath, "utf8"));
       let changed = false;
-      for (const key of ["trainingParticipants", "trainingAttempts", "nurseTrainingParticipants", "nurseTrainingAttempts"]) {
+      for (const key of ["trainingParticipants", "trainingAttempts", "nurseTrainingParticipants", "nurseTrainingAttempts", "patientTasks", "activityEvents"]) {
         if (!Array.isArray(db[key])) {
           db[key] = [];
           changed = true;
@@ -920,18 +921,56 @@ function cleanTextArray(value, label, { allowed = null, maxItems = 20, maxLength
   });
 }
 
+function cleanPhone(value) {
+  const phone = cleanText(value, "Телефон", { max: 30 });
+  if (!phone) return "";
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 7 || digits.length > 15) invalidInput("Телефон: укажите от 7 до 15 цифр");
+  if (!/^[+\d][\d\s()+-]*$/.test(phone)) invalidInput("Телефон: недопустимые символы");
+  return phone;
+}
+
+function validateBloodPressure(systolic, diastolic) {
+  if (!systolic && !diastolic) return;
+  if (systolic < 70 || systolic > 260) invalidInput("Систолическое давление: допустимый диапазон 70–260");
+  if (diastolic < 40 || diastolic > 160) invalidInput("Диастолическое давление: допустимый диапазон 40–160");
+  if (systolic <= diastolic) invalidInput("Артериальное давление: верхнее значение должно быть больше нижнего");
+}
+
+function normalizePatientIdentity(patient = {}) {
+  return [patient.lastName, patient.firstName, patient.middleName, patient.birthDate]
+    .map((value) => String(value || "").trim().toLowerCase().replace(/\s+/g, " "))
+    .join("|");
+}
+
+function findDuplicateSurvey(db, input) {
+  const identity = normalizePatientIdentity(input);
+  const clinic = clinicKey(input.clinic);
+  return (db.nurseSurveys || []).find((survey) =>
+    clinicKey(survey.patient?.clinic || survey.clinic) === clinic &&
+    normalizePatientIdentity(survey.patient) === identity
+  );
+}
+
+function validateNewPassword(value, label = "Новый пароль") {
+  const password = cleanText(value, label, { required: true, max: 200 });
+  if (password.length < 10) invalidInput(`${label}: минимум 10 символов`);
+  if (!/[A-Za-zА-Яа-яЁё]/.test(password) || !/\d/.test(password)) invalidInput(`${label}: добавьте буквы и цифры`);
+  return password;
+}
+
 function validateSurveyInput(body, clinicOverride = "") {
   const birthDate = cleanText(body.birthDate, "Дата рождения", { required: true, max: 10 });
   const parsedBirthDate = Date.parse(`${birthDate}T00:00:00Z`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || !Number.isFinite(parsedBirthDate) || parsedBirthDate > Date.now() || birthDate < "1900-01-01") {
     invalidInput("Дата рождения: недопустимое значение");
   }
-  return {
+  const input = {
     lastName: cleanText(body.lastName, "Фамилия", { required: true, max: 100 }),
     firstName: cleanText(body.firstName, "Имя", { required: true, max: 100 }),
     middleName: cleanText(body.middleName, "Отчество", { max: 100 }),
     birthDate,
-    phone: cleanText(body.phone, "Телефон", { max: 50 }),
+    phone: cleanPhone(body.phone),
     address: cleanText(body.address, "Адрес", { max: 300 }),
     clinic: cleanText(clinicOverride || body.clinic, "Поликлиника", { required: true, max: 100 }),
     nurseName: cleanText(body.nurseName || body.nurseFullName, "ФИО медсестры", { max: 100 }),
@@ -952,12 +991,15 @@ function validateSurveyInput(body, clinicOverride = "") {
     familyDiabetes: cleanEnum(body.familyDiabetes, "Диабет у родственников", ["none", "second", "first"]),
     smoker: cleanEnum(body.smoker, "Курение", ["yes", "no"])
   };
+  validateBloodPressure(input.systolic, input.diastolic);
+  if (input.glucoseLevel && (input.glucoseLevel < 1.5 || input.glucoseLevel > 35)) invalidInput("Уровень сахара: допустимый диапазон 1,5–35");
+  return input;
 }
 
 function validateVisitInput(body) {
   const laboratoryTests = Array.isArray(body.laboratoryTests) ? body.laboratoryTests : [];
   if (laboratoryTests.length > 20) invalidInput("Лабораторные анализы: слишком много значений");
-  return {
+  const input = {
     surveyId: cleanText(body.surveyId, "Пациент", { required: true, max: 100 }),
     weight: cleanNumber(body.weight, "Вес", { min: 0, max: 500 }),
     height: cleanNumber(body.height, "Рост", { min: 0, max: 250 }),
@@ -982,6 +1024,9 @@ function validateVisitInput(body) {
     hypertensionDrugs: cleanTextArray(body.hypertensionDrugs, "Препараты от давления", { allowed: hypertensionDrugs, maxItems: 20 }),
     lifestyleRecommendations: cleanTextArray(body.lifestyleRecommendations, "Рекомендации", { allowed: ["diabetesDiet", "physicalActivity"], maxItems: 2 })
   };
+  validateBloodPressure(input.systolic, input.diastolic);
+  if (input.glucose && (input.glucose < 1.5 || input.glucose > 35)) invalidInput("Уровень сахара: допустимый диапазон 1,5–35");
+  return input;
 }
 
 function calculateScore2Lite(input) {
@@ -1409,8 +1454,33 @@ async function handleApi(req, res, url) {
       trainingStats: buildTrainingStats(db),
       nurseTrainingParticipants: db.nurseTrainingParticipants.map(publicNurseParticipant),
       nurseTrainingAttempts: db.nurseTrainingAttempts,
-      nurseTrainingStats: buildNurseTrainingStats(db)
+      nurseTrainingStats: buildNurseTrainingStats(db),
+      patientTasks: db.patientTasks || [],
+      activityEvents: [...(db.activityEvents || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 1000)
     });
+  }
+
+  if (req.method === "PUT" && url.pathname === "/api/admin/account") {
+    if (!requireAdmin(session)) return send(res, 403, { error: "Нет доступа" });
+    const admin = db.admins.find((item) => item.id === session.userId);
+    if (!admin) return send(res, 404, { error: "Администратор не найден" });
+    const body = await parseBody(req);
+    const currentPassword = cleanText(body.currentPassword, "Текущий пароль", { required: true, max: 200 });
+    if (!verifyPassword(currentPassword, admin.passwordHash)) return send(res, 401, { error: "Текущий пароль указан неверно" });
+    const newPassword = validateNewPassword(body.newPassword);
+    if (verifyPassword(newPassword, admin.passwordHash)) return send(res, 400, { error: "Новый пароль должен отличаться от текущего" });
+    admin.passwordHash = hashPassword(newPassword);
+    admin.updatedAt = new Date().toISOString();
+    invalidateUserSessions(db, "admin", admin.id);
+    appendActivity(db, {
+      type: "admin_password_changed",
+      actorRole: "admin",
+      actorId: admin.id,
+      actorName: admin.name,
+      details: "Администратор изменил свой пароль; старые сеансы завершены"
+    });
+    await writeDb(db);
+    return send(res, 200, { ok: true, currentSessionEnded: true }, { "Set-Cookie": sessionCookie(req, "", 0) });
   }
 
   if (req.method === "POST" && url.pathname === "/api/admin/admins") {
@@ -1418,7 +1488,7 @@ async function handleApi(req, res, url) {
     const body = await parseBody(req);
     const name = String(body.name || "").trim();
     const username = String(body.username || "").trim();
-    const password = String(body.password || "").trim();
+    const password = validateNewPassword(body.password, "Пароль");
     const role = adminRoles[body.role] ? body.role : "observer";
     if (!name || !username || !password) return send(res, 400, { error: "ФИО, логин и пароль обязательны" });
     if (db.admins.some((admin) => admin.username === username)) return send(res, 409, { error: "Такой логин уже используется" });
@@ -1431,6 +1501,8 @@ async function handleApi(req, res, url) {
       createdAt: new Date().toISOString()
     };
     db.admins.push(admin);
+    const actor = db.admins.find((item) => item.id === session.userId);
+    appendActivity(db, { type: "admin_created", actorRole: "admin", actorId: session.userId, actorName: actor?.name || "", details: `Создан администратор: ${admin.name}; роль: ${admin.role}` });
     await writeDb(db);
     return send(res, 201, { admin: publicAdmin(admin) });
   }
@@ -1453,10 +1525,12 @@ async function handleApi(req, res, url) {
     admin.username = username;
     admin.role = role;
     if (password) {
-      admin.passwordHash = hashPassword(password);
+      admin.passwordHash = hashPassword(validateNewPassword(password, "Новый пароль"));
       invalidateUserSessions(db, "admin", admin.id);
     }
     admin.updatedAt = new Date().toISOString();
+    const actor = db.admins.find((item) => item.id === session.userId);
+    appendActivity(db, { type: "admin_updated", actorRole: "admin", actorId: session.userId, actorName: actor?.name || "", details: `Изменён администратор: ${admin.name}; роль: ${admin.role}${password ? "; пароль сброшен" : ""}` });
     await writeDb(db);
     return send(res, 200, { admin: publicAdmin(admin), currentSessionEnded: Boolean(password && admin.id === session.userId) });
   }
@@ -1470,6 +1544,8 @@ async function handleApi(req, res, url) {
     const ownerCount = db.admins.filter((item) => item.role === "owner").length;
     if (admin.role === "owner" && ownerCount <= 1) return send(res, 400, { error: "Нельзя удалить последнего главного администратора" });
     db.admins = db.admins.filter((item) => item.id !== id);
+    const actor = db.admins.find((item) => item.id === session.userId);
+    appendActivity(db, { type: "admin_deleted", actorRole: "admin", actorId: session.userId, actorName: actor?.name || "", details: `Удалён администратор: ${admin.name}` });
     await writeDb(db);
     return send(res, 200, { ok: true });
   }
@@ -1485,6 +1561,14 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/investor/dashboard") {
     if (!requireAdmin(session)) return send(res, 403, { error: "Требуется вход администратора" });
     return send(res, 200, buildInvestorDashboard(db));
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/investor/report.csv") {
+    if (!requireAdmin(session)) return send(res, 403, { error: "Требуется вход администратора" });
+    return send(res, 200, buildInvestorReportCsv(db), {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="e-clinic-investor-${new Date().toISOString().slice(0, 10)}.csv"`
+    });
   }
 
   if (req.method === "GET" && url.pathname === "/api/monitor/dashboard") {
@@ -1597,7 +1681,8 @@ async function handleApi(req, res, url) {
   if (req.method === "POST" && url.pathname === "/api/admin/doctors") {
     if (!canMutateAdmin(session, db)) return send(res, 403, { error: "Недостаточно прав для изменения данных" });
     const body = await parseBody(req);
-    const accessKey = body.accessKey || crypto.randomBytes(9).toString("base64url");
+    if (db.doctors.some((item) => item.login === String(body.login || "").trim())) return send(res, 409, { error: "Такой логин уже используется" });
+    const accessKey = body.accessKey ? validateNewPassword(body.accessKey, "Пароль врача") : `${crypto.randomBytes(6).toString("base64url")}7a`;
     const doctor = {
       id: crypto.randomUUID(),
       fullName: body.fullName,
@@ -1610,6 +1695,8 @@ async function handleApi(req, res, url) {
       createdAt: new Date().toISOString()
     };
     db.doctors.push(doctor);
+    const actor = db.admins.find((item) => item.id === session.userId);
+    appendActivity(db, { type: "doctor_created", actorRole: "admin", actorId: session.userId, actorName: actor?.name || "", clinic: doctor.clinic, details: `Создан профиль врача: ${doctor.fullName}` });
     await writeDb(db);
     return send(res, 201, { doctor: publicDoctor(doctor), accessKey });
   }
@@ -1620,6 +1707,7 @@ async function handleApi(req, res, url) {
     const doctor = db.doctors.find((item) => item.id === id);
     if (!doctor) return send(res, 404, { error: "Врач не найден" });
     const body = await parseBody(req);
+    if (db.doctors.some((item) => item.id !== doctor.id && item.login === String(body.login || "").trim())) return send(res, 409, { error: "Такой логин уже используется" });
     Object.assign(doctor, {
       fullName: body.fullName,
       login: body.login,
@@ -1629,8 +1717,11 @@ async function handleApi(req, res, url) {
       experienceYears: Number(body.experienceYears || 0)
     });
     if (body.accessKey) {
-      doctor.accessKeyHash = hashPassword(body.accessKey);
+      doctor.accessKeyHash = hashPassword(validateNewPassword(body.accessKey, "Новый пароль врача"));
+      invalidateUserSessions(db, "doctor", doctor.id);
     }
+    const actor = db.admins.find((item) => item.id === session.userId);
+    appendActivity(db, { type: "doctor_updated", actorRole: "admin", actorId: session.userId, actorName: actor?.name || "", clinic: doctor.clinic, details: `Изменён профиль врача: ${doctor.fullName}${body.accessKey ? "; пароль сброшен" : ""}` });
     await writeDb(db);
     return send(res, 200, { doctor: publicDoctor(doctor) });
   }
@@ -1638,13 +1729,19 @@ async function handleApi(req, res, url) {
   if (req.method === "DELETE" && url.pathname.startsWith("/api/admin/doctors/")) {
     if (!canMutateAdmin(session, db)) return send(res, 403, { error: "Недостаточно прав для удаления данных" });
     const id = url.pathname.split("/").pop();
-    db.doctors = db.doctors.filter((doctor) => doctor.id !== id);
+    const doctor = db.doctors.find((item) => item.id === id);
+    db.doctors = db.doctors.filter((item) => item.id !== id);
+    invalidateUserSessions(db, "doctor", id);
+    const actor = db.admins.find((item) => item.id === session.userId);
+    appendActivity(db, { type: "doctor_deleted", actorRole: "admin", actorId: session.userId, actorName: actor?.name || "", clinic: doctor?.clinic || "", details: `Удалён профиль врача: ${doctor?.fullName || id}` });
     await writeDb(db);
     return send(res, 200, { ok: true });
   }
 
   if (req.method === "POST" && url.pathname === "/api/nurse-surveys") {
     const body = validateSurveyInput(await parseBody(req));
+    const duplicate = findDuplicateSurvey(db, body);
+    if (duplicate) return send(res, 409, { error: "Пациент с таким ФИО и датой рождения уже существует в этой поликлинике", duplicateId: duplicate.id });
     const survey = buildNurseSurvey(body);
     db.nurseSurveys.push(survey);
     appendActivity(db, {
@@ -1669,6 +1766,7 @@ async function handleApi(req, res, url) {
       doctor: doctor ? publicDoctor(doctor) : null,
       surveys: db.nurseSurveys.filter((survey) => clinicKey(survey.patient?.clinic || survey.clinic) === doctorClinicKey),
       visits: db.doctorVisits.filter((visit) => visit.doctorId === session.userId),
+      tasks: (db.patientTasks || []).filter((task) => task.doctorId === session.userId),
       dictionaries: { diabetesDrugs, hypertensionDrugs }
     });
   }
@@ -1678,16 +1776,21 @@ async function handleApi(req, res, url) {
     const doctor = db.doctors.find((item) => item.id === session.userId);
     if (!doctor) return send(res, 404, { error: "Врач не найден" });
     const body = await parseBody(req);
-    const login = String(body.login || "").trim();
+    const login = cleanText(body.login, "Логин", { required: true, max: 100 });
+    const currentAccessKey = cleanText(body.currentAccessKey, "Текущий пароль", { required: true, max: 200 });
     const accessKey = String(body.accessKey || "").trim();
+    if (!verifyPassword(currentAccessKey, doctor.accessKeyHash)) return send(res, 401, { error: "Текущий пароль указан неверно" });
     if (!login) return send(res, 400, { error: "Логин обязателен" });
     const loginTaken = db.doctors.some((item) => item.id !== doctor.id && item.login === login);
     if (loginTaken) return send(res, 409, { error: "Такой логин уже используется" });
     doctor.login = login;
     if (accessKey) {
-      doctor.accessKeyHash = hashPassword(accessKey);
+      const validatedAccessKey = validateNewPassword(accessKey, "Новый пароль");
+      if (verifyPassword(validatedAccessKey, doctor.accessKeyHash)) return send(res, 400, { error: "Новый пароль должен отличаться от текущего" });
+      doctor.accessKeyHash = hashPassword(validatedAccessKey);
       invalidateUserSessions(db, "doctor", doctor.id);
     }
+    appendActivity(db, { type: "doctor_account_updated", actorRole: "doctor", actorId: doctor.id, actorName: doctor.fullName, clinic: doctor.clinic, details: accessKey ? "Врач изменил логин и пароль; старые сеансы завершены" : "Врач изменил логин" });
     await writeDb(db);
     return send(res, 200, { doctor: publicDoctor(doctor), currentSessionEnded: Boolean(accessKey) });
   }
@@ -1697,6 +1800,8 @@ async function handleApi(req, res, url) {
     const doctor = db.doctors.find((item) => item.id === session.userId);
     if (!doctor) return send(res, 404, { error: "Врач не найден" });
     const body = validateSurveyInput(await parseBody(req), doctor.clinic);
+    const duplicate = findDuplicateSurvey(db, body);
+    if (duplicate) return send(res, 409, { error: "Пациент с таким ФИО и датой рождения уже существует в этой поликлинике", duplicateId: duplicate.id });
     const survey = buildNurseSurvey(body);
     survey.createdByDoctorId = doctor.id;
     db.nurseSurveys.push(survey);
@@ -1773,6 +1878,23 @@ async function handleApi(req, res, url) {
       createdAt: new Date().toISOString()
     };
     db.doctorVisits.push(visit);
+    let followUpTask = null;
+    if (visit.followUpDays > 0) {
+      const dueAt = new Date(Date.now() + visit.followUpDays * 86400000).toISOString();
+      const task = {
+        id: crypto.randomUUID(),
+        surveyId: visit.surveyId,
+        visitId: visit.id,
+        doctorId: session.userId,
+        title: "Повторный приём",
+        dueAt,
+        status: "open",
+        createdAt: new Date().toISOString(),
+        completedAt: null
+      };
+      db.patientTasks.push(task);
+      followUpTask = task;
+    }
     const drugsCount = (visit.diabetesDrugs || []).length + (visit.hypertensionDrugs || []).length;
     appendActivity(db, {
       type: "doctor_visit_created",
@@ -1786,7 +1908,44 @@ async function handleApi(req, res, url) {
       details: drugsCount ? `Осмотр сохранен, назначено препаратов: ${drugsCount}` : "Осмотр сохранен без препаратов"
     });
     await writeDb(db);
-    return send(res, 201, { visit });
+    return send(res, 201, { visit, task: followUpTask });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/doctor/tasks") {
+    if (session?.userType !== "doctor") return send(res, 403, { error: "Нет доступа" });
+    const doctor = db.doctors.find((item) => item.id === session.userId);
+    if (!doctor) return send(res, 404, { error: "Врач не найден" });
+    const body = await parseBody(req);
+    const surveyId = cleanText(body.surveyId, "Пациент", { required: true, max: 100 });
+    const survey = db.nurseSurveys.find((item) => item.id === surveyId);
+    if (!survey) return send(res, 404, { error: "Пациент не найден" });
+    if (!doctorCanAccessSurvey(doctor, survey)) return send(res, 403, { error: "Нет доступа к пациенту другой поликлиники" });
+    const dueDate = cleanText(body.dueDate, "Дата выполнения", { required: true, max: 10 });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate) || !Number.isFinite(Date.parse(`${dueDate}T12:00:00Z`))) return send(res, 400, { error: "Дата выполнения указана неверно" });
+    const task = {
+      id: crypto.randomUUID(), surveyId, doctorId: doctor.id,
+      title: cleanText(body.title, "Задача", { required: true, max: 200 }),
+      dueAt: `${dueDate}T12:00:00.000Z`, status: "open", createdAt: new Date().toISOString(), completedAt: null
+    };
+    db.patientTasks.push(task);
+    appendActivity(db, { type: "patient_task_created", actorRole: "doctor", actorId: doctor.id, actorName: doctor.fullName, clinic: doctor.clinic, surveyId, patientName: patientNameFromSurvey(survey), details: `Создана задача: ${task.title}` });
+    await writeDb(db);
+    return send(res, 201, { task });
+  }
+
+  if (req.method === "PUT" && url.pathname.startsWith("/api/doctor/tasks/")) {
+    if (session?.userType !== "doctor") return send(res, 403, { error: "Нет доступа" });
+    const doctor = db.doctors.find((item) => item.id === session.userId);
+    const id = decodeURIComponent(url.pathname.split("/").pop());
+    const task = (db.patientTasks || []).find((item) => item.id === id && item.doctorId === session.userId);
+    if (!task) return send(res, 404, { error: "Задача не найдена" });
+    const body = await parseBody(req);
+    task.status = body.status === "completed" ? "completed" : "open";
+    task.completedAt = task.status === "completed" ? new Date().toISOString() : null;
+    const survey = db.nurseSurveys.find((item) => item.id === task.surveyId);
+    appendActivity(db, { type: "patient_task_updated", actorRole: "doctor", actorId: doctor?.id || "", actorName: doctor?.fullName || "", clinic: doctor?.clinic || "", surveyId: task.surveyId, patientName: patientNameFromSurvey(survey), details: task.status === "completed" ? `Задача выполнена: ${task.title}` : `Задача возвращена в работу: ${task.title}` });
+    await writeDb(db);
+    return send(res, 200, { task });
   }
 
   if (req.method === "GET" && url.pathname === "/api/training/pretest") {
@@ -2112,6 +2271,24 @@ function buildInvestorDashboard(db) {
   const visitsByDate = countSelected(db.doctorVisits.map((visit) => dateKey(visit.createdAt)));
   const surveyByDate = countSelected(db.nurseSurveys.map((survey) => dateKey(survey.createdAt)));
   const diagnoses = countSelected(db.doctorVisits.map((visit) => visit.diagnosis || "Без диагноза"));
+  const cutoff30 = Date.now() - 30 * 86400000;
+  const highGlucose = db.nurseSurveys.filter((survey) => Number(survey.measurements?.glucoseLevel || 0) >= 6.1).length;
+  const highPressure = db.nurseSurveys.filter((survey) => Number(survey.measurements?.systolic || 0) >= 140 || Number(survey.measurements?.diastolic || 0) >= 90).length;
+  const clinicNames = [...new Set([
+    ...db.doctors.map((doctor) => doctor.clinic || "Не указано"),
+    ...db.nurseSurveys.map((survey) => survey.patient?.clinic || survey.clinic || "Не указано")
+  ])].sort((a, b) => a.localeCompare(b, "ru"));
+  const clinicPerformance = clinicNames.map((clinic) => {
+    const surveys = db.nurseSurveys.filter((survey) => (survey.patient?.clinic || survey.clinic || "Не указано") === clinic);
+    const surveyIds = new Set(surveys.map((survey) => survey.id));
+    return {
+      label: clinic,
+      doctors: db.doctors.filter((doctor) => (doctor.clinic || "Не указано") === clinic).length,
+      surveys: surveys.length,
+      visits: db.doctorVisits.filter((visit) => surveyIds.has(visit.surveyId)).length,
+      highRisk: surveys.filter((survey) => survey.needsDoctor).length
+    };
+  });
   return {
     generatedAt: new Date().toISOString(),
     summary: {
@@ -2122,7 +2299,11 @@ function buildInvestorDashboard(db) {
       highFindriscPercent: stats.highFindriscPercent,
       highScore2Percent: stats.highScore2Percent,
       doctorTrainingPostAverage: doctorEducation.postAverage,
-      nurseTrainingPostAverage: nurseEducation.postAverage
+      nurseTrainingPostAverage: nurseEducation.postAverage,
+      newPatients30Days: db.nurseSurveys.filter((survey) => Date.parse(survey.createdAt || "") >= cutoff30).length,
+      highGlucosePercent: Math.round((highGlucose / Math.max(1, db.nurseSurveys.length)) * 100),
+      highPressurePercent: Math.round((highPressure / Math.max(1, db.nurseSurveys.length)) * 100),
+      openFollowUps: (db.patientTasks || []).filter((task) => task.status !== "completed").length
     },
     doctors: {
       registeredByClinic: objectToSeries(countSelected(db.doctors.map((doctor) => doctor.clinic || "Не указано"))),
@@ -2135,6 +2316,7 @@ function buildInvestorDashboard(db) {
     clinical: {
       visitsByDate: objectToSeries(visitsByDate),
       diagnoses: objectToSeries(diagnoses),
+      clinicPerformance,
       risk: [
         { label: "Нужно к врачу", value: stats.needsDoctorPercent },
         { label: "FINDRISC повышен", value: stats.highFindriscPercent },
@@ -2146,6 +2328,27 @@ function buildInvestorDashboard(db) {
       nurses: nurseEducation
     }
   };
+}
+
+function buildInvestorReportCsv(db) {
+  const data = buildInvestorDashboard(db);
+  const lines = [["Показатель", "Значение"]];
+  const summaryLabels = {
+    doctorsTotal: "Врачи в системе",
+    surveysTotal: "Анкеты пациентов",
+    visitsTotal: "Осмотры врачей",
+    newPatients30Days: "Новые пациенты за 30 дней",
+    highGlucosePercent: "Повышенный сахар, %",
+    highPressurePercent: "Повышенное давление, %",
+    openFollowUps: "Открытые повторные визиты",
+    riskNeedsDoctorPercent: "Требуют врача, %",
+    doctorTrainingPostAverage: "Пост-тест врачей, %",
+    nurseTrainingPostAverage: "Пост-тест медсестер, %"
+  };
+  for (const [key, label] of Object.entries(summaryLabels)) lines.push([label, data.summary[key] ?? 0]);
+  lines.push([], ["Поликлиника", "Врачи", "Анкеты", "Осмотры", "Высокий риск"]);
+  for (const clinic of data.clinical.clinicPerformance) lines.push([clinic.label, clinic.doctors, clinic.surveys, clinic.visits, clinic.highRisk]);
+  return `\uFEFF${lines.map((row) => row.map(csvCell).join(";")).join("\n")}`;
 }
 
 function hasDoctorAction(visit) {

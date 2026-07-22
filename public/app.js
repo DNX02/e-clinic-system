@@ -8,6 +8,8 @@ const initialState = () => ({
   selectedSurvey: null,
   doctorMode: "list",
   doctorRiskFirst: false,
+  doctorPatientFilter: "all",
+  doctorTaskFilter: "open",
   doctorPatientPage: 1,
   lastDoctorKey: null,
   surveyClinicFilter: "all",
@@ -61,10 +63,16 @@ const api = async (url, options = {}) => {
   });
   const contentType = response.headers.get("content-type") || "";
   const data = contentType.includes("application/json") ? await response.json() : { error: await response.text() };
-  if (!response.ok) throw new Error(data.error || "Ошибка запроса");
+  if (!response.ok) {
+    const error = new Error(data.error || "Ошибка запроса");
+    error.status = response.status;
+    error.data = data;
+    throw error;
+  }
   if (!contentType.includes("application/json")) throw new Error("Сервер вернул не JSON. Обновите страницу и попробуйте еще раз.");
   return data;
 };
+const shouldQueueOffline = (error) => !Number(error?.status) || Number(error.status) >= 500;
 
 const html = (strings, ...values) => strings.map((part, i) => part + (values[i] ?? "")).join("");
 const money = (value) => Number(value || 0).toLocaleString("ru-RU");
@@ -1027,6 +1035,13 @@ document.addEventListener("click", async (event) => {
     state.doctorPatientPage = 1;
     renderDoctorPatientList();
   }
+  if (action === "doctor-task-status") {
+    const id = event.target.dataset.id;
+    const status = event.target.dataset.status;
+    const result = await api(`/api/doctor/tasks/${id}`, { method: "PUT", body: JSON.stringify({ status }) });
+    state.doctor.tasks = (state.doctor.tasks || []).map((task) => task.id === id ? result.task : task);
+    renderDoctor();
+  }
   if (action === "doctor-patient-page") {
     state.doctorPatientPage = Math.max(1, Number(event.target.dataset.page || 1));
     renderDoctorPatientList();
@@ -1359,6 +1374,10 @@ function investorOverview() {
       ${investorKpi("Анкеты пациентов", investorNumber(data.summary.surveysTotal), "скрининг на местах", "soft", "Сколько пациентов уже прошли первичный цифровой опрос и расчет рисков.")}
       ${investorKpi("Осмотры врачей", investorNumber(data.summary.visitsTotal), "клинические действия", "success", "Сколько раз врач открыл карту пациента и зафиксировал осмотр, анализы или назначения.")}
       ${investorKpi("Пост-тест врачей", investorNumber(data.summary.doctorTrainingPostAverage, "%"), "средний результат", "hot", "Средний итоговый уровень знаний врачей после обучения.")}
+      ${investorKpi("Новые пациенты", investorNumber(data.summary.newPatients30Days), "за последние 30 дней", "soft", "Сколько новых анкет зарегистрировано за последние 30 дней.")}
+      ${investorKpi("Высокое давление", investorNumber(data.summary.highPressurePercent, "%"), "среди анкет", "hot", "Доля пациентов с давлением 140/90 и выше.")}
+      ${investorKpi("Повышенный сахар", investorNumber(data.summary.highGlucosePercent, "%"), "среди анкет", "hot", "Доля пациентов с уровнем сахара 6,1 ммоль/л и выше.")}
+      ${investorKpi("Повторные визиты", investorNumber(data.summary.openFollowUps), "открытые задачи", "success", "Сколько повторных визитов и задач ещё ожидают выполнения.")}
     </section>
     ${investorPlainInfo("Что показывает этот экран", [
       { title: "Охват", text: "Сколько сотрудников и пациентов уже включены в проект." },
@@ -1408,6 +1427,10 @@ function investorClinics() {
       <div class="section-title"><h2>Клинические диагнозы</h2><span>по осмотрам врачей</span></div>
       ${investorBarChart(data.clinical.diagnoses, "value", "#7c3aed")}
     </section>
+    <section class="investor-card">
+      <div class="section-title"><h2>Эффективность поликлиник</h2><span>охват и клиническая работа</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Поликлиника</th><th>Врачи</th><th>Анкеты</th><th>Осмотры</th><th>Высокий риск</th></tr></thead><tbody>${data.clinical.clinicPerformance.map((clinic) => `<tr><td>${escapeHtml(clinic.label)}</td><td>${clinic.doctors}</td><td>${clinic.surveys}</td><td>${clinic.visits}</td><td>${clinic.highRisk}</td></tr>`).join("")}</tbody></table></div>
+    </section>
   `;
 }
 
@@ -1439,6 +1462,7 @@ function renderInvestorDashboard() {
           <span>Обновлено</span>
           <strong>${new Date(data.generatedAt).toLocaleString("ru-RU")}</strong>
           <small>Данные берутся напрямую из работающей системы</small>
+          <a class="button-link" href="/api/investor/report.csv">Скачать отчёт CSV</a>
           <button type="button" class="secondary" data-action="logout">Выйти</button>
         </div>
       </section>
@@ -1842,8 +1866,8 @@ async function loadAdmin() {
 }
 
 function renderAdmin() {
-  const nav = ["stats", "doctors", "training", "nurseTraining", "surveys", "visits", "access", "qr"].map((tab) => {
-    const names = { stats: "Статистика", doctors: "Врачи", training: "Обучение №4", nurseTraining: "Медсестры №5", surveys: "Анкеты", visits: "Назначения", access: "Доступы", qr: "QR" };
+  const nav = ["stats", "doctors", "training", "nurseTraining", "surveys", "visits", "audit", "access", "qr"].map((tab) => {
+    const names = { stats: "Статистика", doctors: "Врачи", training: "Обучение №4", nurseTraining: "Медсестры №5", surveys: "Анкеты", visits: "Назначения", audit: "Журнал", access: "Доступы", qr: "QR" };
     return `<button data-action="admin-tab" data-tab="${tab}" class="${state.tab === tab ? "active" : ""}">${names[tab]}</button>`;
   }).join("");
   setPage(html`
@@ -1861,6 +1885,7 @@ function adminTab() {
   if (state.tab === "nurseTraining") return renderNurseTrainingAdmin();
   if (state.tab === "surveys") return renderSurveyTable(filteredAdminSurveys());
   if (state.tab === "visits") return renderVisitsAdmin();
+  if (state.tab === "audit") return renderAuditAdmin();
   if (state.tab === "access") return renderAccessAdmin();
   if (state.tab === "qr") return renderQrAdmin();
   return renderStatsAdmin();
@@ -2439,6 +2464,34 @@ function adminRoleOptions(selected = "observer") {
   return roles.map(([value, text]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${text}</option>`).join("");
 }
 
+function renderAuditAdmin() {
+  const labels = {
+    nurse_survey_created: "Создана анкета",
+    doctor_patient_created: "Врач добавил пациента",
+    doctor_survey_viewed: "Открыта карта пациента",
+    doctor_visit_created: "Сохранён осмотр",
+    patient_task_created: "Создана задача",
+    patient_task_updated: "Изменён статус задачи",
+    doctor_account_updated: "Изменён аккаунт врача",
+    doctor_created: "Создан профиль врача",
+    doctor_updated: "Изменён профиль врача",
+    doctor_deleted: "Удалён профиль врача",
+    admin_password_changed: "Администратор сменил пароль",
+    admin_created: "Создан администратор",
+    admin_updated: "Изменён администратор",
+    admin_deleted: "Удалён администратор"
+  };
+  const rows = (state.admin.activityEvents || []).map((event) => html`<tr>
+    <td>${new Date(event.createdAt).toLocaleString("ru-RU")}</td>
+    <td>${escapeHtml(event.actorName || event.actorRole || "Система")}</td>
+    <td>${escapeHtml(labels[event.type] || event.type)}</td>
+    <td>${escapeHtml(event.patientName || "-")}</td>
+    <td>${escapeHtml(event.clinic || "-")}</td>
+    <td>${escapeHtml(event.details || "-")}</td>
+  </tr>`).join("");
+  return html`<section class="panel"><div class="section-title"><div><h2>Журнал действий</h2><p class="muted">Последние ${state.admin.activityEvents?.length || 0} событий. Пароли и медицинские значения сюда не записываются.</p></div></div><div class="table-wrap"><table><thead><tr><th>Дата</th><th>Пользователь</th><th>Действие</th><th>Пациент</th><th>Поликлиника</th><th>Описание</th></tr></thead><tbody>${rows || `<tr><td colspan="6">Событий пока нет</td></tr>`}</tbody></table></div></section>`;
+}
+
 function renderAccessAdmin() {
   const canManage = Boolean(state.admin.canManageAdmins);
   const admins = (state.admin.admins || []).slice().sort((a, b) => {
@@ -2468,7 +2521,7 @@ function renderAccessAdmin() {
             <section class="grid two">
               <div class="form-row"><label>ФИО</label><input name="name" value="${escapeHtml(admin.name)}" required /></div>
               <div class="form-row"><label>Логин</label><input name="username" value="${escapeHtml(admin.username)}" required /></div>
-              <div class="form-row"><label>Новый пароль</label><input name="password" placeholder="Оставьте пустым, если не менять" /></div>
+              <div class="form-row"><label>Новый пароль</label><input name="password" type="password" minlength="10" placeholder="Оставьте пустым, если не менять" /></div>
               <div class="form-row"><label>Роль</label><select name="role">${adminRoleOptions(admin.role)}</select></div>
             </section>
             <div class="actions">
@@ -2481,6 +2534,17 @@ function renderAccessAdmin() {
     </tr>
   `).join("");
   return html`
+    <section class="panel account-security-panel">
+      <h2>Безопасность моего аккаунта</h2>
+      <p class="muted">После смены пароля все старые сеансы будут завершены. Если доступ потерян, пароль может сбросить другой главный администратор.</p>
+      <form class="form" id="adminPasswordForm">
+        <section class="grid two">
+          <div class="form-row"><label>Текущий пароль</label><input name="currentPassword" type="password" autocomplete="current-password" required /></div>
+          <div class="form-row"><label>Новый пароль</label><input name="newPassword" type="password" autocomplete="new-password" minlength="10" required /></div>
+        </section>
+        <button>Сменить мой пароль</button>
+      </form>
+    </section>
     <section class="panel">
       <div class="section-heading">
         <h2>Иерархия доступа</h2>
@@ -2497,7 +2561,7 @@ function renderAccessAdmin() {
           <section class="grid two">
             <div class="form-row"><label>ФИО</label><input name="name" required /></div>
             <div class="form-row"><label>Логин</label><input name="username" required /></div>
-            <div class="form-row"><label>Пароль</label><input name="password" required /></div>
+            <div class="form-row"><label>Пароль</label><input name="password" type="password" minlength="10" required /></div>
             <div class="form-row"><label>Роль</label><select name="role">${adminRoleOptions("observer")}</select></div>
           </section>
           <div class="actions">
@@ -2575,6 +2639,18 @@ function renderQrAdmin() {
 
 function bindAdminForms() {
   bindAdminTrainingFilters();
+  const adminPasswordForm = document.querySelector("#adminPasswordForm");
+  if (adminPasswordForm) adminPasswordForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const data = Object.fromEntries(new FormData(adminPasswordForm));
+      await api("/api/admin/account", { method: "PUT", body: JSON.stringify(data) });
+      alert("Пароль изменён. Все старые сеансы завершены, войдите заново.");
+      window.location.href = ADMIN_APP_PATH;
+    } catch (error) {
+      alert(error.message);
+    }
+  });
   const form = document.querySelector("#doctorForm");
   if (form) form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -2768,6 +2844,7 @@ function renderNurseSurvey() {
           ${input(t("Окружность живота/талия, см"), "rabitoWaist", true, "number")}
           ${input(t("Окружность голени, см"), "calf", true, "number")}
           <div class="form-row"><label>${escapeHtml(t("Расчётный вес Rabito, кг"))}</label><input name="rabitoWeightPreview" inputmode="decimal" readonly /></div>
+          ${input(t("Уровень сахара"), "glucoseLevel", true, "number")}
         </section>
         <div class="actions">
           <button type="submit">${escapeHtml(t("Отправить анкету"))}</button>
@@ -2793,6 +2870,10 @@ function renderNurseSurvey() {
       form.reset();
       updateOfflineSurveyStatus();
     } catch (error) {
+      if (!shouldQueueOffline(error)) {
+        document.querySelector("#surveyResult").innerHTML = `<div class="notice danger">${escapeHtml(error.message)}</div>`;
+        return;
+      }
       saveOfflineSurvey(data);
       document.querySelector("#surveyResult").innerHTML = html`
         <div class="notice warn">
@@ -3845,6 +3926,93 @@ function doctorVisitHistory(surveyId) {
   `;
 }
 
+function doctorTrendChart(survey) {
+  const visits = [...doctorVisitsForSurvey(survey.id)].reverse();
+  const points = [
+    {
+      date: survey.createdAt,
+      systolic: Number(survey.measurements?.systolic || 0),
+      diastolic: Number(survey.measurements?.diastolic || 0),
+      glucose: Number(survey.measurements?.glucoseLevel || 0)
+    },
+    ...visits.map((visit) => ({
+      date: visit.createdAt,
+      systolic: Number(visit.systolic || 0),
+      diastolic: Number(visit.diastolic || 0),
+      glucose: Number(visit.glucose || 0)
+    }))
+  ];
+  const miniChart = (key, label, color) => {
+    const values = points.map((point) => point[key]).filter((value) => Number.isFinite(value) && value > 0);
+    if (!values.length) return `<div class="trend-card"><strong>${escapeHtml(label)}</strong><span class="muted">Нет измерений</span></div>`;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = Math.max(1, max - min);
+    const coordinates = values.map((value, index) => {
+      const x = values.length === 1 ? 50 : 5 + index * 90 / (values.length - 1);
+      const y = 38 - ((value - min) / range) * 30;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+    const latest = values.at(-1);
+    return html`<div class="trend-card">
+      <div><strong>${escapeHtml(label)}</strong><span>${latest}</span></div>
+      <svg viewBox="0 0 100 44" role="img" aria-label="${escapeHtml(label)}"><polyline points="${coordinates}" fill="none" stroke="${color}" stroke-width="3" vector-effect="non-scaling-stroke" /></svg>
+      <small>${values.length} измерений · минимум ${min} · максимум ${max}</small>
+    </div>`;
+  };
+  return html`
+    <section class="patient-trends">
+      <h3>Динамика показателей</h3>
+      <div class="trend-grid">
+        ${miniChart("systolic", "Систолическое АД", "#dc2626")}
+        ${miniChart("diastolic", "Диастолическое АД", "#f59e0b")}
+        ${miniChart("glucose", "Уровень сахара", "#2563eb")}
+      </div>
+    </section>
+  `;
+}
+
+function patientTasksForSurvey(surveyId) {
+  return (state.doctor?.tasks || [])
+    .filter((task) => task.surveyId === surveyId)
+    .sort((a, b) => new Date(a.dueAt) - new Date(b.dueAt));
+}
+
+function doctorPatientTasks(surveyId) {
+  const tasks = patientTasksForSurvey(surveyId);
+  return html`
+    <section class="patient-task-box">
+      <h3>Задачи и повторные визиты</h3>
+      <form class="form compact-task-form" data-doctor-task-form data-survey-id="${surveyId}">
+        <input name="title" placeholder="Например: позвонить пациенту" required maxlength="200" />
+        <input name="dueDate" type="date" required />
+        <button type="submit">Добавить задачу</button>
+      </form>
+      <div class="task-list">${tasks.map((task) => {
+        const overdue = task.status !== "completed" && new Date(task.dueAt) < new Date();
+        return html`<article class="task-item ${overdue ? "overdue" : ""} ${task.status === "completed" ? "completed" : ""}">
+          <div><strong>${escapeHtml(task.title)}</strong><span>${new Date(task.dueAt).toLocaleDateString("ru-RU")}${overdue ? " · просрочено" : ""}</span></div>
+          <button type="button" class="secondary" data-action="doctor-task-status" data-id="${task.id}" data-status="${task.status === "completed" ? "open" : "completed"}">${task.status === "completed" ? "Вернуть" : "Выполнено"}</button>
+        </article>`;
+      }).join("") || `<p class="muted">Задач пока нет</p>`}</div>
+    </section>
+  `;
+}
+
+function doctorTasksPanel() {
+  const tasks = (state.doctor?.tasks || []).filter((task) => state.doctorTaskFilter === "all" || task.status === state.doctorTaskFilter);
+  const surveys = Object.fromEntries((state.doctor?.surveys || []).map((survey) => [survey.id, survey]));
+  const today = new Date();
+  const rows = [...tasks].sort((a, b) => new Date(a.dueAt) - new Date(b.dueAt)).map((task) => {
+    const overdue = task.status !== "completed" && new Date(task.dueAt) < today;
+    return html`<article class="task-item ${overdue ? "overdue" : ""} ${task.status === "completed" ? "completed" : ""}">
+      <div><strong>${escapeHtml(task.title)}</strong><span>${escapeHtml(fullName(surveys[task.surveyId]?.patient) || "Пациент")} · ${new Date(task.dueAt).toLocaleDateString("ru-RU")}${overdue ? " · просрочено" : ""}</span></div>
+      <div class="actions"><button type="button" data-action="select-survey" data-id="${task.surveyId}">Открыть пациента</button><button type="button" class="secondary" data-action="doctor-task-status" data-id="${task.id}" data-status="${task.status === "completed" ? "open" : "completed"}">${task.status === "completed" ? "Вернуть" : "Выполнено"}</button></div>
+    </article>`;
+  }).join("");
+  return html`<section class="panel doctor-tasks-panel"><div class="section-title"><div><h2>Задачи и напоминания</h2><p class="muted">Повторные визиты создаются автоматически после осмотра.</p></div><select id="doctorTaskFilter"><option value="open" ${state.doctorTaskFilter === "open" ? "selected" : ""}>Открытые</option><option value="completed" ${state.doctorTaskFilter === "completed" ? "selected" : ""}>Выполненные</option><option value="all" ${state.doctorTaskFilter === "all" ? "selected" : ""}>Все</option></select></div><div class="task-list">${rows || `<p class="muted">Задач в этой категории нет</p>`}</div></section>`;
+}
+
 function doctorProfilePanel() {
   const t = (value) => translateDoctorText(value);
   const visits = [...(state.doctor?.visits || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -3866,7 +4034,8 @@ function doctorProfilePanel() {
         <h3>${escapeHtml(t("Сменить логин и пароль"))}</h3>
         <section class="grid two">
           <div class="form-row"><label>${escapeHtml(t("Новый логин"))}</label><input name="login" value="${escapeHtml(state.doctor?.doctor?.login || "")}" required /></div>
-          <div class="form-row"><label>${escapeHtml(t("Новый пароль / ключ"))}</label><input name="accessKey" placeholder="${escapeHtml(t("Оставьте пустым, если ключ менять не нужно"))}" /></div>
+          <div class="form-row"><label>Текущий пароль</label><input name="currentAccessKey" type="password" autocomplete="current-password" required /></div>
+          <div class="form-row"><label>${escapeHtml(t("Новый пароль / ключ"))}</label><input name="accessKey" type="password" autocomplete="new-password" minlength="10" placeholder="${escapeHtml(t("Оставьте пустым, если ключ менять не нужно"))}" /></div>
         </section>
         <button>${escapeHtml(t("Сохранить логин и пароль"))}</button>
         <div id="doctorAccountResult"></div>
@@ -3968,7 +4137,14 @@ function doctorPatientsPanel() {
       <div class="muted" id="doctorSyncStatus"></div>
       <div id="doctorSyncResult"></div>
       <input id="patientSearch" placeholder="${escapeHtml(t("Введите имя или фамилию"))}" />
-      <div id="patientList" style="margin-top:12px">${doctorPaginatedSurveyList(doctorSortedSurveys(state.doctor.surveys))}</div>
+      <select id="doctorPatientFilter" aria-label="Фильтр пациентов">
+        <option value="all" ${state.doctorPatientFilter === "all" ? "selected" : ""}>Все пациенты</option>
+        <option value="risk" ${state.doctorPatientFilter === "risk" ? "selected" : ""}>Повышенный риск</option>
+        <option value="pressure" ${state.doctorPatientFilter === "pressure" ? "selected" : ""}>Высокое давление</option>
+        <option value="glucose" ${state.doctorPatientFilter === "glucose" ? "selected" : ""}>Высокий сахар</option>
+        <option value="overdue" ${state.doctorPatientFilter === "overdue" ? "selected" : ""}>Просрочен повторный визит</option>
+      </select>
+      <div id="patientList" style="margin-top:12px">${doctorPaginatedSurveyList(doctorSortedSurveys(doctorFilteredSurveys()))}</div>
     </section>
   `;
 }
@@ -3977,10 +4153,13 @@ function renderDoctor() {
   const t = (value) => translateDoctorText(value);
   const doctorNav = [
     ["patients", "Пациенты"],
+    ["tasks", "Задачи"],
     ["profile", "Кабинет"],
     ["stats", "Статистика"]
   ].map(([tab, label]) => `<button data-action="doctor-tab" data-tab="${tab}" class="${state.doctorSection === tab ? "active" : ""}">${escapeHtml(t(label))}</button>`).join("");
-  const content = state.doctorSection === "profile"
+  const content = state.doctorSection === "tasks"
+    ? doctorTasksPanel()
+    : state.doctorSection === "profile"
     ? doctorProfilePanel()
     : state.doctorSection === "stats"
       ? doctorStatsPanel()
@@ -4000,9 +4179,19 @@ function renderDoctor() {
     state.doctorPatientPage = 1;
     renderDoctorPatientList();
   });
+  document.querySelector("#doctorPatientFilter")?.addEventListener("change", (event) => {
+    state.doctorPatientFilter = event.target.value;
+    state.doctorPatientPage = 1;
+    renderDoctorPatientList();
+  });
+  document.querySelector("#doctorTaskFilter")?.addEventListener("change", (event) => {
+    state.doctorTaskFilter = event.target.value;
+    renderDoctor();
+  });
   bindDoctorVisit();
   bindDoctorPatientSurvey();
   bindDoctorAccountForm();
+  bindDoctorTaskForms();
 }
 
 function doctorSortedSurveys(surveys) {
@@ -4017,9 +4206,23 @@ function renderDoctorPatientList() {
   const search = document.querySelector("#patientSearch");
   const patientList = document.querySelector("#patientList");
   if (!patientList) return;
-  const query = (search?.value || "").toLowerCase();
-  const list = state.doctor.surveys.filter((survey) => fullName(survey.patient).toLowerCase().includes(query));
+  const query = (search?.value || "").trim().toLowerCase();
+  const list = doctorFilteredSurveys(query);
   patientList.innerHTML = doctorPaginatedSurveyList(doctorSortedSurveys(list));
+}
+
+function doctorFilteredSurveys(query = "") {
+  const openOverdueSurveyIds = new Set((state.doctor.tasks || []).filter((task) => task.status !== "completed" && new Date(task.dueAt) < new Date()).map((task) => task.surveyId));
+  return state.doctor.surveys.filter((survey) => {
+    const haystack = [fullName(survey.patient), survey.patient?.phone, survey.patient?.clinic].join(" ").toLowerCase();
+    if (query && !haystack.includes(query)) return false;
+    const measurements = survey.measurements || {};
+    if (state.doctorPatientFilter === "risk" && !survey.needsDoctor) return false;
+    if (state.doctorPatientFilter === "pressure" && Number(measurements.systolic || 0) < 140) return false;
+    if (state.doctorPatientFilter === "glucose" && Number(measurements.glucoseLevel || 0) < 6.1) return false;
+    if (state.doctorPatientFilter === "overdue" && !openOverdueSurveyIds.has(survey.id)) return false;
+    return true;
+  });
 }
 
 function doctorPaginatedSurveyList(surveys) {
@@ -4053,6 +4256,7 @@ function doctorSurveyList(surveys) {
       </div>
       <div class="patient-card__meta">
         <span>АД ${survey.measurements.systolic}/${survey.measurements.diastolic}</span>
+        <span>Сахар ${survey.measurements.glucoseLevel || "-"}</span>
         <span>FINDRISC ${survey.findrisc.score}</span>
         <span>${new Date(survey.createdAt).toLocaleDateString("ru-RU")}</span>
       </div>
@@ -4156,7 +4360,9 @@ function doctorVisitForm(survey) {
     <form class="form" id="visitForm">
       <h2>${escapeHtml(fullName(survey.patient))}</h2>
       ${doctorSurveySummary(survey)}
+      ${doctorTrendChart(survey)}
       ${doctorVisitHistory(survey.id)}
+      ${doctorPatientTasks(survey.id)}
       <input type="hidden" name="surveyId" value="${survey.id}" />
       <section class="grid two">
         ${input(t("Вес по весам, кг"), "weight", true, "number")}
@@ -4318,11 +4524,16 @@ function bindDoctorVisit() {
     try {
       const result = await api("/api/doctor/visits", { method: "POST", body: JSON.stringify(data) });
       state.doctor.visits = [result.visit, ...(state.doctor.visits || [])];
+      if (result.task) state.doctor.tasks = [...(state.doctor.tasks || []), result.task];
       document.querySelector("#visitResult").innerHTML = `<div class="notice ok">${escapeHtml(translateDoctorText("Осмотр сохранён и отправлен администратору."))}</div>`;
       form.reset();
       updateLifestyleRecommendationPanels();
       updateOfflineDoctorStatus();
     } catch (error) {
+      if (!shouldQueueOffline(error)) {
+        document.querySelector("#visitResult").innerHTML = `<div class="notice danger">${escapeHtml(error.message)}</div>`;
+        return;
+      }
       saveOfflineDoctorAction({ type: "visit", data });
       document.querySelector("#visitResult").innerHTML = `<div class="notice warn">${escapeHtml(translateDoctorText("Интернет недоступен или сервер не ответил. Запись сохранена на этом устройстве и будет отправлена через синхронизацию."))}</div>`;
       form.reset();
@@ -4354,6 +4565,25 @@ function bindDoctorAccountForm() {
   });
 }
 
+function bindDoctorTaskForms() {
+  document.querySelectorAll("[data-doctor-task-form]").forEach((form) => {
+    const dueDate = form.elements.dueDate;
+    if (dueDate && !dueDate.value) dueDate.value = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        const data = Object.fromEntries(new FormData(form));
+        data.surveyId = form.dataset.surveyId;
+        const result = await api("/api/doctor/tasks", { method: "POST", body: JSON.stringify(data) });
+        state.doctor.tasks = [...(state.doctor.tasks || []), result.task];
+        renderDoctor();
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+  });
+}
+
 function bindDoctorPatientSurvey() {
   const form = document.querySelector("#doctorPatientSurveyForm");
   if (!form) return;
@@ -4370,6 +4600,10 @@ function bindDoctorPatientSurvey() {
       renderDoctor();
       setTimeout(() => document.querySelector("#doctorPrimaryPanel")?.scrollIntoView({ block: "start" }), 0);
     } catch (error) {
+      if (!shouldQueueOffline(error)) {
+        document.querySelector("#doctorPatientSurveyResult").innerHTML = `<div class="notice danger">${escapeHtml(error.message)}</div>`;
+        return;
+      }
       const localSurveyId = `local-${crypto.randomUUID()}`;
       const localSurvey = {
         id: localSurveyId,
