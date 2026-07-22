@@ -7,10 +7,12 @@
     "start": "node server.js",
     "dev": "node server.js",
     "test:product": "node scripts/test-product-improvements.mjs",
+    "test:ui": "node scripts/check-ui-contract.mjs",
     "upload-db": "node scripts/upload-db-to-postgres.mjs"
   },
   "dependencies": {
     "docx": "^9.7.1",
+    "pdfkit": "^0.17.2",
     "pg": "^8.13.1"
   }
 }

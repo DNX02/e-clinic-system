@@ -1042,6 +1042,16 @@ document.addEventListener("click", async (event) => {
     state.doctor.tasks = (state.doctor.tasks || []).map((task) => task.id === id ? result.task : task);
     renderDoctor();
   }
+  if (action === "patient-archive") {
+    if (!confirm(event.target.dataset.archived === "true" ? "Перенести карточку пациента в архив?" : "Восстановить карточку?")) return;
+    await api(`/api/admin/patients/${event.target.dataset.id}/archive`, { method: "POST", body: JSON.stringify({ archived: event.target.dataset.archived === "true" }) });
+    await loadAdmin();
+  }
+  if (action === "appointment-status") {
+    const result = await api(`/api/doctor/appointments/${event.target.dataset.id}`, { method: "PUT", body: JSON.stringify({ status: event.target.dataset.status }) });
+    state.doctor.appointments = state.doctor.appointments.map((item) => item.id === result.appointment.id ? result.appointment : item);
+    renderDoctor();
+  }
   if (action === "doctor-patient-page") {
     state.doctorPatientPage = Math.max(1, Number(event.target.dataset.page || 1));
     renderDoctorPatientList();
@@ -1866,8 +1876,8 @@ async function loadAdmin() {
 }
 
 function renderAdmin() {
-  const nav = ["stats", "doctors", "training", "nurseTraining", "surveys", "visits", "audit", "access", "qr"].map((tab) => {
-    const names = { stats: "Статистика", doctors: "Врачи", training: "Обучение №4", nurseTraining: "Медсестры №5", surveys: "Анкеты", visits: "Назначения", audit: "Журнал", access: "Доступы", qr: "QR" };
+  const nav = ["stats", "doctors", "training", "nurseTraining", "surveys", "visits", "operations", "audit", "access", "qr"].map((tab) => {
+    const names = { stats: "Статистика", doctors: "Врачи", training: "Обучение №4", nurseTraining: "Медсестры №5", surveys: "Пациенты", visits: "Назначения", operations: "План и сообщения", audit: "Журнал", access: "Доступы", qr: "QR" };
     return `<button data-action="admin-tab" data-tab="${tab}" class="${state.tab === tab ? "active" : ""}">${names[tab]}</button>`;
   }).join("");
   setPage(html`
@@ -1885,6 +1895,7 @@ function adminTab() {
   if (state.tab === "nurseTraining") return renderNurseTrainingAdmin();
   if (state.tab === "surveys") return renderSurveyTable(filteredAdminSurveys());
   if (state.tab === "visits") return renderVisitsAdmin();
+  if (state.tab === "operations") return renderOperationsAdmin();
   if (state.tab === "audit") return renderAuditAdmin();
   if (state.tab === "access") return renderAccessAdmin();
   if (state.tab === "qr") return renderQrAdmin();
@@ -2382,11 +2393,26 @@ function renderSurveyTable(surveys) {
       <td>${survey.measurements.rabitoWeight || "-"} кг</td>
       <td>${survey.needsDoctor ? `<span class="pill danger">К врачу</span><div class="muted">${escapeHtml(referralReasonText(survey))}</div>` : '<span class="pill ok">Обычный риск</span>'}</td>
       <td>${new Date(survey.createdAt).toLocaleString("ru-RU")}</td>
+      <td><details><summary>Изменить</summary><form class="patient-edit-form form" data-id="${survey.id}">
+        <input name="lastName" value="${escapeHtml(survey.patient?.lastName || "")}" placeholder="Фамилия" required />
+        <input name="firstName" value="${escapeHtml(survey.patient?.firstName || "")}" placeholder="Имя" required />
+        <input name="middleName" value="${escapeHtml(survey.patient?.middleName || "")}" placeholder="Отчество" />
+        <input name="birthDate" type="date" value="${escapeHtml(survey.patient?.birthDate || "")}" />
+        <input name="phone" value="${escapeHtml(survey.patient?.phone || "")}" placeholder="Телефон" />
+        <input name="address" value="${escapeHtml(survey.patient?.address || "")}" placeholder="Адрес" />
+        <input name="clinic" value="${escapeHtml(survey.patient?.clinic || "")}" required />
+        <label><input name="reminderConsent" type="checkbox" ${survey.patient?.reminderConsent ? "checked" : ""}/> Согласие на напоминания</label>
+        <select name="reminderChannel"><option value="none">Не отправлять</option><option value="sms" ${survey.patient?.reminderChannel === "sms" ? "selected" : ""}>SMS</option><option value="telegram" ${survey.patient?.reminderChannel === "telegram" ? "selected" : ""}>Telegram</option></select>
+        <input name="telegramChatId" value="${escapeHtml(survey.patient?.telegramChatId || "")}" placeholder="Telegram chat ID" />
+        <button>Сохранить</button>
+      </form><button class="${survey.archivedAt ? "secondary" : "danger"}" data-action="patient-archive" data-id="${survey.id}" data-archived="${survey.archivedAt ? "false" : "true"}">${survey.archivedAt ? "Восстановить" : "В архив"}</button></details></td>
     </tr>
   `).join("");
+  const patientOptions = surveys.filter((survey) => !survey.archivedAt).map((survey) => `<option value="${survey.id}">${escapeHtml(fullName(survey.patient))} — ${escapeHtml(survey.patient?.clinic || "")}</option>`).join("");
   return html`
     <section class="panel">
       <h2>Анкеты медсестры</h2>
+      <details class="compact-admin-form"><summary>Объединить дубликаты пациентов</summary><form id="patientMergeForm" class="form grid two"><label>Карточка-дубликат<select name="sourceId">${patientOptions}</select></label><label>Основная карточка<select name="targetId">${patientOptions}</select></label><button>Объединить</button></form></details>
       <div class="filter-bar">
         <div class="form-row">
           <label>Сортировка пациентов по поликлиникам</label>
@@ -2396,12 +2422,19 @@ function renderSurveyTable(surveys) {
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Пациент</th><th>Дата рождения</th><th>АД</th><th>FINDRISC</th><th>Сердечно-сосудистый риск</th><th>Rabito</th><th>Статус</th><th>Дата</th></tr></thead>
-          <tbody>${rows || "<tr><td colspan='8'>Пока нет анкет</td></tr>"}</tbody>
+          <thead><tr><th>Пациент</th><th>Дата рождения</th><th>АД</th><th>FINDRISC</th><th>Сердечно-сосудистый риск</th><th>Rabito</th><th>Статус</th><th>Дата</th><th>Карточка</th></tr></thead>
+          <tbody>${rows || "<tr><td colspan='9'>Пока нет анкет</td></tr>"}</tbody>
         </table>
       </div>
     </section>
   `;
+}
+
+function renderOperationsAdmin() {
+  const clinics = adminSurveyClinics();
+  const options = clinics.map((clinic) => `<option>${escapeHtml(clinic)}</option>`).join("");
+  const reminders = (state.admin.reminderQueue || []).sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt)).slice(0,100).map((item) => `<tr><td>${escapeHtml(item.channel)}</td><td>${escapeHtml(item.recipientMasked)}</td><td>${new Date(item.scheduledAt).toLocaleString("ru-RU")}</td><td><span class="pill ${item.status === "sent" ? "ok" : item.status === "blocked" ? "warn" : ""}">${escapeHtml(item.status)}</span><div class="muted">${escapeHtml(item.reason || "")}</div></td></tr>`).join("");
+  return html`<section class="grid two"><form id="clinicTargetForm" class="panel form"><h2>Цели поликлиники</h2><select name="clinic" required>${options}</select><input name="monthlyPatients" type="number" min="0" placeholder="Пациентов в месяц"/><input name="monthlyVisits" type="number" min="0" placeholder="Осмотров в месяц"/><input name="followUpCompletionPercent" type="number" min="0" max="100" placeholder="Повторные визиты, %"/><button>Сохранить цели</button></form><section class="panel"><h2>Очередь напоминаний</h2><p class="muted">Статус «blocked» означает, что согласие/контакт отсутствуют или поставщик SMS/Telegram ещё не подключён.</p><div class="table-wrap"><table><thead><tr><th>Канал</th><th>Получатель</th><th>Когда</th><th>Статус</th></tr></thead><tbody>${reminders || "<tr><td colspan='4'>Очередь пуста</td></tr>"}</tbody></table></div></section></section>`;
 }
 
 function referralReasonText(survey) {
@@ -2639,6 +2672,31 @@ function renderQrAdmin() {
 
 function bindAdminForms() {
   bindAdminTrainingFilters();
+  document.querySelectorAll(".patient-edit-form").forEach((patientForm) => patientForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const data = Object.fromEntries(new FormData(patientForm));
+      data.reminderConsent = patientForm.elements.reminderConsent.checked;
+      await api(`/api/admin/patients/${patientForm.dataset.id}`, { method: "PUT", body: JSON.stringify(data) });
+      await loadAdmin();
+    } catch (error) { alert(error.message); }
+  }));
+  document.querySelector("#patientMergeForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!confirm("Объединить карточки? Дубликат будет архивирован, а его осмотры и задачи перенесены.")) return;
+    try {
+      await api("/api/admin/patients/merge", { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(event.target))) });
+      await loadAdmin();
+    } catch (error) { alert(error.message); }
+  });
+  document.querySelector("#clinicTargetForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      await api("/api/admin/clinic-targets", { method: "PUT", body: JSON.stringify(Object.fromEntries(new FormData(event.target))) });
+      alert("Цели сохранены");
+      await loadAdmin();
+    } catch (error) { alert(error.message); }
+  });
   const adminPasswordForm = document.querySelector("#adminPasswordForm");
   if (adminPasswordForm) adminPasswordForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -4153,11 +4211,14 @@ function renderDoctor() {
   const t = (value) => translateDoctorText(value);
   const doctorNav = [
     ["patients", "Пациенты"],
+    ["calendar", "Календарь"],
     ["tasks", "Задачи"],
     ["profile", "Кабинет"],
     ["stats", "Статистика"]
   ].map(([tab, label]) => `<button data-action="doctor-tab" data-tab="${tab}" class="${state.doctorSection === tab ? "active" : ""}">${escapeHtml(t(label))}</button>`).join("");
-  const content = state.doctorSection === "tasks"
+  const content = state.doctorSection === "calendar"
+    ? doctorCalendarPanel()
+    : state.doctorSection === "tasks"
     ? doctorTasksPanel()
     : state.doctorSection === "profile"
     ? doctorProfilePanel()
@@ -4192,6 +4253,23 @@ function renderDoctor() {
   bindDoctorPatientSurvey();
   bindDoctorAccountForm();
   bindDoctorTaskForms();
+  document.querySelector("#appointmentForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const result = await api("/api/doctor/appointments", { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(event.target))) });
+      state.doctor.appointments.push(result.appointment);
+      renderDoctor();
+    } catch (error) { alert(error.message); }
+  });
+}
+
+function doctorCalendarPanel() {
+  const patients = (state.doctor.surveys || []).map((survey) => `<option value="${survey.id}">${escapeHtml(fullName(survey.patient))}</option>`).join("");
+  const rows = [...(state.doctor.appointments || [])].sort((a,b) => new Date(a.startsAt)-new Date(b.startsAt)).map((item) => {
+    const survey = state.doctor.surveys.find((entry) => entry.id === item.surveyId);
+    return `<tr><td>${new Date(item.startsAt).toLocaleString("ru-RU")}</td><td>${escapeHtml(fullName(survey?.patient))}</td><td>${escapeHtml(item.note || "")}</td><td>${escapeHtml(item.status)}</td><td><div class="actions"><button data-action="appointment-status" data-id="${item.id}" data-status="arrived">Пришёл</button><button data-action="appointment-status" data-id="${item.id}" data-status="completed">Завершён</button><button class="secondary" data-action="appointment-status" data-id="${item.id}" data-status="no_show">Не явился</button></div></td></tr>`;
+  }).join("");
+  return html`<section class="panel"><h2>Календарь приёмов</h2><form id="appointmentForm" class="form grid two"><label>Пациент<select name="surveyId" required>${patients}</select></label><label>Дата и время<input type="datetime-local" name="startsAt" required /></label><label>Комментарий<input name="note" /></label><button>Записать пациента</button></form><div class="table-wrap"><table><thead><tr><th>Дата</th><th>Пациент</th><th>Комментарий</th><th>Статус</th><th></th></tr></thead><tbody>${rows || "<tr><td colspan='5'>Записей пока нет</td></tr>"}</tbody></table></div></section>`;
 }
 
 function doctorSortedSurveys(surveys) {
@@ -4263,6 +4341,7 @@ function doctorSurveyList(surveys) {
       <div class="patient-card__footer">
         ${survey.needsDoctor ? `<span class="pill warn">${escapeHtml(t("К врачу"))}</span>` : `<span class="pill ok">${escapeHtml(t("Обычный риск"))}</span>`}
         <button data-action="select-survey" data-id="${survey.id}">${escapeHtml(t("Открыть"))}</button>
+        <a href="/api/doctor/patients/${survey.id}/report.pdf"><button type="button" class="secondary">PDF</button></a>
       </div>
     </div>
   `).join("") || `<p class='muted'>${escapeHtml(t("Анкет пока нет"))}</p>`;
