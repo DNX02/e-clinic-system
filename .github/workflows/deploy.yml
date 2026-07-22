@@ -1,18 +1,16 @@
-name: Deploy to Google Cloud VM
+name: Verify e-clinic
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: eclinic-production-deploy
-  cancel-in-progress: false
 
 jobs:
   verify:
@@ -21,110 +19,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: "22"
           cache: npm
       - run: npm ci
-      - name: Check JavaScript syntax
-        run: |
-          node --check server.js
-          node --check public/app.js
-
-  deploy:
-    if: github.event_name != 'pull_request'
-    needs: verify
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure SSH
-        env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/eclinic_deploy
-          chmod 600 ~/.ssh/eclinic_deploy
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
-
-      - name: Build release archive
-        run: |
-          tar \
-            --exclude='.git' \
-            --exclude='.github' \
-            --exclude='node_modules' \
-            --exclude='data/db.json' \
-            -czf /tmp/eclinic-release.tgz .
-
-      - name: Upload release
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-        run: |
-          scp -i ~/.ssh/eclinic_deploy /tmp/eclinic-release.tgz \
-            "$DEPLOY_USER@$DEPLOY_HOST:/tmp/eclinic-release.tgz"
-
-      - name: Deploy with rollback
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-        run: |
-          ssh -i ~/.ssh/eclinic_deploy "$DEPLOY_USER@$DEPLOY_HOST" 'bash -s' <<'REMOTE'
-          set -euo pipefail
-
-          app_dir=/opt/e-clinic-system
-          backup_dir=/opt/e-clinic-deploy-backups
-          stamp=$(date -u +%Y%m%d-%H%M%S)
-          backup="$backup_dir/$stamp.tgz"
-
-          sudo install -d -m 700 "$backup_dir"
-          sudo tar \
-            --exclude='node_modules' \
-            --exclude='*.bak-*' \
-            -czf "$backup" -C "$app_dir" .
-
-          restore_previous_release() {
-            sudo tar -xzf "$backup" -C "$app_dir"
-            cd "$app_dir"
-            sudo npm ci --omit=dev
-            sudo systemctl restart e-clinic
-          }
-
-          sudo tar -xzf /tmp/eclinic-release.tgz -C "$app_dir"
-          sudo rm -f /tmp/eclinic-release.tgz
-          cd "$app_dir"
-          sudo npm ci --omit=dev
-          sudo systemctl restart e-clinic
-
-          healthy=false
-          for attempt in 1 2 3 4 5 6; do
-            if curl --fail --silent --show-error \
-              http://127.0.0.1:3000/api/health >/dev/null; then
-              healthy=true
-              break
-            fi
-            sleep 5
-          done
-
-          if [ "$healthy" != true ]; then
-            restore_previous_release
-            exit 1
-          fi
-
-          mapfile -t old_backups < <(
-            find "$backup_dir" -maxdepth 1 -type f -name '*.tgz' \
-              -printf '%T@ %p\n' | sort -nr | tail -n +6 | cut -d' ' -f2-
-          )
-          for old_backup in "${old_backups[@]}"; do
-            case "$old_backup" in
-              "$backup_dir"/*.tgz) sudo rm -- "$old_backup" ;;
-              *) echo "Unsafe backup path: $old_backup" >&2; exit 1 ;;
-            esac
-          done
-          REMOTE
-
-      - name: Verify public health endpoint
-        run: |
-          curl --fail --silent --show-error \
-            --retry 5 --retry-delay 5 \
-            https://doctor.e-clinic-control.ru/api/health
+      - run: node --check server.js
+      - run: node --check public/app.js
