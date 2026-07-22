@@ -607,6 +607,21 @@ function clientIp(req) {
   return String(req.headers["cf-connecting-ip"] || req.headers["x-real-ip"] || req.socket.remoteAddress || "unknown").trim();
 }
 
+function securityEvent(event, req, details = {}) {
+  const pathname = String(req.url || "").split("?", 1)[0] || "/";
+  console.warn(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: "warning",
+    category: "security",
+    event,
+    requestId: req.requestId || "unknown",
+    ip: clientIp(req),
+    method: req.method || "GET",
+    path: pathname,
+    ...details
+  }));
+}
+
 function consumeRateLimit(key, limit, windowMs) {
   const now = Date.now();
   const current = rateLimits.get(key);
@@ -627,6 +642,7 @@ function enforceLoginRateLimit(req, res, loginType) {
   const key = `login:${loginType}:${clientIp(req)}`;
   const result = consumeRateLimit(key, LOGIN_RATE_LIMIT, LOGIN_RATE_WINDOW_MS);
   if (result.allowed) return key;
+  securityEvent("rate_limited", req, { scope: "login", accountType: loginType, retryAfter: result.retryAfter });
   send(res, 429, { error: "Слишком много попыток входа. Повторите через минуту." }, { "Retry-After": String(result.retryAfter) });
   return "";
 }
@@ -635,6 +651,7 @@ function enforceUserRateLimit(req, res, session, action, limit, windowMs) {
   const identity = session ? `${session.userType}:${session.userId}` : clientIp(req);
   const result = consumeRateLimit(`${action}:${identity}`, limit, windowMs);
   if (result.allowed) return true;
+  securityEvent("rate_limited", req, { scope: action, accountType: session?.userType || "anonymous", retryAfter: result.retryAfter });
   send(res, 429, { error: "Слишком много запросов. Повторите позже." }, { "Retry-After": String(result.retryAfter) });
   return false;
 }
@@ -1331,9 +1348,13 @@ async function handleApi(req, res, url) {
     if (!rateLimitKey) return;
     const body = await parseBody(req);
     const admin = db.admins.find((item) => item.username === body.username);
-    if (!admin || !verifyPassword(body.password || "", admin.passwordHash)) return send(res, 401, { error: "Неверный логин или пароль" });
+    if (!admin || !verifyPassword(body.password || "", admin.passwordHash)) {
+      securityEvent("login_failed", req, { accountType: "admin" });
+      return send(res, 401, { error: "Неверный логин или пароль" });
+    }
     clearRateLimit(rateLimitKey);
     const sid = await createSession("admin", admin.id);
+    securityEvent("login_succeeded", req, { accountType: "admin", actorId: admin.id });
     return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(req, sid) });
   }
 
@@ -1342,13 +1363,18 @@ async function handleApi(req, res, url) {
     if (!rateLimitKey) return;
     const body = await parseBody(req);
     const doctor = db.doctors.find((item) => item.login === body.login);
-    if (!doctor || !verifyPassword(body.accessKey || "", doctor.accessKeyHash)) return send(res, 401, { error: "Неверный логин или ключ" });
+    if (!doctor || !verifyPassword(body.accessKey || "", doctor.accessKeyHash)) {
+      securityEvent("login_failed", req, { accountType: "doctor" });
+      return send(res, 401, { error: "Неверный логин или ключ" });
+    }
     clearRateLimit(rateLimitKey);
     const sid = await createSession("doctor", doctor.id);
+    securityEvent("login_succeeded", req, { accountType: "doctor", actorId: doctor.id });
     return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(req, sid) });
   }
 
   if (req.method === "POST" && url.pathname === "/api/logout") {
+    securityEvent("logout", req, { accountType: session?.userType || "anonymous", actorId: session?.userId || null });
     await clearSession(req);
     return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(req, "", 0) });
   }
@@ -2420,12 +2446,24 @@ function getLanUrls() {
 }
 
 createServer(async (req, res) => {
+  req.requestId = crypto.randomUUID();
+  res.setHeader("X-Request-Id", req.requestId);
+  const startedAt = Date.now();
+  res.once("finish", () => {
+    if (res.statusCode >= 400) {
+      securityEvent("http_error_response", req, { statusCode: res.statusCode, durationMs: Date.now() - startedAt });
+    }
+  });
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
-    if (!isTrustedStateChangingRequest(req)) return send(res, 403, { error: "Межсайтовый запрос заблокирован" });
+    if (!isTrustedStateChangingRequest(req)) {
+      securityEvent("cross_site_request_blocked", req);
+      return send(res, 403, { error: "Межсайтовый запрос заблокирован" });
+    }
     if (url.pathname.startsWith("/api/")) return await handleApi(req, res, url);
     return await serveStatic(req, res, url);
   } catch (error) {
+    securityEvent("application_error", req, { errorName: error?.name || "Error" });
     console.error(error);
     if ([400, 413].includes(error.statusCode)) {
       return send(res, error.statusCode, { error: error.message });
