@@ -55,3 +55,9 @@ curl --fail http://127.0.0.1:3000/api/health
 systemctl status eclinic-security-audit.timer --no-pager
 journalctl -u eclinic-security-audit.service -n 100 --no-pager
 ```
+
+Безопасная ручная проверка Telegram-канала, не создающая настоящую ошибку службы:
+
+```bash
+sudo /usr/local/sbin/eclinic-security-audit-notify --test
+```
