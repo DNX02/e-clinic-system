@@ -18,6 +18,7 @@ const PG_TIMEOUT_MS = Number(process.env.PG_TIMEOUT_MS || 8000);
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 const INITIAL_ADMIN_PASSWORD = process.env.INITIAL_ADMIN_PASSWORD || "";
+const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 12 * 60 * 60 * 1000);
 const ADMIN_APP_PATH = "/app-1-admin-panel";
 const DOCTOR_APP_PATH = "/app-2-doctor";
 const SURVEY_APP_PATH = "/app-3-patient-survey";
@@ -570,11 +571,34 @@ function getCookie(req, name) {
   return cookie ? decodeURIComponent(cookie.split("=").slice(1).join("=")) : null;
 }
 
+function isSecureRequest(req) {
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim().toLowerCase();
+  if (forwardedProto === "https") return true;
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(":")[0].toLowerCase();
+  return !["localhost", "127.0.0.1", "::1", "[::1]"].includes(host);
+}
+
+function sessionCookie(req, sid, maxAgeSeconds = Math.floor(SESSION_TTL_MS / 1000)) {
+  const secure = isSecureRequest(req) ? "; Secure" : "";
+  return `sid=${encodeURIComponent(sid)}; HttpOnly; Path=/; SameSite=Strict; Max-Age=${maxAgeSeconds}${secure}`;
+}
+
 async function getSession(req) {
   const sid = getCookie(req, "sid");
   if (!sid) return null;
   const db = await readDb();
-  return db.sessions[sid] || null;
+  const session = db.sessions[sid];
+  if (!session) return null;
+  const createdAt = Date.parse(session.createdAt || "");
+  const userExists = session.userType === "admin"
+    ? db.admins.some((item) => item.id === session.userId)
+    : session.userType === "doctor" && db.doctors.some((item) => item.id === session.userId);
+  if (!Number.isFinite(createdAt) || Date.now() - createdAt >= SESSION_TTL_MS || !userExists) {
+    delete db.sessions[sid];
+    await writeDb(db);
+    return null;
+  }
+  return session;
 }
 
 async function createSession(userType, userId) {
@@ -591,6 +615,12 @@ async function clearSession(req) {
   const db = await readDb();
   delete db.sessions[sid];
   await writeDb(db);
+}
+
+function invalidateUserSessions(db, userType, userId) {
+  for (const [sid, session] of Object.entries(db.sessions || {})) {
+    if (session.userType === userType && session.userId === userId) delete db.sessions[sid];
+  }
 }
 
 function publicDoctor(doctor) {
@@ -1106,7 +1136,7 @@ async function handleApi(req, res, url) {
     const admin = db.admins.find((item) => item.username === body.username);
     if (!admin || !verifyPassword(body.password || "", admin.passwordHash)) return send(res, 401, { error: "Неверный логин или пароль" });
     const sid = await createSession("admin", admin.id);
-    return send(res, 200, { ok: true }, { "Set-Cookie": `sid=${encodeURIComponent(sid)}; HttpOnly; Path=/; SameSite=Lax` });
+    return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(req, sid) });
   }
 
   if (req.method === "POST" && url.pathname === "/api/login/doctor") {
@@ -1114,12 +1144,12 @@ async function handleApi(req, res, url) {
     const doctor = db.doctors.find((item) => item.login === body.login);
     if (!doctor || !verifyPassword(body.accessKey || "", doctor.accessKeyHash)) return send(res, 401, { error: "Неверный логин или ключ" });
     const sid = await createSession("doctor", doctor.id);
-    return send(res, 200, { ok: true }, { "Set-Cookie": `sid=${encodeURIComponent(sid)}; HttpOnly; Path=/; SameSite=Lax` });
+    return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(req, sid) });
   }
 
   if (req.method === "POST" && url.pathname === "/api/logout") {
     await clearSession(req);
-    return send(res, 200, { ok: true }, { "Set-Cookie": "sid=; Max-Age=0; Path=/" });
+    return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(req, "", 0) });
   }
 
   if (req.method === "GET" && url.pathname === "/api/me") {
@@ -1197,10 +1227,11 @@ async function handleApi(req, res, url) {
     admin.role = role;
     if (password) {
       admin.passwordHash = hashPassword(password);
+      invalidateUserSessions(db, "admin", admin.id);
     }
     admin.updatedAt = new Date().toISOString();
     await writeDb(db);
-    return send(res, 200, { admin: publicAdmin(admin) });
+    return send(res, 200, { admin: publicAdmin(admin), currentSessionEnded: Boolean(password && admin.id === session.userId) });
   }
 
   if (req.method === "DELETE" && url.pathname.startsWith("/api/admin/admins/")) {
@@ -1427,9 +1458,10 @@ async function handleApi(req, res, url) {
     doctor.login = login;
     if (accessKey) {
       doctor.accessKeyHash = hashPassword(accessKey);
+      invalidateUserSessions(db, "doctor", doctor.id);
     }
     await writeDb(db);
-    return send(res, 200, { doctor: publicDoctor(doctor) });
+    return send(res, 200, { doctor: publicDoctor(doctor), currentSessionEnded: Boolean(accessKey) });
   }
 
   if (req.method === "POST" && url.pathname === "/api/doctor/surveys") {

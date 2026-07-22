@@ -2651,7 +2651,12 @@ function bindAdminForms() {
       event.preventDefault();
       try {
         const data = Object.fromEntries(new FormData(accessForm));
-        await api(`/api/admin/admins/${accessForm.dataset.id}`, { method: "PUT", body: JSON.stringify(data) });
+        const result = await api(`/api/admin/admins/${accessForm.dataset.id}`, { method: "PUT", body: JSON.stringify(data) });
+        if (result.currentSessionEnded) {
+          alert("Пароль изменён. Для безопасности войдите заново.");
+          window.location.href = ADMIN_APP_PATH;
+          return;
+        }
         await loadAdmin();
       } catch (error) {
         alert(error.message);
@@ -4333,6 +4338,11 @@ function bindDoctorAccountForm() {
     try {
       const data = Object.fromEntries(new FormData(form));
       const result = await api("/api/doctor/account", { method: "PUT", body: JSON.stringify(data) });
+      if (result.currentSessionEnded) {
+        alert(translateDoctorText("Пароль изменён. Для безопасности войдите заново."));
+        window.location.href = DOCTOR_APP_PATH;
+        return;
+      }
       state.doctor.doctor = result.doctor;
       document.querySelector("#doctorAccountResult").innerHTML = `<div class="notice ok">${escapeHtml(translateDoctorText("Логин и пароль обновлены."))}</div>`;
       form.elements.accessKey.value = "";
