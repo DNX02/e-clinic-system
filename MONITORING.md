@@ -38,3 +38,20 @@ systemctl status netdata --no-pager
 journalctl -u netdata --since "1 hour ago" --no-pager
 curl --fail http://127.0.0.1:3000/api/health
 ```
+
+## Ежедневная проверка безопасности
+
+Таймер `eclinic-security-audit.timer` ежедневно запускает локальную замену GitHub Actions. Проверка выполняется для последнего коммита `main` и включает:
+
+- `npm audit` для рабочих зависимостей;
+- проверку синтаксиса JavaScript и shell-скриптов;
+- поиск случайно добавленных токенов, ключей и паролей в файлах Git.
+
+При ошибке служба `eclinic-security-audit-notify.service` отправляет сообщение в Telegram через уже настроенного бота Netdata. Токен и получатель читаются из закрытого серверного файла и не копируются в репозиторий.
+
+Проверка состояния:
+
+```bash
+systemctl status eclinic-security-audit.timer --no-pager
+journalctl -u eclinic-security-audit.service -n 100 --no-pager
+```

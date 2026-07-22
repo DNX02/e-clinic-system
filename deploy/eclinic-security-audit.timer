@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the E-Clinic security audit every day
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 UTC
+RandomizedDelaySec=15min
+Persistent=true
+Unit=eclinic-security-audit.service
+
+[Install]
+WantedBy=timers.target
