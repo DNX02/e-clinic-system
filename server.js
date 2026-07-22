@@ -557,9 +557,22 @@ function send(res, status, payload, headers = {}) {
   const body = typeof payload === "string" || isBinary ? payload : JSON.stringify(payload);
   res.writeHead(status, {
     "Content-Type": typeof payload === "string" || isBinary ? "text/plain; charset=utf-8" : "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    ...securityHeaders(),
     ...headers
   });
   res.end(body);
+}
+
+function securityHeaders() {
+  return {
+    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://api.qrserver.com; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
+  };
 }
 
 async function parseBody(req) {
@@ -825,6 +838,107 @@ function calculateRabito(input) {
   const sexCoef = input.sex === "male" ? 1 : 2;
   if (!arm || !waist || !calf) return null;
   return Number((0.5759 * arm + 0.5263 * waist + 1.2452 * calf - 4.8689 * sexCoef - 32.9241).toFixed(1));
+}
+
+function invalidInput(message) {
+  const error = new Error(message);
+  error.statusCode = 400;
+  throw error;
+}
+
+function cleanText(value, label, { required = false, max = 200 } = {}) {
+  const text = String(value ?? "").trim();
+  if (required && !text) invalidInput(`${label}: поле обязательно`);
+  if (text.length > max) invalidInput(`${label}: превышена допустимая длина`);
+  return text;
+}
+
+function cleanNumber(value, label, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  if (value === "" || value === null || value === undefined) return 0;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < min || number > max) invalidInput(`${label}: недопустимое значение`);
+  return number;
+}
+
+function cleanEnum(value, label, allowed, fallback = "") {
+  const text = String(value ?? "").trim();
+  if (!text && fallback) return fallback;
+  if (!allowed.includes(text)) invalidInput(`${label}: недопустимое значение`);
+  return text;
+}
+
+function cleanTextArray(value, label, { allowed = null, maxItems = 20, maxLength = 200 } = {}) {
+  if (!Array.isArray(value)) return [];
+  if (value.length > maxItems) invalidInput(`${label}: слишком много значений`);
+  return value.map((item) => {
+    const text = cleanText(item, label, { max: maxLength });
+    if (allowed && !allowed.includes(text)) invalidInput(`${label}: недопустимое значение`);
+    return text;
+  });
+}
+
+function validateSurveyInput(body, clinicOverride = "") {
+  const birthDate = cleanText(body.birthDate, "Дата рождения", { required: true, max: 10 });
+  const parsedBirthDate = Date.parse(`${birthDate}T00:00:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || !Number.isFinite(parsedBirthDate) || parsedBirthDate > Date.now() || birthDate < "1900-01-01") {
+    invalidInput("Дата рождения: недопустимое значение");
+  }
+  return {
+    lastName: cleanText(body.lastName, "Фамилия", { required: true, max: 100 }),
+    firstName: cleanText(body.firstName, "Имя", { required: true, max: 100 }),
+    middleName: cleanText(body.middleName, "Отчество", { max: 100 }),
+    birthDate,
+    phone: cleanText(body.phone, "Телефон", { max: 50 }),
+    address: cleanText(body.address, "Адрес", { max: 300 }),
+    clinic: cleanText(clinicOverride || body.clinic, "Поликлиника", { required: true, max: 100 }),
+    nurseName: cleanText(body.nurseName || body.nurseFullName, "ФИО медсестры", { max: 100 }),
+    sex: cleanEnum(body.sex, "Пол", ["male", "female"]),
+    age: cleanNumber(body.age, "Возраст", { min: 0, max: 120 }),
+    height: cleanNumber(body.height, "Рост", { min: 0, max: 250 }),
+    bmi: cleanNumber(body.bmi, "Индекс массы тела", { min: 0, max: 100 }),
+    systolic: cleanNumber(body.systolic, "Систолическое давление", { min: 0, max: 300 }),
+    diastolic: cleanNumber(body.diastolic, "Диастолическое давление", { min: 0, max: 200 }),
+    arm: cleanNumber(body.arm, "Окружность плеча", { min: 0, max: 200 }),
+    rabitoWaist: cleanNumber(body.rabitoWaist || body.waist, "Окружность талии", { min: 0, max: 300 }),
+    calf: cleanNumber(body.calf, "Окружность голени", { min: 0, max: 200 }),
+    glucoseLevel: cleanNumber(body.glucoseLevel, "Уровень сахара", { min: 0, max: 50 }),
+    activity: cleanEnum(body.activity, "Физическая активность", ["yes", "no"]),
+    vegetables: cleanEnum(body.vegetables, "Овощи и фрукты", ["yes", "no"]),
+    bpMeds: cleanEnum(body.bpMeds, "Препараты от давления", ["yes", "no"]),
+    highGlucose: cleanEnum(body.highGlucose, "Высокий сахар", ["yes", "no"]),
+    familyDiabetes: cleanEnum(body.familyDiabetes, "Диабет у родственников", ["none", "second", "first"]),
+    smoker: cleanEnum(body.smoker, "Курение", ["yes", "no"])
+  };
+}
+
+function validateVisitInput(body) {
+  const laboratoryTests = Array.isArray(body.laboratoryTests) ? body.laboratoryTests : [];
+  if (laboratoryTests.length > 20) invalidInput("Лабораторные анализы: слишком много значений");
+  return {
+    surveyId: cleanText(body.surveyId, "Пациент", { required: true, max: 100 }),
+    weight: cleanNumber(body.weight, "Вес", { min: 0, max: 500 }),
+    height: cleanNumber(body.height, "Рост", { min: 0, max: 250 }),
+    bmi: cleanNumber(body.bmi, "Индекс массы тела", { min: 0, max: 100 }),
+    glucose: cleanNumber(body.glucose, "Уровень сахара", { min: 0, max: 50 }),
+    glucoseType: cleanEnum(body.glucoseType, "Тип измерения сахара", ["fasting", "random", "postMeal", "hba1c"], "fasting"),
+    diagnosis: cleanText(body.diagnosis, "Диагноз", { max: 500 }),
+    systolic: cleanNumber(body.systolic, "Систолическое давление", { min: 0, max: 300 }),
+    diastolic: cleanNumber(body.diastolic, "Диастолическое давление", { min: 0, max: 200 }),
+    followUpDays: cleanNumber(body.followUpDays, "Срок повторного осмотра", { min: 0, max: 3650 }),
+    laboratoryTests: laboratoryTests.map((item) => ({
+      test: cleanText(item?.test || item?.name, "Название анализа", { required: true, max: 100 }),
+      result: cleanText(item?.result, "Результат анализа", { max: 200 }),
+      fields: Object.fromEntries(Object.entries(item?.fields && typeof item.fields === "object" ? item.fields : {}).slice(0, 20).map(([key, value]) => [
+        cleanText(key, "Поле анализа", { required: true, max: 100 }),
+        cleanText(value, "Значение анализа", { max: 200 })
+      ]))
+    })),
+    referrals: cleanTextArray(body.referrals, "Направления", { maxItems: 20 }),
+    treatmentPlan: cleanText(body.treatmentPlan, "План лечения", { max: 3000 }),
+    diabetesDrugs: cleanTextArray(body.diabetesDrugs, "Препараты от диабета", { allowed: diabetesDrugs, maxItems: 20 }),
+    hypertensionDrugs: cleanTextArray(body.hypertensionDrugs, "Препараты от давления", { allowed: hypertensionDrugs, maxItems: 20 }),
+    lifestyleRecommendations: cleanTextArray(body.lifestyleRecommendations, "Рекомендации", { allowed: ["diabetesDiet", "physicalActivity"], maxItems: 2 })
+  };
 }
 
 function calculateScore2Lite(input) {
@@ -1475,7 +1589,7 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/nurse-surveys") {
-    const body = await parseBody(req);
+    const body = validateSurveyInput(await parseBody(req));
     const survey = buildNurseSurvey(body);
     db.nurseSurveys.push(survey);
     appendActivity(db, {
@@ -1527,8 +1641,8 @@ async function handleApi(req, res, url) {
     if (session?.userType !== "doctor") return send(res, 403, { error: "Нет доступа" });
     const doctor = db.doctors.find((item) => item.id === session.userId);
     if (!doctor) return send(res, 404, { error: "Врач не найден" });
-    const body = await parseBody(req);
-    const survey = buildNurseSurvey({ ...body, clinic: doctor.clinic });
+    const body = validateSurveyInput(await parseBody(req), doctor.clinic);
+    const survey = buildNurseSurvey(body);
     survey.createdByDoctorId = doctor.id;
     db.nurseSurveys.push(survey);
     appendActivity(db, {
@@ -1569,7 +1683,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === "POST" && url.pathname === "/api/doctor/visits") {
     if (session?.userType !== "doctor") return send(res, 403, { error: "Нет доступа" });
-    const body = await parseBody(req);
+    const body = validateVisitInput(await parseBody(req));
     const doctor = db.doctors.find((item) => item.id === session.userId);
     if (!doctor) return send(res, 404, { error: "Врач не найден" });
     const survey = db.nurseSurveys.find((item) => item.id === body.surveyId);
@@ -1592,14 +1706,14 @@ async function handleApi(req, res, url) {
       systolic: Number(body.systolic || 0),
       diastolic: Number(body.diastolic || 0),
       followUpDays: Number(body.followUpDays || 0),
-      laboratoryTests: Array.isArray(body.laboratoryTests) ? body.laboratoryTests : [],
-      referrals: body.referrals || [],
-      treatmentPlan: body.treatmentPlan || "",
-      diabetesDrugs: body.diabetesDrugs || [],
-      hypertensionDrugs: body.hypertensionDrugs || [],
+      laboratoryTests: body.laboratoryTests,
+      referrals: body.referrals,
+      treatmentPlan: body.treatmentPlan,
+      diabetesDrugs: body.diabetesDrugs,
+      hypertensionDrugs: body.hypertensionDrugs,
       lifestyleRecommendations: {
-        diabetesDiet: Array.isArray(body.lifestyleRecommendations) && body.lifestyleRecommendations.includes("diabetesDiet"),
-        physicalActivity: Array.isArray(body.lifestyleRecommendations) && body.lifestyleRecommendations.includes("physicalActivity")
+        diabetesDiet: body.lifestyleRecommendations.includes("diabetesDiet"),
+        physicalActivity: body.lifestyleRecommendations.includes("physicalActivity")
       },
       createdAt: new Date().toISOString()
     };
@@ -2253,11 +2367,11 @@ async function serveStatic(req, res, url) {
   if (!filePath.startsWith(publicDir)) return send(res, 403, "Нет доступа");
   try {
     const content = await readFile(filePath);
-    res.writeHead(200, { "Content-Type": mime[extname(filePath)] || "application/octet-stream" });
+    res.writeHead(200, { "Content-Type": mime[extname(filePath)] || "application/octet-stream", ...securityHeaders() });
     res.end(content);
   } catch {
     const content = await readFile(join(publicDir, "index.html"));
-    res.writeHead(200, { "Content-Type": mime[".html"] });
+    res.writeHead(200, { "Content-Type": mime[".html"], ...securityHeaders() });
     res.end(content);
   }
 }
