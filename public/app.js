@@ -871,7 +871,7 @@ function showDoctorLanguagePrompt(onChoose) {
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js?v=20260722sugar1").catch(() => {});
+  navigator.serviceWorker.register("/sw.js?v=20260723mobile1").catch(() => {});
 }
 
 async function boot() {
