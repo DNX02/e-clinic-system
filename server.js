@@ -646,7 +646,10 @@ function isTrustedStateChangingRequest(req) {
   const origin = String(req.headers.origin || "").trim();
   if (!origin) return true;
   try {
-    const originHost = new URL(origin).host.toLowerCase();
+    const originUrl = new URL(origin);
+    const originHost = originUrl.host.toLowerCase();
+    const originHostname = originUrl.hostname.toLowerCase();
+    if (originUrl.protocol === "https:" && (originHostname === "e-clinic-control.ru" || originHostname.endsWith(".e-clinic-control.ru"))) return true;
     const requestHost = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim().toLowerCase();
     return Boolean(originHost && requestHost && originHost === requestHost);
   } catch {
