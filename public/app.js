@@ -94,6 +94,7 @@ const clinicSortKey = (value = "") => {
 };
 const clinicNumbers = Array.from({ length: 15 }, (_, index) => index + 1).filter((number) => ![6, 13].includes(number));
 const clinicOptions = clinicNumbers.map((number) => [`Поликлиника №${number}`, `Поликлиника №${number}`]);
+const isExcludedClinicName = (value = "") => ["6", "13"].includes(String(value).match(/\d+/)?.[0] || "");
 const lifestyleRecommendations = {
   diabetesDiet: [
     "Основа питания: овощи, фрукты, бобовые, цельные злаки и нежирные источники белка.",
@@ -879,7 +880,7 @@ function showDoctorLanguagePrompt(onChoose) {
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js?v=20260723tasks1").catch(() => {});
+  navigator.serviceWorker.register("/sw.js?v=20260723tasks2").catch(() => {});
 }
 
 async function boot() {
@@ -1903,12 +1904,13 @@ function adminTab() {
 
 function adminSurveyClinics() {
   return [...new Set(state.admin.surveys.map(surveyClinic))]
-    .filter(Boolean)
+    .filter((clinic) => clinic && !isExcludedClinicName(clinic))
     .sort((a, b) => clinicSortKey(a).localeCompare(clinicSortKey(b), "ru"));
 }
 
 function filteredAdminSurveys() {
   return state.admin.surveys
+    .filter((survey) => !isExcludedClinicName(surveyClinic(survey)))
     .filter((survey) => state.surveyClinicFilter === "all" || surveyClinic(survey) === state.surveyClinicFilter)
     .sort((a, b) => {
       const clinicCompare = clinicSortKey(surveyClinic(a)).localeCompare(clinicSortKey(surveyClinic(b)), "ru");
@@ -1949,7 +1951,7 @@ function renderTrainingAdmin() {
     (acc[attempt.participantId] ||= []).push(attempt);
     return acc;
   }, {});
-  const participants = (state.admin.trainingParticipants || []).filter((participant) =>
+  const participants = (state.admin.trainingParticipants || []).filter((participant) => !isExcludedClinicName(participant.clinic)).filter((participant) =>
     trainingParticipantMatchesFilters(participant, attemptsByParticipant[participant.id] || [], "training")
   );
   const pageSize = 20;
@@ -2211,7 +2213,7 @@ function renderNurseTrainingAdmin() {
     (acc[attempt.participantId] ||= []).push(attempt);
     return acc;
   }, {});
-  const participants = (state.admin.nurseTrainingParticipants || []).filter((participant) =>
+  const participants = (state.admin.nurseTrainingParticipants || []).filter((participant) => !isExcludedClinicName(participant.clinic)).filter((participant) =>
     trainingParticipantMatchesFilters(participant, attemptsByParticipant[participant.id] || [], "nurseTraining")
   );
   const pageSize = 20;
@@ -2329,7 +2331,7 @@ function renderDoctorsAdmin() {
       <input readonly value="${escapeHtml(state.lastDoctorKey.accessKey)}" style="margin-top:8px" />
     </div>
   ` : '<div id="newKey"></div>';
-  const rows = state.admin.doctors.map((doctor) => html`
+  const rows = state.admin.doctors.filter((doctor) => !isExcludedClinicName(doctor.clinic)).map((doctor) => html`
     <tr>
       <td>${escapeHtml(doctor.fullName)}</td>
       <td>${escapeHtml(doctor.login)}</td>
@@ -2443,7 +2445,9 @@ function referralReasonText(survey) {
 function renderVisitsAdmin() {
   const doctors = Object.fromEntries(state.admin.doctors.map((doctor) => [doctor.id, doctor.fullName]));
   const surveys = Object.fromEntries(state.admin.surveys.map((survey) => [survey.id, fullName(survey.patient)]));
-  const rows = state.admin.visits.map((visit) => html`
+  const excludedSurveyIds = new Set(state.admin.surveys.filter((survey) => isExcludedClinicName(surveyClinic(survey))).map((survey) => survey.id));
+  const excludedDoctorIds = new Set(state.admin.doctors.filter((doctor) => isExcludedClinicName(doctor.clinic)).map((doctor) => doctor.id));
+  const rows = state.admin.visits.filter((visit) => !excludedSurveyIds.has(visit.surveyId) && !excludedDoctorIds.has(visit.doctorId)).map((visit) => html`
     <tr>
       <td>${escapeHtml(doctors[visit.doctorId] || "Врач")}</td>
       <td>${escapeHtml(surveys[visit.surveyId] || "Пациент")}</td>

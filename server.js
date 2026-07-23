@@ -838,6 +838,16 @@ function clinicKey(value = "") {
   return number || text.replace(/\s+/g, "");
 }
 
+function isExcludedClinic(value = "") {
+  return ["6", "13"].includes(clinicKey(value));
+}
+
+function allowedClinic(value, label = "Поликлиника") {
+  const clinic = cleanText(value, label, { required: true, max: 100 });
+  if (isExcludedClinic(clinic)) invalidInput(`${label}: поликлиника исключена из системы`);
+  return clinic;
+}
+
 function doctorCanAccessSurvey(doctor, survey) {
   const doctorClinic = clinicKey(doctor?.clinic);
   const surveyClinic = clinicKey(survey?.patient?.clinic || survey?.clinic);
@@ -1086,7 +1096,7 @@ function validatePatientProfileInput(body, existing = {}) {
     birthDate,
     phone: cleanPhone(body.phone ?? existing.phone),
     address: cleanText(body.address ?? existing.address, "Адрес", { max: 300 }),
-    clinic: cleanText(body.clinic ?? existing.clinic, "Поликлиника", { required: true, max: 100 }),
+    clinic: allowedClinic(body.clinic ?? existing.clinic),
     sex: cleanEnum(body.sex ?? existing.sex, "Пол", ["male", "female"]),
     reminderConsent: body.reminderConsent === true || body.reminderConsent === "true",
     reminderChannel: cleanEnum(body.reminderChannel ?? existing.reminderChannel ?? "none", "Канал напоминаний", ["none", "sms", "telegram"], "none"),
@@ -1114,7 +1124,7 @@ function validateSurveyInput(body, clinicOverride = "") {
     birthDate,
     phone: cleanPhone(body.phone),
     address: cleanText(body.address, "Адрес", { max: 300 }),
-    clinic: cleanText(clinicOverride || body.clinic, "Поликлиника", { required: true, max: 100 }),
+    clinic: allowedClinic(clinicOverride || body.clinic),
     nurseName: cleanText(body.nurseName || body.nurseFullName, "ФИО медсестры", { max: 100 }),
     sex: cleanEnum(body.sex, "Пол", ["male", "female"]),
     age: cleanNumber(body.age, "Возраст", { min: 0, max: 120 }),
@@ -1632,7 +1642,7 @@ async function handleApi(req, res, url) {
   if (req.method === "PUT" && url.pathname === "/api/admin/clinic-targets") {
     if (!canMutateAdmin(session, db)) return send(res, 403, { error: "Недостаточно прав" });
     const body = await parseBody(req);
-    const clinic = cleanText(body.clinic, "Поликлиника", { required: true, max: 100 });
+    const clinic = allowedClinic(body.clinic);
     db.settings.clinicTargets ||= {};
     db.settings.clinicTargets[clinic] = {
       monthlyPatients: Math.max(0, Number(body.monthlyPatients || 0)),
@@ -1811,7 +1821,7 @@ async function handleApi(req, res, url) {
     const participant = {
       id: crypto.randomUUID(),
       fullName: body.fullName,
-      clinic: body.clinic,
+      clinic: allowedClinic(body.clinic),
       specialty: body.specialty || "",
       phone: body.phone || "",
       createdAt: new Date().toISOString()
@@ -1851,7 +1861,7 @@ async function handleApi(req, res, url) {
     const participant = {
       id: crypto.randomUUID(),
       fullName: body.fullName,
-      clinic: body.clinic,
+      clinic: allowedClinic(body.clinic),
       position: body.position || "Медсестра",
       phone: body.phone || "",
       createdAt: new Date().toISOString()
@@ -1894,7 +1904,7 @@ async function handleApi(req, res, url) {
       login: body.login,
       accessKeyHash: hashPassword(accessKey),
       passport: body.passport,
-      clinic: body.clinic,
+      clinic: allowedClinic(body.clinic),
       specialty: body.specialty,
       experienceYears: Number(body.experienceYears || 0),
       createdAt: new Date().toISOString()
@@ -1917,7 +1927,7 @@ async function handleApi(req, res, url) {
       fullName: body.fullName,
       login: body.login,
       passport: body.passport,
-      clinic: body.clinic,
+      clinic: allowedClinic(body.clinic),
       specialty: body.specialty,
       experienceYears: Number(body.experienceYears || 0)
     });
@@ -2461,7 +2471,7 @@ function buildEducationInvestorStats(participants, attempts, postMode) {
     (acc[attempt.participantId] ||= []).push(attempt);
     return acc;
   }, {});
-  const rows = participants.map((participant) => {
+  const rows = participants.filter((participant) => !isExcludedClinic(participant.clinic)).map((participant) => {
     const participantAttempts = attemptsByParticipant[participant.id] || [];
     const pre = participantAttempts.find((attempt) => attempt.type === "pre");
     const post = postMode === "task"
@@ -2517,7 +2527,9 @@ function buildInvestorDashboard(db) {
   const stats = buildStats(db);
   const doctorEducation = buildEducationInvestorStats(db.trainingParticipants, db.trainingAttempts, "task");
   const nurseEducation = buildEducationInvestorStats(db.nurseTrainingParticipants, db.nurseTrainingAttempts, "post");
-  const surveysByClinic = countSelected(db.nurseSurveys.map((survey) => survey.patient?.clinic || survey.clinic || "Не указано"));
+  const visibleSurveys = db.nurseSurveys.filter((survey) => !isExcludedClinic(survey.patient?.clinic || survey.clinic));
+  const visibleDoctors = db.doctors.filter((doctor) => !isExcludedClinic(doctor.clinic));
+  const surveysByClinic = countSelected(visibleSurveys.map((survey) => survey.patient?.clinic || survey.clinic || "Не указано"));
   const visitsByDate = countSelected(db.doctorVisits.map((visit) => dateKey(visit.createdAt)));
   const surveyByDate = countSelected(db.nurseSurveys.map((survey) => dateKey(survey.createdAt)));
   const diagnoses = countSelected(db.doctorVisits.map((visit) => visit.diagnosis || "Без диагноза"));
@@ -2525,9 +2537,9 @@ function buildInvestorDashboard(db) {
   const highGlucose = db.nurseSurveys.filter((survey) => Number(survey.measurements?.glucoseLevel || 0) >= 6.1).length;
   const highPressure = db.nurseSurveys.filter((survey) => Number(survey.measurements?.systolic || 0) >= 140 || Number(survey.measurements?.diastolic || 0) >= 90).length;
   const clinicNames = [...new Set([
-    ...db.doctors.map((doctor) => doctor.clinic || "Не указано"),
-    ...db.nurseSurveys.map((survey) => survey.patient?.clinic || survey.clinic || "Не указано")
-  ])].sort((a, b) => a.localeCompare(b, "ru"));
+    ...visibleDoctors.map((doctor) => doctor.clinic || "Не указано"),
+    ...visibleSurveys.map((survey) => survey.patient?.clinic || survey.clinic || "Не указано")
+  ])].filter((clinic) => !isExcludedClinic(clinic)).sort((a, b) => a.localeCompare(b, "ru"));
   const clinicPerformance = clinicNames.map((clinic) => {
     const surveys = db.nurseSurveys.filter((survey) => (survey.patient?.clinic || survey.clinic || "Не указано") === clinic);
     const surveyIds = new Set(surveys.map((survey) => survey.id));
@@ -2564,7 +2576,7 @@ function buildInvestorDashboard(db) {
       openFollowUps: (db.patientTasks || []).filter((task) => task.status !== "completed").length
     },
     doctors: {
-      registeredByClinic: objectToSeries(countSelected(db.doctors.map((doctor) => doctor.clinic || "Не указано"))),
+      registeredByClinic: objectToSeries(countSelected(visibleDoctors.map((doctor) => doctor.clinic || "Не указано"))),
       registeredByDate: objectToSeries(countSelected(db.doctors.map((doctor) => dateKey(doctor.createdAt))))
     },
     nurses: {
@@ -2791,9 +2803,9 @@ function buildOperationsMonitor(db, filters = {}) {
 function buildPublicOperationsMonitorRows(db) {
   const rows = buildOperationsMonitorRows(db);
   return {
-    surveyRows: rows.surveyRows.map((row) => ({ ...row, patientName: "Пациент" })),
-    visitRows: rows.visitRows.map((row) => ({ ...row, patientName: "Пациент" })),
-    eventRows: rows.eventRows.map((row) => ({ ...row, patientName: row.patientName ? "Пациент" : "" }))
+    surveyRows: rows.surveyRows.filter((row) => !isExcludedClinic(row.clinic)).map((row) => ({ ...row, patientName: "Пациент" })),
+    visitRows: rows.visitRows.filter((row) => !isExcludedClinic(row.clinic)).map((row) => ({ ...row, patientName: "Пациент" })),
+    eventRows: rows.eventRows.filter((row) => !isExcludedClinic(row.clinic)).map((row) => ({ ...row, patientName: row.patientName ? "Пациент" : "" }))
   };
 }
 
