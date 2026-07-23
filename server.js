@@ -16,8 +16,9 @@ const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "0.0.0.0";
 const DATABASE_URL = process.env.DATABASE_URL || "";
 const PG_TIMEOUT_MS = Number(process.env.PG_TIMEOUT_MS || 8000);
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const GOOGLE_CLOUD_PROJECT = process.env.GOOGLE_CLOUD_PROJECT || "";
+const GOOGLE_CLOUD_LOCATION = process.env.GOOGLE_CLOUD_LOCATION || "global";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const INITIAL_ADMIN_PASSWORD = process.env.INITIAL_ADMIN_PASSWORD || "";
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 12 * 60 * 60 * 1000);
 const MAX_JSON_BODY_BYTES = Number(process.env.MAX_JSON_BODY_BYTES || 1024 * 1024);
@@ -36,6 +37,8 @@ let dbWritePromise = Promise.resolve();
 let dbReadyPromise = null;
 let pgPoolPromise = null;
 const rateLimits = new Map();
+let googleAccessToken = "";
+let googleAccessTokenExpiresAt = 0;
 const normalizedCollectionTables = {
   admins: "app_admins",
   doctors: "app_doctors",
@@ -908,40 +911,66 @@ function buildAssistantSystemPrompt(db, session, appName) {
   ].join("\n");
 }
 
-function extractOpenAiText(payload) {
-  if (typeof payload?.output_text === "string" && payload.output_text.trim()) return payload.output_text.trim();
+function extractGeminiText(payload) {
   const parts = [];
-  for (const item of payload?.output || []) {
-    for (const content of item?.content || []) {
-      if (typeof content?.text === "string") parts.push(content.text);
+  for (const candidate of payload?.candidates || []) {
+    for (const part of candidate?.content?.parts || []) {
+      if (typeof part?.text === "string") parts.push(part.text);
     }
   }
   return parts.join("\n").trim() || "Не удалось получить ответ консультанта.";
 }
 
-async function askOpenAiAssistant({ messages, prompt }) {
-  const response = await fetch("https://api.openai.com/v1/responses", {
+async function getGoogleAccessToken() {
+  if (googleAccessToken && Date.now() < googleAccessTokenExpiresAt - 60_000) return googleAccessToken;
+  const response = await fetch(
+    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+    { headers: { "Metadata-Flavor": "Google" } }
+  );
+  if (!response.ok) throw new Error(`Не удалось получить токен Google Cloud: HTTP ${response.status}`);
+  const payload = await response.json();
+  if (!payload?.access_token) throw new Error("Google Cloud не вернул токен доступа");
+  googleAccessToken = payload.access_token;
+  googleAccessTokenExpiresAt = Date.now() + Number(payload.expires_in || 300) * 1000;
+  return googleAccessToken;
+}
+
+async function askGeminiAssistant({ messages, prompt }) {
+  const accessToken = await getGoogleAccessToken();
+  const endpoint = [
+    "https://aiplatform.googleapis.com/v1/projects",
+    encodeURIComponent(GOOGLE_CLOUD_PROJECT),
+    "locations",
+    encodeURIComponent(GOOGLE_CLOUD_LOCATION),
+    "publishers/google/models",
+    `${encodeURIComponent(GEMINI_MODEL)}:generateContent`
+  ].join("/");
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${OPENAI_API_KEY}`,
+      "Authorization": `Bearer ${accessToken}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: OPENAI_MODEL,
-      instructions: prompt,
-      input: messages.map((message) => ({
-        role: message.role === "assistant" ? "assistant" : "user",
-        content: String(message.content || "").slice(0, 2000)
+      systemInstruction: {
+        parts: [{ text: prompt }]
+      },
+      contents: messages.map((message) => ({
+        role: message.role === "assistant" ? "model" : "user",
+        parts: [{ text: String(message.content || "").slice(0, 2000) }]
       })),
-      max_output_tokens: 700
+      generationConfig: {
+        maxOutputTokens: 700,
+        temperature: 0.3
+      }
     })
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = payload?.error?.message || "OpenAI API временно недоступен";
+    const message = payload?.error?.message || "Vertex AI временно недоступен";
     throw new Error(message);
   }
-  return extractOpenAiText(payload);
+  return extractGeminiText(payload);
 }
 
 function requestBaseUrl(req) {
@@ -1495,7 +1524,7 @@ async function handleApi(req, res, url) {
   if (req.method === "POST" && url.pathname === "/api/assistant") {
     if (!session || !["admin", "doctor"].includes(session.userType)) return send(res, 403, { error: "Требуется вход в систему" });
     if (!enforceUserRateLimit(req, res, session, "assistant", 20, 60 * 1000)) return;
-    if (!OPENAI_API_KEY) return send(res, 503, { error: "AI-консультант еще не подключен: на сервере не задан OPENAI_API_KEY." });
+    if (!GOOGLE_CLOUD_PROJECT) return send(res, 503, { error: "AI-консультант еще не подключен: на сервере не задан GOOGLE_CLOUD_PROJECT." });
     const body = await parseBody(req);
     const rawMessages = Array.isArray(body.messages) ? body.messages : [];
     const messages = rawMessages
@@ -1508,11 +1537,11 @@ async function handleApi(req, res, url) {
     if (!messages.length) return send(res, 400, { error: "Напишите вопрос консультанту." });
     try {
       const appName = assistantAppName(body.app || "");
-      const answer = await askOpenAiAssistant({
+      const answer = await askGeminiAssistant({
         messages,
         prompt: buildAssistantSystemPrompt(db, session, appName)
       });
-      return send(res, 200, { answer, model: OPENAI_MODEL });
+      return send(res, 200, { answer, model: GEMINI_MODEL });
     } catch (error) {
       console.error("Assistant failed:", error);
       return send(res, 502, { error: "AI-консультант временно недоступен. Попробуйте позже." });
