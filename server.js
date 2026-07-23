@@ -776,7 +776,10 @@ function getCookie(req, name) {
 function isSecureRequest(req) {
   const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim().toLowerCase();
   if (forwardedProto === "https") return true;
-  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(":")[0].toLowerCase();
+  const forwardedHost = String(req.headers["x-forwarded-host"] || "").split(",")[0].trim();
+  const host = String(forwardedHost && forwardedHost !== "_" ? forwardedHost : req.headers.host || "")
+    .split(":")[0]
+    .toLowerCase();
   return !["localhost", "127.0.0.1", "::1", "[::1]"].includes(host);
 }
 
@@ -2908,7 +2911,10 @@ function buildTrainingAnswerKeysCsv() {
 }
 
 async function serveStatic(req, res, url) {
-  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(":")[0].toLowerCase();
+  const forwardedHost = String(req.headers["x-forwarded-host"] || "").split(",")[0].trim();
+  const host = String(forwardedHost && forwardedHost !== "_" ? forwardedHost : req.headers.host || "")
+    .split(":")[0]
+    .toLowerCase();
   const appRoutes = {
     "/": "/index.html",
     [ADMIN_APP_PATH]: "/admin.html",
