@@ -100,6 +100,9 @@ try {
   const dashboard = await request(admin, "/api/admin/dashboard");
   assert.ok(dashboard.activityEvents.some((event) => event.type === "patient_task_updated"));
   assert.equal(dashboard.reminderQueue.length, 1);
+  const publicMonitor = await request(session(), "/api/monitor/dashboard");
+  assert.equal(publicMonitor.summary.surveys, 1);
+  assert.ok(publicMonitor.surveys.every((survey) => survey.patientName === "Пациент"));
 
   await request(doctor, "/api/doctor/account", { method: "PUT", expected: 401, body: { login: "test-doctor", currentAccessKey: "wrong-password", accessKey: doctorNewPassword } });
   await request(doctor, "/api/doctor/account", { method: "PUT", body: { login: "test-doctor", currentAccessKey: doctorPassword, accessKey: doctorNewPassword } });

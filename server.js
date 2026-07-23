@@ -1780,12 +1780,10 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/monitor/dashboard") {
-    if (!requireAdmin(session)) return send(res, 403, { error: "Требуется вход администратора" });
     return send(res, 200, buildOperationsMonitor(db, Object.fromEntries(url.searchParams)));
   }
 
   if (req.method === "GET" && url.pathname === "/api/monitor/report.csv") {
-    if (!requireAdmin(session)) return send(res, 403, { error: "Требуется вход администратора" });
     const report = buildOperationsReportCsv(db, Object.fromEntries(url.searchParams));
     return send(res, 200, report, {
       "Content-Type": "text/csv; charset=utf-8",
@@ -1794,10 +1792,9 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/monitor/weekly-report.docx") {
-    if (!requireAdmin(session)) return send(res, 403, { error: "Требуется вход администратора" });
     const period = monitorReportPeriod(Object.fromEntries(url.searchParams));
     const report = await buildWeeklyMonitorReportDocx(db, period, {
-      buildRows: buildOperationsMonitorRows,
+      buildRows: buildPublicOperationsMonitorRows,
       dateKey,
       clinicKey
     });
@@ -2707,7 +2704,7 @@ function groupMonitor(items, keyFn, seed = {}) {
 }
 
 function buildOperationsMonitor(db, filters = {}) {
-  const { surveyRows, visitRows, eventRows } = buildOperationsMonitorRows(db);
+  const { surveyRows, visitRows, eventRows } = buildPublicOperationsMonitorRows(db);
   const filteredSurveys = surveyRows.filter((row) => matchesMonitorFilters(row, filters));
   const filteredVisits = visitRows.filter((row) => matchesMonitorFilters(row, filters));
   const filteredEvents = eventRows.filter((row) => matchesMonitorFilters(row, filters));
@@ -2788,6 +2785,15 @@ function buildOperationsMonitor(db, filters = {}) {
     events: publicEvents,
     surveys: publicSurveys,
     visits: filteredVisits.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 300)
+  };
+}
+
+function buildPublicOperationsMonitorRows(db) {
+  const rows = buildOperationsMonitorRows(db);
+  return {
+    surveyRows: rows.surveyRows.map((row) => ({ ...row, patientName: "Пациент" })),
+    visitRows: rows.visitRows.map((row) => ({ ...row, patientName: "Пациент" })),
+    eventRows: rows.eventRows.map((row) => ({ ...row, patientName: row.patientName ? "Пациент" : "" }))
   };
 }
 

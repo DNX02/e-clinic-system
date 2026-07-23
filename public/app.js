@@ -92,7 +92,7 @@ const clinicSortKey = (value = "") => {
   const number = text.match(/\d+/)?.[0];
   return number ? String(number).padStart(4, "0") : text.toLowerCase();
 };
-const clinicNumbers = Array.from({ length: 15 }, (_, index) => index + 1);
+const clinicNumbers = Array.from({ length: 15 }, (_, index) => index + 1).filter((number) => ![6, 13].includes(number));
 const clinicOptions = clinicNumbers.map((number) => [`Поликлиника №${number}`, `Поликлиника №${number}`]);
 const lifestyleRecommendations = {
   diabetesDiet: [
@@ -879,7 +879,7 @@ function showDoctorLanguagePrompt(onChoose) {
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js?v=20260723hotfix1").catch(() => {});
+  navigator.serviceWorker.register("/sw.js?v=20260723tasks1").catch(() => {});
 }
 
 async function boot() {
@@ -985,7 +985,7 @@ function route() {
   if (appMode === "training" || path === TRAINING_APP_PATH) return loadTrainingPretest();
   if (appMode === "nurse-training" || path === NURSE_TRAINING_APP_PATH) return loadNurseTraining();
   if (appMode === "investor" || path === INVESTOR_APP_PATH) return state.me?.type === "admin" ? loadInvestorDashboard() : renderAdminLogin();
-  if (appMode === "monitor" || path === MONITOR_APP_PATH) return state.me?.type === "admin" ? loadMonitorDashboard() : renderAdminLogin();
+  if (appMode === "monitor" || path === MONITOR_APP_PATH) return loadMonitorDashboard();
   if (appMode === "doctor" || path === DOCTOR_APP_PATH) return state.me?.type === "doctor" ? loadDoctor() : renderDoctorLogin();
   if (appMode === "admin" || path === ADMIN_APP_PATH) return state.me?.type === "admin" ? loadAdmin() : renderAdminLogin();
   renderHome();
@@ -1473,7 +1473,6 @@ function renderInvestorDashboard() {
           <strong>${new Date(data.generatedAt).toLocaleString("ru-RU")}</strong>
           <small>Данные берутся напрямую из работающей системы</small>
           <a class="button-link" href="/api/investor/report.csv">Скачать отчёт CSV</a>
-          <button type="button" class="secondary" data-action="logout">Выйти</button>
         </div>
       </section>
       <nav class="investor-tabs">
@@ -2902,7 +2901,6 @@ function renderNurseSurvey() {
           ${input(t("Окружность живота/талия, см"), "rabitoWaist", true, "number")}
           ${input(t("Окружность голени, см"), "calf", true, "number")}
           <div class="form-row"><label>${escapeHtml(t("Расчётный вес Rabito, кг"))}</label><input name="rabitoWeightPreview" inputmode="decimal" readonly /></div>
-          ${input(t("Уровень сахара"), "glucoseLevel", true, "number")}
         </section>
         <div class="actions">
           <button type="submit">${escapeHtml(t("Отправить анкету"))}</button>
