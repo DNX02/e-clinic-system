@@ -2911,10 +2911,7 @@ function buildTrainingAnswerKeysCsv() {
 }
 
 async function serveStatic(req, res, url) {
-  const forwardedHost = String(req.headers["x-forwarded-host"] || "").split(",")[0].trim();
-  const host = String(forwardedHost && forwardedHost !== "_" ? forwardedHost : req.headers.host || "")
-    .split(":")[0]
-    .toLowerCase();
+  const host = String(req.headers.host || "").split(":")[0].toLowerCase();
   const appRoutes = {
     "/": "/index.html",
     [ADMIN_APP_PATH]: "/admin.html",
