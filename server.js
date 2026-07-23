@@ -31,6 +31,7 @@ const TRAINING_APP_PATH = "/app-4-doctor-knowledge";
 const NURSE_TRAINING_APP_PATH = "/app-5-nurse-knowledge";
 const INVESTOR_APP_PATH = "/app-6-investor-dashboard";
 const MONITOR_APP_PATH = "/app-7-operations-monitor";
+const DIABETES_APP_PATH = "/app-8-diabetes-risk";
 let dbCache = null;
 let dbLoadPromise = null;
 let dbWritePromise = Promise.resolve();
@@ -2916,7 +2917,8 @@ async function serveStatic(req, res, url) {
     [TRAINING_APP_PATH]: "/training.html",
     [NURSE_TRAINING_APP_PATH]: "/nurse-training.html",
     [INVESTOR_APP_PATH]: "/investor.html",
-    [MONITOR_APP_PATH]: "/monitor.html"
+    [MONITOR_APP_PATH]: "/monitor.html",
+    [DIABETES_APP_PATH]: "/diabetes.html"
   };
   const hostHomeRoutes = {
     "admin.e-clinic-control.ru": "/admin.html",
@@ -2925,7 +2927,8 @@ async function serveStatic(req, res, url) {
     "training.e-clinic-control.ru": "/training.html",
     "nurse.e-clinic-control.ru": "/nurse-training.html",
     "investor.e-clinic-control.ru": "/investor.html",
-    "monitor.e-clinic-control.ru": "/monitor.html"
+    "monitor.e-clinic-control.ru": "/monitor.html",
+    "diabetes.e-clinic-control.ru": "/diabetes.html"
   };
   const route = url.pathname === "/" && hostHomeRoutes[host] ? hostHomeRoutes[host] : appRoutes[url.pathname] || url.pathname;
   const safePath = normalize(route).replace(/^(\.\.[/\\])+/, "");

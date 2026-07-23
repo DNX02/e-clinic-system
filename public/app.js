@@ -55,6 +55,7 @@ const TRAINING_APP_PATH = "/app-4-doctor-knowledge";
 const NURSE_TRAINING_APP_PATH = "/app-5-nurse-knowledge";
 const INVESTOR_APP_PATH = "/app-6-investor-dashboard";
 const MONITOR_APP_PATH = "/app-7-operations-monitor";
+const DIABETES_APP_PATH = "/app-8-diabetes-risk";
 
 const api = async (url, options = {}) => {
   const response = await fetch(url, {
@@ -1202,6 +1203,7 @@ function renderHome() {
           <a href="${INVESTOR_APP_PATH}"><button>№6 Для инвесторов</button></a>
           <input id="homeInvestorUrl" readonly value="${investorUrl}" />
           <a href="${MONITOR_APP_PATH}"><button>№7 Экран наблюдения</button></a>
+          <a href="${DIABETES_APP_PATH}"><button>№8 Риск сахарного диабета</button></a>
           <input id="homeMonitorUrl" readonly value="${monitorUrl}" />
         </div>
         <p class="muted">Ссылка №1 администратора не показывается здесь, чтобы врачи случайно не открывали админку.</p>

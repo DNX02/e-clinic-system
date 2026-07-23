@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="description" content="Анонимная оценка риска сахарного диабета 2 типа по шкале FINDRISC" />
+    <title>Риск диабета — E-Clinic Control</title>
+    <link rel="icon" href="/icons/survey-icon.svg" />
+    <link rel="stylesheet" href="/diabetes.css?v=20260723" />
+  </head>
+  <body>
+    <div class="flag-background" aria-hidden="true">
+      <div class="flag-red"></div><div class="flag-white"></div><div class="flag-green"></div>
+      <svg class="flag-emblem" viewBox="0 0 220 150" role="presentation">
+        <g fill="#d8a600">
+          <path d="M64 91h92l-7 23H71z"/><path d="M75 88 59 55l29 18 22-36 22 36 29-18-16 33z"/>
+          <rect x="68" y="116" width="84" height="8" rx="4"/>
+          <circle cx="58" cy="32" r="4"/><circle cx="74" cy="22" r="4"/><circle cx="92" cy="16" r="4"/>
+          <circle cx="110" cy="13" r="4"/><circle cx="128" cy="16" r="4"/><circle cx="146" cy="22" r="4"/><circle cx="162" cy="32" r="4"/>
+        </g>
+      </svg>
+    </div>
+    <main class="screen-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="E-Clinic Control">
+          <span class="brand-mark">E</span>
+          <span><strong>E‑Clinic Control</strong><small data-i18n="programName">Профилактика диабета</small></span>
+        </a>
+        <div class="language-switch" aria-label="Выбор языка">
+          <button type="button" data-language="tj">TJ</button>
+          <button type="button" data-language="ru" class="active">RU</button>
+          <button type="button" data-language="en">EN</button>
+        </div>
+      </header>
+      <section class="screen-card" id="screenCard" aria-live="polite"></section>
+      <footer class="privacy-note"><span class="privacy-icon">✓</span><span data-i18n="privacy">Опрос анонимный. Имя, телефон и ответы не сохраняются.</span></footer>
+    </main>
+    <script type="module" src="/diabetes.js?v=20260723"></script>
+  </body>
+</html>
