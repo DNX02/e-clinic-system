@@ -62,7 +62,10 @@ const mime = {
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".webmanifest": "application/manifest+json; charset=utf-8",
-  ".svg": "image/svg+xml"
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".txt": "text/plain; charset=utf-8",
+  ".xml": "application/xml; charset=utf-8"
 };
 
 const seedAdmins = [
@@ -2939,16 +2942,25 @@ async function serveStatic(req, res, url) {
   if (!filePath.startsWith(publicDir)) return send(res, 403, "Нет доступа");
   try {
     const content = await readFile(filePath);
+    const privatePages = new Set([
+      "/admin.html",
+      "/doctor.html",
+      "/survey.html",
+      "/training.html",
+      "/nurse-training.html",
+      "/investor.html",
+      "/monitor.html",
+      "/privacy-admin.html"
+    ]);
     res.writeHead(200, {
       "Content-Type": mime[extname(filePath)] || "application/octet-stream",
       "Cache-Control": "no-cache",
+      ...(privatePages.has(route) ? { "X-Robots-Tag": "noindex, nofollow, noarchive" } : {}),
       ...securityHeaders()
     });
     res.end(content);
   } catch {
-    const content = await readFile(join(publicDir, "index.html"));
-    res.writeHead(200, { "Content-Type": mime[".html"], "Cache-Control": "no-cache", ...securityHeaders() });
-    res.end(content);
+    return send(res, 404, "Страница не найдена", { "X-Robots-Tag": "noindex, nofollow" });
   }
 }
 

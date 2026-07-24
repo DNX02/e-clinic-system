@@ -3,39 +3,102 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Медицинская система</title>
-    <link rel="stylesheet" href="/styles.css?v=20260723tasks2" />
+    <meta name="theme-color" content="#0b6b5d" />
+    <meta name="description" content="E‑Clinic Control — цифровая медицинская платформа и бесплатная анонимная оценка риска сахарного диабета 2 типа по шкале FINDRISC." />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <link rel="canonical" href="https://e-clinic-control.ru/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="ru_RU" />
+    <meta property="og:site_name" content="E‑Clinic Control" />
+    <meta property="og:title" content="E‑Clinic Control — профилактика сахарного диабета" />
+    <meta property="og:description" content="Бесплатно оцените риск сахарного диабета 2 типа по международной шкале FINDRISC." />
+    <meta property="og:url" content="https://e-clinic-control.ru/" />
+    <meta property="og:image" content="https://e-clinic-control.ru/og.png" />
+    <meta property="og:image:alt" content="E‑Clinic Control — оценка риска сахарного диабета" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://e-clinic-control.ru/og.png" />
+    <title>E‑Clinic Control — оценка риска сахарного диабета</title>
+    <link rel="icon" href="/icons/survey-icon.svg" />
+    <link rel="stylesheet" href="/landing.css?v=20260724" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "E-Clinic Control",
+        "url": "https://e-clinic-control.ru/",
+        "inLanguage": ["ru", "tg", "en"],
+        "description": "Цифровая медицинская платформа для профилактики хронических заболеваний."
+      }
+    </script>
   </head>
-  <body data-app="home">
-    <div id="app"></div>
-    <script type="module" src="/app.js?v=20260723tasks2"></script>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="E‑Clinic Control — главная">
+        <span class="brand-mark" aria-hidden="true">E</span>
+        <span><strong>E‑Clinic Control</strong><small>Цифровая профилактика</small></span>
+      </a>
+      <a class="header-action" href="/app-8-diabetes-risk">Оценить риск</a>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="flag-glow" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="hero-copy">
+          <p class="eyebrow">Профилактика сахарного диабета</p>
+          <h1>Узнайте свой риск диабета за несколько минут</h1>
+          <p class="hero-lead">Ответьте на 8 простых вопросов и получите предварительную оценку риска сахарного диабета 2 типа по международной шкале FINDRISC.</p>
+          <div class="hero-actions">
+            <a class="primary-action" href="/app-8-diabetes-risk">Пройти бесплатный тест</a>
+            <a class="text-action" href="#about">Как это работает</a>
+          </div>
+          <p class="privacy-line"><span aria-hidden="true">✓</span> Анонимно: имя, телефон и ответы не сохраняются</p>
+        </div>
+        <aside class="risk-card" aria-label="Преимущества теста">
+          <div class="score-ring"><span>8</span><small>вопросов</small></div>
+          <ul>
+            <li><b>3 языка</b><span>Русский, тоҷикӣ и English</span></li>
+            <li><b>2–3 минуты</b><span>Можно пройти с телефона</span></li>
+            <li><b>FINDRISC</b><span>Международная шкала риска</span></li>
+          </ul>
+        </aside>
+      </section>
+
+      <section class="section" id="about">
+        <div class="section-heading">
+          <p class="eyebrow">Как проходит оценка</p>
+          <h2>Три шага к пониманию риска</h2>
+        </div>
+        <div class="steps">
+          <article><span>01</span><h3>Ответьте на вопросы</h3><p>Возраст, индекс массы тела, окружность талии, образ жизни и семейная история.</p></article>
+          <article><span>02</span><h3>Получите результат</h3><p>Система рассчитает баллы FINDRISC и покажет уровень риска понятным языком.</p></article>
+          <article><span>03</span><h3>Обсудите с врачом</h3><p>При повышенном риске сохраните или распечатайте результат и обратитесь в поликлинику.</p></article>
+        </div>
+      </section>
+
+      <section class="section info-grid">
+        <article class="info-card accent">
+          <p class="eyebrow">Почему это важно</p>
+          <h2>Диабет 2 типа можно предупредить</h2>
+          <p>Ранняя оценка факторов риска помогает вовремя обратить внимание на питание, физическую активность, массу тела и уровень глюкозы.</p>
+          <a href="/app-8-diabetes-risk">Проверить свой риск →</a>
+        </article>
+        <article class="info-card">
+          <p class="eyebrow">Важно знать</p>
+          <h2>Тест не ставит диагноз</h2>
+          <p>Результат носит информационный характер. Диагноз сахарного диабета устанавливает медицинский работник на основании обследования и лабораторных анализов.</p>
+        </article>
+      </section>
+
+      <section class="final-cta">
+        <div><p class="eyebrow">Начните сейчас</p><h2>Здоровье начинается с осведомлённости</h2></div>
+        <a class="primary-action light" href="/app-8-diabetes-risk">Пройти тест FINDRISC</a>
+      </section>
+    </main>
+
+    <footer>
+      <div class="brand footer-brand"><span class="brand-mark" aria-hidden="true">E</span><span><strong>E‑Clinic Control</strong><small>Республика Таджикистан</small></span></div>
+      <p>Информационная платформа профилактической медицины. Не заменяет консультацию врача.</p>
+      <p>© 2026 E‑Clinic Control</p>
+    </footer>
   </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
