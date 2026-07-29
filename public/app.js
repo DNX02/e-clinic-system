@@ -2559,7 +2559,7 @@ function renderAccessAdmin() {
             <section class="grid two">
               <div class="form-row"><label>ФИО</label><input name="name" value="${escapeHtml(admin.name)}" required /></div>
               <div class="form-row"><label>Логин</label><input name="username" value="${escapeHtml(admin.username)}" required /></div>
-              <div class="form-row"><label>Новый пароль</label><input name="password" type="password" minlength="10" placeholder="Оставьте пустым, если не менять" /></div>
+              <div class="form-row"><label>Новый пароль</label><input name="password" type="password" minlength="5" placeholder="Оставьте пустым, если не менять" /></div>
               <div class="form-row"><label>Роль</label><select name="role">${adminRoleOptions(admin.role)}</select></div>
             </section>
             <div class="actions">
@@ -2578,7 +2578,7 @@ function renderAccessAdmin() {
       <form class="form" id="adminPasswordForm">
         <section class="grid two">
           <div class="form-row"><label>Текущий пароль</label><input name="currentPassword" type="password" autocomplete="current-password" required /></div>
-          <div class="form-row"><label>Новый пароль</label><input name="newPassword" type="password" autocomplete="new-password" minlength="10" required /></div>
+          <div class="form-row"><label>Новый пароль</label><input name="newPassword" type="password" autocomplete="new-password" minlength="5" required /></div>
         </section>
         <button>Сменить мой пароль</button>
       </form>
@@ -2599,7 +2599,7 @@ function renderAccessAdmin() {
           <section class="grid two">
             <div class="form-row"><label>ФИО</label><input name="name" required /></div>
             <div class="form-row"><label>Логин</label><input name="username" required /></div>
-            <div class="form-row"><label>Пароль</label><input name="password" type="password" minlength="10" required /></div>
+            <div class="form-row"><label>Пароль</label><input name="password" type="password" minlength="5" required /></div>
             <div class="form-row"><label>Роль</label><select name="role">${adminRoleOptions("observer")}</select></div>
           </section>
           <div class="actions">
@@ -4097,7 +4097,7 @@ function doctorProfilePanel() {
         <section class="grid two">
           <div class="form-row"><label>${escapeHtml(t("Новый логин"))}</label><input name="login" value="${escapeHtml(state.doctor?.doctor?.login || "")}" required /></div>
           <div class="form-row"><label>Текущий пароль</label><input name="currentAccessKey" type="password" autocomplete="current-password" required /></div>
-          <div class="form-row"><label>${escapeHtml(t("Новый пароль / ключ"))}</label><input name="accessKey" type="password" autocomplete="new-password" minlength="10" placeholder="${escapeHtml(t("Оставьте пустым, если ключ менять не нужно"))}" /></div>
+          <div class="form-row"><label>${escapeHtml(t("Новый пароль / ключ"))}</label><input name="accessKey" type="password" autocomplete="new-password" minlength="5" placeholder="${escapeHtml(t("Оставьте пустым, если ключ менять не нужно"))}" /></div>
         </section>
         <button>${escapeHtml(t("Сохранить логин и пароль"))}</button>
         <div id="doctorAccountResult"></div>

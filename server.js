@@ -1142,7 +1142,7 @@ function validatePatientProfileInput(body, existing = {}) {
 
 function validateNewPassword(value, label = "Новый пароль") {
   const password = cleanText(value, label, { required: true, max: 200 });
-  if (password.length < 10) invalidInput(`${label}: минимум 10 символов`);
+  if (password.length < 5) invalidInput(`${label}: минимум 5 символов`);
   if (!/[A-Za-zА-Яа-яЁё]/.test(password) || !/\d/.test(password)) invalidInput(`${label}: добавьте буквы и цифры`);
   return password;
 }
