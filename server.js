@@ -1014,7 +1014,7 @@ function calculateRabito(input) {
   const waist = Number(input.rabitoWaist || input.waist || 0);
   const calf = Number(input.calf || 0);
   const sexCoef = input.sex === "male" ? 1 : 2;
-  if (!arm || !waist || !calf) return null;
+  if (![arm, waist, calf].every((value) => Number.isFinite(value) && value > 0)) return null;
   return Number((0.5759 * arm + 0.5263 * waist + 1.2452 * calf - 4.8689 * sexCoef - 32.9241).toFixed(1));
 }
 
@@ -1103,6 +1103,10 @@ function patientReportPdf(survey, visits, tasks) {
     line("Поликлиника", survey.patient?.clinic || survey.clinic);
     line("Телефон", survey.patient?.phone);
     doc.moveDown().fontSize(14).text("Последняя анкета").moveDown(0.4);
+    line("Рост, см", survey.measurements?.height || "—");
+    if (survey.measurements?.weight > 0) line("Измеренный вес, кг", survey.measurements.weight);
+    if (survey.measurements?.rabitoWeight > 0) line("Расчётный вес Rabito, кг", survey.measurements.rabitoWeight);
+    line("Индекс массы тела", survey.measurements?.bmi || "—");
     line("Артериальное давление", `${survey.measurements?.systolic || "—"}/${survey.measurements?.diastolic || "—"}`);
     line("Уровень сахара", survey.measurements?.glucoseLevel);
     line("FINDRISC", `${survey.findrisc?.score ?? "—"} — ${survey.findrisc?.level || "—"}`);
@@ -1153,6 +1157,16 @@ function validateSurveyInput(body, clinicOverride = "") {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || !Number.isFinite(parsedBirthDate) || parsedBirthDate > Date.now() || birthDate < "1900-01-01") {
     invalidInput("Дата рождения: недопустимое значение");
   }
+  if (body.weight !== undefined && body.weight !== null && typeof body.weight !== "number" && typeof body.weight !== "string") {
+    invalidInput("Вес: недопустимое значение");
+  }
+  const rawWeight = typeof body.weight === "string" ? body.weight.trim().replace(",", ".") : body.weight;
+  const hasMeasuredWeight = rawWeight !== undefined && rawWeight !== null && rawWeight !== "";
+  const weight = hasMeasuredWeight ? cleanNumber(rawWeight, "Вес", { min: 0, max: 500 }) : 0;
+  if (hasMeasuredWeight && weight <= 0) {
+    invalidInput("Вес: укажите значение больше 0 и не больше 500 кг");
+  }
+  const height = hasMeasuredWeight && typeof body.height === "string" ? body.height.trim().replace(",", ".") : body.height;
   const input = {
     lastName: cleanText(body.lastName, "Фамилия", { required: true, max: 100 }),
     firstName: cleanText(body.firstName, "Имя", { required: true, max: 100 }),
@@ -1164,8 +1178,9 @@ function validateSurveyInput(body, clinicOverride = "") {
     nurseName: cleanText(body.nurseName || body.nurseFullName, "ФИО медсестры", { max: 100 }),
     sex: cleanEnum(body.sex, "Пол", ["male", "female"]),
     age: cleanNumber(body.age, "Возраст", { min: 0, max: 120 }),
-    height: cleanNumber(body.height, "Рост", { min: 0, max: 250 }),
-    bmi: cleanNumber(body.bmi, "Индекс массы тела", { min: 0, max: 100 }),
+    weight,
+    height: cleanNumber(height, "Рост", { min: 0, max: 250 }),
+    bmi: hasMeasuredWeight ? 0 : cleanNumber(body.bmi, "Индекс массы тела", { min: 0, max: 100 }),
     systolic: cleanNumber(body.systolic, "Систолическое давление", { min: 0, max: 300 }),
     diastolic: cleanNumber(body.diastolic, "Диастолическое давление", { min: 0, max: 200 }),
     arm: cleanNumber(body.arm, "Окружность плеча", { min: 0, max: 200 }),
@@ -1179,6 +1194,11 @@ function validateSurveyInput(body, clinicOverride = "") {
     familyDiabetes: cleanEnum(body.familyDiabetes, "Диабет у родственников", ["none", "second", "first"]),
     smoker: cleanEnum(body.smoker, "Курение", ["yes", "no"])
   };
+  if (hasMeasuredWeight) {
+    if (input.height <= 0) invalidInput("Рост: укажите значение больше 0 для расчёта индекса массы тела");
+    if (input.rabitoWaist <= 0) invalidInput("Окружность талии: укажите значение больше 0 для расчёта FINDRISC");
+    input.bmi = cleanNumber(Number((weight / ((input.height / 100) ** 2)).toFixed(1)), "Индекс массы тела", { min: 0, max: 100 });
+  }
   validateBloodPressure(input.systolic, input.diastolic);
   if (input.glucoseLevel && (input.glucoseLevel < 1.5 || input.glucoseLevel > 35)) invalidInput("Уровень сахара: допустимый диапазон 1,5–35");
   return input;
@@ -1273,6 +1293,8 @@ function buildNurseSurvey(body) {
     },
     measurements: {
       age: Number(body.age || 0),
+      weight: Number(body.weight || 0),
+      weightSource: Number(body.weight || 0) > 0 ? "measured" : rabitoWeight > 0 ? "rabito" : "",
       height: Number(body.height || 0),
       bmi: Number(body.bmi || 0),
       systolic: Number(body.systolic || 0),

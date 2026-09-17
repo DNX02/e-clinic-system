@@ -300,6 +300,13 @@ const TAJIK_TEXT = {
   "Поликлиника пациента": "Поликлиникаи бемор",
   "Рост, см": "Қад, см",
   "Индекс массы тела": "Индекси массаи бадан",
+  "Введите вес по весам. ИМТ рассчитается автоматически по весу и росту.": "Вазнро аз рӯи тарозу ворид кунед. Индекси массаи бадан аз рӯи вазн ва қад худкор ҳисоб мешавад.",
+  "Если взвесить пациента нельзя, оставьте вес пустым и заполните окружности для расчёта Rabito.": "Агар беморро баркашидан имкон надошта бошад, вазнро холӣ монед ва даври бозу ва соқро барои ҳисоби Rabito ворид кунед.",
+  "Окружность талии нужна для FINDRISC при любом способе определения веса.": "Даври миён барои FINDRISC дар ҳар ду усули муайян кардани вазн лозим аст.",
+  "Введите число больше нуля": "Адади аз сифр калонро ворид кунед",
+  "Слишком большое значение": "Қимат аз ҳад зиёд аст",
+  "Проверьте вес и рост: ИМТ не должен превышать 100": "Вазн ва қадро санҷед: индекси массаи бадан набояд аз 100 зиёд бошад",
+  "Проверьте окружности для расчёта веса": "Андозаҳои даври баданро барои ҳисоби вазн санҷед",
   "Физическая активность 30 минут в день": "Фаъолияти ҷисмонӣ 30 дақиқа дар рӯз",
   "Да": "Ҳа",
   "Нет": "Не",
@@ -881,7 +888,7 @@ function showDoctorLanguagePrompt(onChoose) {
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js?v=20260723tasks2").catch(() => {});
+  navigator.serviceWorker.register("/sw.js?v=20260917weight").catch(() => {});
 }
 
 async function boot() {
@@ -2393,7 +2400,7 @@ function renderSurveyTable(surveys) {
       <td>${survey.measurements.systolic}/${survey.measurements.diastolic}</td>
       <td>${survey.findrisc.score} - ${survey.findrisc.level}</td>
       <td>${survey.score2.percent}% - ${survey.score2.level}</td>
-      <td>${survey.measurements.rabitoWeight || "-"} кг</td>
+      <td>${survey.measurements.weight || survey.measurements.rabitoWeight || "-"} кг<div class="muted">${survey.measurements.weight ? "По весам" : "Расчёт Rabito"}</div></td>
       <td>${survey.needsDoctor ? `<span class="pill danger">К врачу</span><div class="muted">${escapeHtml(referralReasonText(survey))}</div>` : '<span class="pill ok">Обычный риск</span>'}</td>
       <td>${new Date(survey.createdAt).toLocaleString("ru-RU")}</td>
       <td><details><summary>Изменить</summary><form class="patient-edit-form form" data-id="${survey.id}">
@@ -2425,7 +2432,7 @@ function renderSurveyTable(surveys) {
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Пациент</th><th>Дата рождения</th><th>АД</th><th>FINDRISC</th><th>Сердечно-сосудистый риск</th><th>Rabito</th><th>Статус</th><th>Дата</th><th>Карточка</th></tr></thead>
+          <thead><tr><th>Пациент</th><th>Дата рождения</th><th>АД</th><th>FINDRISC</th><th>Сердечно-сосудистый риск</th><th>Вес</th><th>Статус</th><th>Дата</th><th>Карточка</th></tr></thead>
           <tbody>${rows || "<tr><td colspan='9'>Пока нет анкет</td></tr>"}</tbody>
         </table>
       </div>
@@ -2860,6 +2867,29 @@ function bindAdminTrainingFilters() {
   });
 }
 
+function surveyWeightFields(t) {
+  return html`
+    ${input(t("Рост, см"), "height", true, "number")}
+    ${input(t("Вес по весам, кг"), "weight", false, "number")}
+    <div class="form-row"><label>${escapeHtml(t("Индекс массы тела"))}</label><input name="bmi" inputmode="decimal" readonly /></div>
+    ${input(t("Окружность живота/талия, см"), "rabitoWaist", true, "number")}
+  `;
+}
+
+function surveyRabitoFields(t) {
+  return html`
+    <section data-rabito-fields>
+      <h3>${escapeHtml(t("Формула Rabito"))}</h3>
+      <p class="muted">${escapeHtml(t("Если взвесить пациента нельзя, оставьте вес пустым и заполните окружности для расчёта Rabito."))}</p>
+      <div class="grid three">
+        ${input(t("Окружность плеча, см"), "arm", true, "number")}
+        ${input(t("Окружность голени, см"), "calf", true, "number")}
+        <div class="form-row"><label>${escapeHtml(t("Расчётный вес Rabito, кг"))}</label><input name="rabitoWeightPreview" inputmode="decimal" readonly /></div>
+      </div>
+    </section>
+  `;
+}
+
 function renderNurseSurvey() {
   const t = (value) => translateSurveyText(value);
   const surveySelect = (label, name, options) => select(t(label), name, options.map(([value, text]) => [value, t(text)]));
@@ -2886,9 +2916,9 @@ function renderNurseSurvey() {
           <select name="clinic">${clinicOptions.map(([value, text]) => `<option value="${value}">${escapeHtml(clinicText(text))}</option>`).join("")}</select>
         </div>
         <h3>FINDRISC</h3>
+        <p class="muted">${escapeHtml(t("Введите вес по весам. ИМТ рассчитается автоматически по весу и росту."))} ${escapeHtml(t("Окружность талии нужна для FINDRISC при любом способе определения веса."))}</p>
         <section class="grid two">
-          ${input(t("Рост, см"), "height", true, "number")}
-          ${input(t("Индекс массы тела"), "bmi", true, "number")}
+          ${surveyWeightFields(t)}
           ${surveySelect("Физическая активность 30 минут в день", "activity", [["yes", "Да"], ["no", "Нет"]])}
           ${surveySelect("Овощи/фрукты ежедневно", "vegetables", [["yes", "Да"], ["no", "Нет"]])}
           ${surveySelect("Принимал препараты от давления", "bpMeds", [["no", "Нет"], ["yes", "Да"]])}
@@ -2901,13 +2931,7 @@ function renderNurseSurvey() {
           ${input(t("Систолическое АД"), "systolic", true, "number")}
           ${input(t("Диастолическое АД"), "diastolic", true, "number")}
         </section>
-        <h3>${escapeHtml(t("Формула Rabito"))}</h3>
-        <section class="grid three">
-          ${input(t("Окружность плеча, см"), "arm", true, "number")}
-          ${input(t("Окружность живота/талия, см"), "rabitoWaist", true, "number")}
-          ${input(t("Окружность голени, см"), "calf", true, "number")}
-          <div class="form-row"><label>${escapeHtml(t("Расчётный вес Rabito, кг"))}</label><input name="rabitoWeightPreview" inputmode="decimal" readonly /></div>
-        </section>
+        ${surveyRabitoFields(t)}
         <div class="actions">
           <button type="submit">${escapeHtml(t("Отправить анкету"))}</button>
           <button type="button" class="secondary" id="syncSurveysButton">${escapeHtml(t("Синхронизировать"))}</button>
@@ -3022,7 +3046,7 @@ function showSurveySubmitted(survey) {
   document.querySelector("#surveyResult").innerHTML = html`
     <div class="notice ${survey.needsDoctor ? "danger" : "ok"}">
       FINDRISC: ${survey.findrisc.score} (${escapeHtml(translateSurveyDynamicText(survey.findrisc.level))}). ${escapeHtml(translateSurveyText("Сердечно-сосудистый риск"))}: ${survey.score2.percent}% (${escapeHtml(translateSurveyDynamicText(survey.score2.level))}).
-      ${escapeHtml(translateSurveyText("Расчётный вес Rabito, кг"))}: ${survey.measurements.rabitoWeight || "-"}.
+      ${escapeHtml(translateSurveyText(survey.measurements.weight ? "Вес по весам, кг" : "Расчётный вес Rabito, кг"))}: ${survey.measurements.weight || survey.measurements.rabitoWeight || "-"}.
       ${survey.needsDoctor ? `<strong>${escapeHtml(translateSurveyText("Направить к врачу."))}</strong><div>${escapeHtml(translateSurveyText("Причина"))}:</div><ul>${reasons}</ul>` : escapeHtml(translateSurveyText("Повышенный риск не выявлен."))}
     </div>
   `;
@@ -3187,24 +3211,49 @@ function bindBirthDateAge(form) {
 }
 
 function bindNurseSurveyCalculations(form) {
+  const t = form.id === "surveyForm" ? translateSurveyText : translateDoctorText;
   const numericValue = (name) => Number(String(form.elements[name]?.value || "").replace(",", "."));
   const calculate = () => {
+    const measured = form.elements.weight.value.trim() !== "";
+    const measuredWeight = numericValue("weight");
+    const rabitoFields = form.querySelector("[data-rabito-fields]");
+    rabitoFields.hidden = measured;
+    for (const name of ["arm", "calf"]) {
+      form.elements[name].required = !measured;
+      form.elements[name].disabled = measured;
+    }
+    for (const [name, max] of [["weight", 500], ["height", 250], ["rabitoWaist", 300], ["arm", 200], ["calf", 200]]) {
+      const field = form.elements[name];
+      const number = numericValue(name);
+      const filled = !field.disabled && field.value.trim() !== "";
+      field.setCustomValidity(filled && (!Number.isFinite(number) || number <= 0)
+        ? t("Введите число больше нуля")
+        : filled && number > max ? t("Слишком большое значение") : "");
+    }
     const arm = numericValue("arm");
     const waist = numericValue("rabitoWaist");
     const calf = numericValue("calf");
     const sexCoef = form.elements.sex.value === "male" ? 1 : 2;
-    const rabitoWeight = arm > 0 && waist > 0 && calf > 0
+    const rabitoWeight = !measured && arm > 0 && waist > 0 && calf > 0
       ? 0.5759 * arm + 0.5263 * waist + 1.2452 * calf - 4.8689 * sexCoef - 32.9241
       : 0;
     form.elements.rabitoWeightPreview.value = rabitoWeight > 0 ? rabitoWeight.toFixed(1) : "";
 
     const heightM = numericValue("height") / 100;
-    form.elements.bmi.value = rabitoWeight > 0 && heightM > 0 ? (rabitoWeight / (heightM * heightM)).toFixed(1) : "";
+    const weight = measured ? measuredWeight : rabitoWeight;
+    const bmi = weight > 0 && heightM > 0 ? weight / (heightM * heightM) : 0;
+    form.elements.bmi.value = Number.isFinite(bmi) && bmi > 0 ? bmi.toFixed(1) : "";
+    if (bmi > 100) form.elements.height.setCustomValidity(t("Проверьте вес и рост: ИМТ не должен превышать 100"));
+    if (!measured && arm > 0 && waist > 0 && calf > 0 && rabitoWeight <= 0) {
+      form.elements.arm.setCustomValidity(t("Проверьте окружности для расчёта веса"));
+    }
   };
-  ["height", "arm", "rabitoWaist", "calf"].forEach((name) => {
+  ["weight", "height", "arm", "rabitoWaist", "calf"].forEach((name) => {
     form.elements[name].addEventListener("input", calculate);
   });
   form.elements.sex.addEventListener("change", calculate);
+  form.addEventListener("reset", () => queueMicrotask(calculate));
+  calculate();
 }
 
 async function loadTrainingPretest() {
@@ -4372,9 +4421,9 @@ function doctorPatientSurveyForm() {
         ${input(t("Адрес"), "address")}
       </section>
       <h3>FINDRISC</h3>
+      <p class="muted">${escapeHtml(t("Введите вес по весам. ИМТ рассчитается автоматически по весу и росту."))} ${escapeHtml(t("Окружность талии нужна для FINDRISC при любом способе определения веса."))}</p>
       <section class="grid two">
-        ${input(t("Рост, см"), "height", true, "number")}
-        ${input(t("Индекс массы тела"), "bmi", true, "number")}
+        ${surveyWeightFields(t)}
         ${doctorSelect("Физическая активность 30 минут в день", "activity", [["yes", "Да"], ["no", "Нет"]])}
         ${doctorSelect("Овощи/фрукты ежедневно", "vegetables", [["yes", "Да"], ["no", "Нет"]])}
         ${doctorSelect("Принимал препараты от давления", "bpMeds", [["no", "Нет"], ["yes", "Да"]])}
@@ -4387,14 +4436,8 @@ function doctorPatientSurveyForm() {
         ${input(t("Систолическое АД"), "systolic", true, "number")}
         ${input(t("Диастолическое АД"), "diastolic", true, "number")}
       </section>
-      <h3>${escapeHtml(t("Формула Rabito"))}</h3>
-      <section class="grid three">
-        ${input(t("Окружность плеча, см"), "arm", true, "number")}
-        ${input(t("Окружность живота/талия, см"), "rabitoWaist", true, "number")}
-        ${input(t("Окружность голени, см"), "calf", true, "number")}
-        <div class="form-row"><label>${escapeHtml(t("Расчётный вес Rabito, кг"))}</label><input name="rabitoWeightPreview" inputmode="decimal" readonly /></div>
-        ${input(t("Уровень сахара"), "glucoseLevel", true, "number")}
-      </section>
+      ${surveyRabitoFields(t)}
+      ${input(t("Уровень сахара"), "glucoseLevel", true, "number")}
       <div class="actions">
         <button type="submit">${escapeHtml(t("Отправить анкету"))}</button>
         <button type="button" class="secondary" data-action="cancel-doctor-patient">${escapeHtml(t("Отмена"))}</button>
@@ -4424,6 +4467,7 @@ function doctorSurveySummary(survey) {
           <strong>${escapeHtml(t("Паспортная часть"))}</strong>
           <div class="muted">${escapeHtml(t("Возраст"))}: ${measurements.age || "-"}</div>
           <div class="muted">${escapeHtml(t("Рост, см"))}: ${measurements.height || "-"}</div>
+          ${measurements.weight ? `<div class="muted">${escapeHtml(t("Вес по весам, кг"))}: ${measurements.weight}</div>` : ""}
           <div class="muted">${escapeHtml(t("Индекс массы тела"))}: ${measurements.bmi || "-"}</div>
           <div class="muted">${escapeHtml(t("Артериальное давление"))}: ${measurements.systolic || "-"}/${measurements.diastolic || "-"}</div>
           <div class="muted">FINDRISC: ${survey.findrisc?.score ?? "-"} (${escapeHtml(translateDoctorDynamicText(survey.findrisc?.level || "-"))})</div>
@@ -4702,7 +4746,9 @@ function bindDoctorPatientSurvey() {
         },
         measurements: {
           age: Number(data.age || 0),
-          height: Number(data.height || 0),
+          height: Number(String(data.height || 0).replace(",", ".")),
+          weight: Number(String(data.weight || 0).replace(",", ".")),
+          weightSource: data.weight ? "measured" : "rabito",
           bmi: Number(data.bmi || 0),
           systolic: Number(data.systolic || 0),
           diastolic: Number(data.diastolic || 0),

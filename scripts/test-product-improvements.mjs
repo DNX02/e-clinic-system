@@ -109,6 +109,79 @@ try {
   assert.equal(publicMonitor.summary.surveys, 1);
   assert.ok(publicMonitor.surveys.every((survey) => survey.patientName === "Пациент"));
 
+  // A known weight replaces arm/calf measurements; waist is still needed for FINDRISC.
+  const nurse = session();
+  const measuredPatient = {
+    ...patient, lastName: "Измеренный", clinic: "Поликлиника №1", nurseName: "Тестовая Медсестра",
+    height: 180, weight: 81, bmi: 18, arm: undefined, calf: undefined, glucoseLevel: undefined
+  };
+  const measuredMale = await request(nurse, "/api/nurse-surveys", {
+    method: "POST", expected: 201, body: measuredPatient
+  });
+  assert.equal(measuredMale.survey.measurements.weight, 81);
+  assert.equal(measuredMale.survey.measurements.weightSource, "measured");
+  assert.equal(measuredMale.survey.measurements.bmi, 25);
+  assert.equal(measuredMale.survey.answers.bmi, 25);
+  assert.equal(measuredMale.survey.measurements.rabitoWeight, null);
+  assert.equal(measuredMale.survey.measurements.glucoseLevel, 0);
+  assert.equal(measuredMale.survey.findrisc.score, 3, "FINDRISC must use BMI from the measured weight");
+
+  const measuredFemale = await request(nurse, "/api/nurse-surveys", {
+    method: "POST", expected: 201,
+    body: { ...measuredPatient, lastName: "Измеренная", sex: "female", weight: "81,3", height: "180,0" }
+  });
+  assert.equal(measuredFemale.survey.measurements.weight, 81.3);
+  assert.equal(measuredFemale.survey.measurements.bmi, 25.1);
+  assert.equal(measuredFemale.survey.measurements.rabitoWeight, null);
+  assert.equal(measuredFemale.survey.findrisc.score, 7, "Female waist thresholds still apply with a measured weight");
+
+  const measuredWithCircumferences = await request(nurse, "/api/nurse-surveys", {
+    method: "POST", expected: 201,
+    body: { ...measuredPatient, lastName: "ПриоритетИзмерения", weight: 97.2, arm: 30, calf: 35 }
+  });
+  assert.equal(measuredWithCircumferences.survey.measurements.weight, 97.2);
+  assert.equal(measuredWithCircumferences.survey.measurements.weightSource, "measured");
+  assert.equal(measuredWithCircumferences.survey.measurements.bmi, 30);
+  assert.equal(measuredWithCircumferences.survey.findrisc.score, 5);
+  assert.notEqual(measuredWithCircumferences.survey.measurements.rabitoWeight, 97.2);
+
+  for (const [field, invalidValues] of [
+    ["weight", [0, -1, "не число", 501]],
+    ["height", [undefined, "", 0, -1, "не число", 251]],
+    ["rabitoWaist", [undefined, "", 0, -1, "не число", 301]]
+  ]) {
+    for (const value of invalidValues) {
+      await request(nurse, "/api/nurse-surveys", {
+        method: "POST", expected: 400,
+        body: { ...measuredPatient, lastName: `Ошибка-${field}-${String(value)}`, [field]: value }
+      });
+    }
+  }
+
+  // Existing surveys and offline drafts without the new field retain the Rabito flow.
+  for (const [index, weight] of [undefined, "", null].entries()) {
+    const legacySurvey = await request(nurse, "/api/nurse-surveys", {
+      method: "POST", expected: 201,
+      body: { ...patient, lastName: `ПрежняяАнкета-${index}`, clinic: "Поликлиника №1", nurseName: "Тестовая Медсестра", weight, glucoseLevel: undefined }
+    });
+    assert.equal(legacySurvey.survey.measurements.rabitoWeight, createdSurvey.survey.measurements.rabitoWeight);
+    assert.equal(legacySurvey.survey.measurements.bmi, createdSurvey.survey.measurements.bmi);
+    assert.deepEqual(legacySurvey.survey.findrisc, createdSurvey.survey.findrisc);
+  }
+
+  const doctorMeasured = await request(doctor, "/api/doctor/surveys", {
+    method: "POST", expected: 201,
+    body: { ...measuredPatient, lastName: "ИзмеренВрачом", glucoseLevel: 5.5 }
+  });
+  assert.equal(doctorMeasured.survey.measurements.weight, 81);
+  assert.equal(doctorMeasured.survey.measurements.bmi, 25);
+  assert.equal(doctorMeasured.survey.measurements.glucoseLevel, 5.5);
+  const measuredWorkspace = await request(doctor, "/api/doctor/workspace");
+  const persistedMeasured = measuredWorkspace.surveys.find((survey) => survey.id === measuredMale.survey.id);
+  assert.equal(persistedMeasured?.measurements.weight, 81);
+  assert.equal(persistedMeasured?.measurements.weightSource, "measured");
+  assert.equal(persistedMeasured?.measurements.bmi, 25);
+
   await request(doctor, "/api/doctor/account", { method: "PUT", expected: 401, body: { login: "test-doctor", currentAccessKey: "wrong-password", accessKey: doctorNewPassword } });
   await request(doctor, "/api/doctor/account", { method: "PUT", body: { login: "test-doctor", currentAccessKey: doctorPassword, accessKey: doctorNewPassword } });
   const doctorRelogin = session();
