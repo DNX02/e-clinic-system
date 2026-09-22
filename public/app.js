@@ -890,7 +890,7 @@ function showDoctorLanguagePrompt(onChoose) {
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js?v=20260922keys").catch(() => {});
+  navigator.serviceWorker.register("/sw.js?v=20260922layout").catch(() => {});
 }
 
 async function boot() {
@@ -2414,8 +2414,8 @@ function renderDoctorsAdmin() {
   `;
   }).join("");
   return html`
-    <section class="grid two">
-      <form class="panel form" id="doctorForm">
+    <section class="grid two doctor-admin-layout">
+      <form class="panel form doctor-create-panel" id="doctorForm">
         <h2>Создать профиль врача</h2>
         <div class="form-row"><label>ФИО</label><input name="fullName" required /></div>
         <div class="form-row"><label>Логин</label><input name="login" required /></div>

@@ -305,6 +305,23 @@ button:disabled {
   gap: 12px;
 }
 
+.doctor-admin-layout {
+  align-items: start;
+  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+}
+
+.doctor-create-panel {
+  align-content: start;
+  align-self: start;
+  height: max-content;
+}
+
+@media (max-width: 1050px) {
+  .doctor-admin-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 .form-row {
   display: grid;
   gap: 6px;
