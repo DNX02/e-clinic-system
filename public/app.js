@@ -890,7 +890,7 @@ function showDoctorLanguagePrompt(onChoose) {
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js?v=20260922admin").catch(() => {});
+  navigator.serviceWorker.register("/sw.js?v=20260922keys").catch(() => {});
 }
 
 async function boot() {
@@ -1032,6 +1032,28 @@ document.addEventListener("click", async (event) => {
     state.trainingAdminPage = 1;
     state.nurseTrainingAdminPage = 1;
     await loadAdmin();
+  }
+  if (action === "generate-doctor-key") {
+    const input = event.target.closest(".doctor-key-form")?.elements.accessKey;
+    if (!input) return;
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+    const random = crypto.getRandomValues(new Uint8Array(8));
+    input.value = Array.from(random, (value) => alphabet[value % alphabet.length]).join("");
+    input.focus();
+    input.select();
+  }
+  if (action === "copy-doctor-key") {
+    const input = event.target.closest(".doctor-key-reveal")?.querySelector("input");
+    if (!input) return;
+    try {
+      await navigator.clipboard.writeText(input.value);
+      event.target.textContent = "Скопировано";
+    } catch {
+      input.focus();
+      input.select();
+      document.execCommand("copy");
+      event.target.textContent = "Скопировано";
+    }
   }
   if (action === "doctor-tab") {
     state.doctorSection = event.target.dataset.tab;
@@ -2357,26 +2379,40 @@ function renderDoctorsAdmin() {
       <input readonly value="${escapeHtml(state.lastDoctorKey.accessKey)}" style="margin-top:8px" />
     </div>
   ` : '<div id="newKey"></div>';
-  const rows = state.admin.doctors.filter((doctor) => !isExcludedClinicName(doctor.clinic)).map((doctor) => html`
+  const rows = state.admin.doctors.filter((doctor) => !isExcludedClinicName(doctor.clinic)).map((doctor) => {
+    const revealedKey = state.lastDoctorKey?.doctorId === doctor.id ? html`
+      <div class="doctor-key-reveal notice ok" style="margin-top:8px">
+        <strong>Новый временный ключ</strong>
+        <div class="actions" style="margin-top:6px">
+          <input readonly value="${escapeHtml(state.lastDoctorKey.accessKey)}" aria-label="Новый временный ключ врача" />
+          <button type="button" class="secondary" data-action="copy-doctor-key">Копировать</button>
+        </div>
+        <div class="muted">Ключ виден только до обновления страницы.</div>
+      </div>
+    ` : "";
+    return html`
     <tr>
       <td>${escapeHtml(doctor.fullName)}</td>
       <td>${escapeHtml(doctor.login)}</td>
       <td>
         <span class="pill ok">Ключ хранится защищённо</span>
-        <div class="muted">Текущий ключ нельзя посмотреть. При необходимости задайте новый.</div>
+        <div class="muted">Действующий ключ зашифрован. Можно быстро создать новый временный ключ.</div>
         <form class="doctor-key-form" data-id="${doctor.id}" style="margin-top:8px">
           <div class="actions">
-            <input name="accessKey" placeholder="Новый ключ" ${state.admin.canEdit ? "" : "disabled"} />
-            <button class="secondary" ${state.admin.canEdit ? "" : "disabled"}>Сменить</button>
+            <input name="accessKey" minlength="5" autocomplete="new-password" placeholder="Новый ключ" ${state.admin.canEdit ? "" : "disabled"} />
+            <button type="button" class="secondary" data-action="generate-doctor-key" ${state.admin.canEdit ? "" : "disabled"}>Создать ключ</button>
+            <button class="secondary" ${state.admin.canEdit ? "" : "disabled"}>Сохранить</button>
           </div>
         </form>
+        ${revealedKey}
       </td>
       <td>${escapeHtml(doctor.clinic)}</td>
       <td>${escapeHtml(doctor.specialty)}</td>
       <td>${doctor.experienceYears}</td>
       <td><button class="danger" data-action="delete-doctor" data-id="${doctor.id}" ${state.admin.canEdit ? "" : "disabled"}>Удалить</button></td>
     </tr>
-  `).join("");
+  `;
+  }).join("");
   return html`
     <section class="grid two">
       <form class="panel form" id="doctorForm">
