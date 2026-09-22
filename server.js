@@ -5,6 +5,7 @@ import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { networkInterfaces } from "node:os";
 import crypto from "node:crypto";
+import { gzipSync } from "node:zlib";
 import PDFDocument from "pdfkit";
 import { buildWeeklyMonitorReportDocx, monitorReportPeriod } from "./weekly-monitor-report.js";
 
@@ -650,10 +651,16 @@ function isDatabaseError(error) {
 
 function send(res, status, payload, headers = {}) {
   const isBinary = Buffer.isBuffer(payload) || payload instanceof Uint8Array;
-  const body = typeof payload === "string" || isBinary ? payload : JSON.stringify(payload);
+  const isJson = typeof payload !== "string" && !isBinary;
+  let body = typeof payload === "string" || isBinary ? payload : JSON.stringify(payload);
+  const acceptsGzip = String(res.req?.headers?.["accept-encoding"] || "").includes("gzip");
+  const shouldCompress = isJson && acceptsGzip && Buffer.byteLength(body) >= 1024;
+  if (shouldCompress) body = gzipSync(body);
   res.writeHead(status, {
-    "Content-Type": typeof payload === "string" || isBinary ? "text/plain; charset=utf-8" : "application/json; charset=utf-8",
+    "Content-Type": isJson ? "application/json; charset=utf-8" : "text/plain; charset=utf-8",
     "Cache-Control": "no-store",
+    "Content-Length": Buffer.byteLength(body),
+    ...(shouldCompress ? { "Content-Encoding": "gzip", "Vary": "Accept-Encoding" } : {}),
     ...securityHeaders(),
     ...headers
   });
@@ -1646,32 +1653,44 @@ async function handleApi(req, res, url) {
 
   if (req.method === "GET" && url.pathname === "/api/admin/dashboard") {
     if (!requireAdmin(session)) return send(res, 403, { error: "Нет доступа" });
+    const tab = url.searchParams.get("tab") || "stats";
     const diabetesDrugCounts = countSelected(db.doctorVisits.flatMap((visit) => visit.diabetesDrugs || []));
     const hypertensionDrugCounts = countSelected(db.doctorVisits.flatMap((visit) => visit.hypertensionDrugs || []));
-    return send(res, 200, {
-      doctors: db.doctors.map(publicDoctor),
-      surveys: db.nurseSurveys,
-      visits: db.doctorVisits,
-      admins: db.admins.map(publicAdmin),
+    const dashboard = {
       stats: buildStats(db),
       canEdit: canMutateAdmin(session, db),
       canManageAdmins: canManageAdmins(session, db),
       adminRoles,
-      dictionaries: { diabetesDrugs, hypertensionDrugs },
       drugStats: { diabetesDrugCounts, hypertensionDrugCounts },
-      trainingParticipants: db.trainingParticipants.map(publicParticipant),
-      trainingAttempts: db.trainingAttempts.map(enrichTrainingAttempt),
       trainingStats: buildTrainingStats(db),
-      nurseTrainingParticipants: db.nurseTrainingParticipants.map(publicNurseParticipant),
-      nurseTrainingAttempts: db.nurseTrainingAttempts,
-      nurseTrainingStats: buildNurseTrainingStats(db),
-      patientTasks: db.patientTasks || [],
-      appointments: db.appointments || [],
-      reminderQueue: db.reminderQueue || [],
-      messageEvents: db.messageEvents || [],
-      clinicTargets: db.settings?.clinicTargets || {},
-      activityEvents: [...(db.activityEvents || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 1000)
-    });
+      nurseTrainingStats: buildNurseTrainingStats(db)
+    };
+    if (tab === "doctors") dashboard.doctors = db.doctors.map(publicDoctor);
+    if (tab === "training") {
+      dashboard.trainingParticipants = db.trainingParticipants.map(publicParticipant);
+      dashboard.trainingAttempts = db.trainingAttempts.map(enrichTrainingAttempt);
+    }
+    if (tab === "nurseTraining") {
+      dashboard.nurseTrainingParticipants = db.nurseTrainingParticipants.map(publicNurseParticipant);
+      dashboard.nurseTrainingAttempts = db.nurseTrainingAttempts;
+    }
+    if (tab === "surveys") dashboard.surveys = db.nurseSurveys;
+    if (tab === "visits") {
+      dashboard.visits = db.doctorVisits;
+      dashboard.doctors = db.doctors.map(({ id, fullName, clinic }) => ({ id, fullName, clinic }));
+      dashboard.surveys = db.nurseSurveys.map(({ id, patient }) => ({
+        id,
+        patient: { lastName: patient?.lastName, firstName: patient?.firstName, middleName: patient?.middleName, clinic: patient?.clinic }
+      }));
+    }
+    if (tab === "operations") {
+      dashboard.surveyClinics = [...new Set(db.nurseSurveys.map((survey) => survey.patient?.clinic || survey.clinic).filter(Boolean))];
+      dashboard.reminderQueue = db.reminderQueue || [];
+      dashboard.clinicTargets = db.settings?.clinicTargets || {};
+    }
+    if (tab === "audit") dashboard.activityEvents = [...(db.activityEvents || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 1000);
+    if (tab === "access") dashboard.admins = db.admins.map(publicAdmin);
+    return send(res, 200, dashboard);
   }
 
   if (req.method === "PUT" && url.pathname === "/api/admin/account") {

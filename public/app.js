@@ -2,6 +2,8 @@ const app = document.querySelector("#app");
 const initialState = () => ({
   me: null,
   admin: null,
+  adminLoading: false,
+  adminLoadError: "",
   doctor: null,
   tab: "stats",
   doctorSection: "patients",
@@ -888,13 +890,13 @@ function showDoctorLanguagePrompt(onChoose) {
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js?v=20260917weight").catch(() => {});
+  navigator.serviceWorker.register("/sw.js?v=20260922admin").catch(() => {});
 }
 
 async function boot() {
   const { user } = await api("/api/me");
   state.me = user;
-  route();
+  await route();
   initAssistantWidget();
 }
 
@@ -987,7 +989,7 @@ function bindAssistantWidget(widget) {
   });
 }
 
-function route() {
+async function route() {
   const path = window.location.pathname;
   const appMode = document.body.dataset.app;
   if (appMode === "survey" || path === SURVEY_APP_PATH) return renderNurseSurvey();
@@ -1026,10 +1028,10 @@ document.addEventListener("click", async (event) => {
     window.location.href = "/";
   }
   if (action === "admin-tab") {
-    state.tab = event.target.dataset.tab;
+    state.tab = event.target.closest("[data-action]").dataset.tab;
     state.trainingAdminPage = 1;
     state.nurseTrainingAdminPage = 1;
-    renderAdmin();
+    await loadAdmin();
   }
   if (action === "doctor-tab") {
     state.doctorSection = event.target.dataset.tab;
@@ -1880,8 +1882,18 @@ function renderDoctorLogin() {
 }
 
 async function loadAdmin() {
-  state.admin = await api("/api/admin/dashboard");
+  state.adminLoading = true;
+  state.adminLoadError = "";
   renderAdmin();
+  try {
+    const dashboard = await api(`/api/admin/dashboard?tab=${encodeURIComponent(state.tab || "stats")}`);
+    state.admin = { ...(state.admin || {}), ...dashboard };
+  } catch (error) {
+    state.adminLoadError = error.message || "Не удалось загрузить данные";
+  } finally {
+    state.adminLoading = false;
+    renderAdmin();
+  }
 }
 
 function renderAdmin() {
@@ -1892,7 +1904,11 @@ function renderAdmin() {
   setPage(html`
     <div class="layout">
       ${topbar("Панель администратора", nav)}
-      <main class="container admin-container">${adminTab()}</main>
+      <main class="container admin-container">${state.adminLoading
+        ? `<section class="panel"><h2>Загрузка данных…</h2><p class="muted">Пожалуйста, подождите.</p></section>`
+        : state.adminLoadError
+          ? `<section class="panel"><h2>Не удалось загрузить данные</h2><p>${escapeHtml(state.adminLoadError)}</p><button type="button" data-action="admin-tab" data-tab="${escapeHtml(state.tab)}">Повторить</button></section>`
+          : adminTab()}</main>
     </div>
   `);
   bindAdminForms();
@@ -1912,7 +1928,8 @@ function adminTab() {
 }
 
 function adminSurveyClinics() {
-  return [...new Set(state.admin.surveys.map(surveyClinic))]
+  const clinics = state.admin.surveyClinics || (state.admin.surveys || []).map(surveyClinic);
+  return [...new Set(clinics)]
     .filter((clinic) => clinic && !isExcludedClinicName(clinic))
     .sort((a, b) => clinicSortKey(a).localeCompare(clinicSortKey(b), "ru"));
 }
