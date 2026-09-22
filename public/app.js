@@ -890,7 +890,7 @@ function showDoctorLanguagePrompt(onChoose) {
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js?v=20260922layout").catch(() => {});
+  navigator.serviceWorker.register("/sw.js?v=20260922layout2").catch(() => {});
 }
 
 async function boot() {

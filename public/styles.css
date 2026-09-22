@@ -249,6 +249,10 @@ button:disabled {
   padding: 24px;
 }
 
+.admin-container {
+  max-width: 1800px;
+}
+
 .grid {
   display: grid;
   gap: 16px;
