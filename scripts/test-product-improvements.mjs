@@ -118,6 +118,10 @@ try {
   const publicMonitor = await request(session(), "/api/monitor/dashboard");
   assert.equal(publicMonitor.summary.surveys, 1);
   assert.ok(publicMonitor.surveys.every((survey) => survey.patientName === "Пациент"));
+  assert.deepEqual(publicMonitor.filters.nurses, ["Добавил врач"]);
+  assert.equal(publicMonitor.nurses.length, 1);
+  assert.equal(publicMonitor.nurses[0].nurseName, "Добавил врач");
+  assert.equal(publicMonitor.nurses[0].surveys, 1);
 
   // A known weight replaces arm/calf measurements; waist is still needed for FINDRISC.
   const nurse = session();
@@ -144,6 +148,11 @@ try {
   assert.equal(measuredFemale.survey.measurements.bmi, 25.1);
   assert.equal(measuredFemale.survey.measurements.rabitoWeight, null);
   assert.equal(measuredFemale.survey.findrisc.score, 7, "Female waist thresholds still apply with a measured weight");
+  const nurseMonitor = await request(session(), "/api/monitor/dashboard?nurse=Тестовая%20Медсестра");
+  assert.equal(nurseMonitor.summary.surveys, 2);
+  assert.equal(nurseMonitor.nurses.length, 1);
+  assert.equal(nurseMonitor.nurses[0].nurseName, "Тестовая Медсестра");
+  assert.equal(nurseMonitor.nurses[0].surveys, 2);
 
   const measuredWithCircumferences = await request(nurse, "/api/nurse-surveys", {
     method: "POST", expected: 201,

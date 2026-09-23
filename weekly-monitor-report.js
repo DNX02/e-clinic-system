@@ -150,6 +150,18 @@ export async function buildWeeklyMonitorReportDocx(db, period, helpers) {
     return { clinic, dayStats, surveys: sum("surveys"), needsDoctor: sum("needsDoctor"), views: sum("views"), visits: sum("visits"), actions: sum("actions") };
   });
   const total = (key) => stats.reduce((sum, row) => sum + row[key], 0);
+  const nurseStatsMap = new Map();
+  for (const row of surveys) {
+    const day = helpers.dateKey(row.createdAt);
+    const key = `${day}||${row.clinic}||${row.nurseName}`;
+    const item = nurseStatsMap.get(key) || { day, clinic: row.clinic, nurseName: row.nurseName, surveys: 0, needsDoctor: 0 };
+    item.surveys += 1;
+    if (row.needsDoctor) item.needsDoctor += 1;
+    nurseStatsMap.set(key, item);
+  }
+  const nurseStats = [...nurseStatsMap.values()].sort((a, b) =>
+    a.day.localeCompare(b.day) || helpers.clinicKey(a.clinic).localeCompare(helpers.clinicKey(b.clinic), "ru") || a.nurseName.localeCompare(b.nurseName, "ru")
+  );
   const children = [
     paragraph("Недельный отчет по работе поликлиник", { heading: HeadingLevel.TITLE, size: 34, bold: true, color: GREEN, after: 100 }),
     paragraph(`Период: ${dateLabel(period.from)} - ${dateLabel(period.to)}`, { bold: true, color: "31524D" }),
@@ -171,6 +183,13 @@ export async function buildWeeklyMonitorReportDocx(db, period, helpers) {
       stats.map((row) => [[new Paragraph({ spacing: { before: 0, after: 0 }, children: [new InternalHyperlink({ anchor: anchorFor(row.clinic), children: [new TextRun({ text: row.clinic, font: "Arial", size: 19, bold: true, color: "0F766E", underline: {} })] })] })], row.surveys, row.views, row.actions]),
       [3600, 1800, 1980, 1980]
     ),
+    paragraph("Работа медсестёр по дням", { heading: HeadingLevel.HEADING_1, size: 28, bold: true, color: GREEN, before: 240 }),
+    paragraph("Количество заполненных анкет и направлений к врачу по каждой медсестре.", { size: 20, color: "64748B" }),
+    table(
+      ["Дата", "Поликлиника", "Медсестра", "Осмотрено", "К врачу"],
+      nurseStats.map((row) => [dateLabel(row.day), row.clinic, row.nurseName, row.surveys, row.needsDoctor]),
+      [1500, 2000, 2860, 1500, 1500]
+    ),
     paragraph("Детализация по дням", { heading: HeadingLevel.HEADING_1, size: 28, bold: true, color: GREEN, before: 280 })
   ];
   for (const [index, row] of stats.entries()) {
@@ -185,7 +204,7 @@ export async function buildWeeklyMonitorReportDocx(db, period, helpers) {
   }
   if (!stats.length) children.push(paragraph("За выбранный период в системе нет анкет, просмотров карт или сохраненных осмотров.", { bold: true, color: "9B1C1C" }));
   children.push(paragraph("Примечание", { heading: HeadingLevel.HEADING_1, size: 28, bold: true, color: GREEN, before: 260 }));
-  children.push(paragraph("Имена медсестер в отчете не отображаются. Данные агрегированы по поликлиникам и дням. «Открыто карт» показывает зафиксированные открытия анкет врачами, а «С действиями» - осмотры с назначением, планом лечения, лабораторией, направлением или повторным обследованием."));
+  children.push(paragraph("Раздел «Работа медсестёр по дням» формируется по ФИО, указанному при заполнении анкеты. «Открыто карт» показывает зафиксированные открытия анкет врачами, а «С действиями» - осмотры с назначением, планом лечения, лабораторией, направлением или повторным обследованием."));
   const doc = new Document({
     styles: {
       default: { document: { run: { font: "Arial", size: 22, color: INK }, paragraph: { spacing: { after: 120, line: 264, lineRule: "auto" } } } },
