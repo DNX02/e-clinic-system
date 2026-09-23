@@ -22,6 +22,8 @@ desktop.ini
 # Node dependencies and caches
 node_modules/
 artifacts/
+__pycache__/
+*.pyc
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
