@@ -4,6 +4,7 @@ const initialState = () => ({
   admin: null,
   adminLoading: false,
   adminLoadError: "",
+  auditSurvey: null,
   doctor: null,
   tab: "stats",
   doctorSection: "patients",
@@ -891,7 +892,7 @@ function showDoctorLanguagePrompt(onChoose) {
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js?v=20260923nursereport").catch(() => {});
+  navigator.serviceWorker.register("/sw.js?v=20260923auditform").catch(() => {});
 }
 
 async function boot() {
@@ -1029,10 +1030,24 @@ document.addEventListener("click", async (event) => {
     window.location.href = "/";
   }
   if (action === "admin-tab") {
+    state.auditSurvey = null;
     state.tab = event.target.closest("[data-action]").dataset.tab;
     state.trainingAdminPage = 1;
     state.nurseTrainingAdminPage = 1;
     await loadAdmin();
+  }
+  if (action === "open-audit-survey") {
+    const id = event.target.closest("[data-action]").dataset.id;
+    try {
+      state.auditSurvey = await api(`/api/admin/patients/${encodeURIComponent(id)}`);
+      renderAdmin();
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+  if (action === "close-audit-survey") {
+    state.auditSurvey = null;
+    renderAdmin();
   }
   if (action === "generate-doctor-key") {
     const input = event.target.closest(".doctor-key-form")?.elements.accessKey;
@@ -2591,11 +2606,70 @@ function renderAuditAdmin() {
     <td>${new Date(event.createdAt).toLocaleString("ru-RU")}</td>
     <td>${escapeHtml(event.actorName || event.actorRole || "Система")}</td>
     <td>${escapeHtml(labels[event.type] || event.type)}</td>
-    <td>${escapeHtml(event.patientName || "-")}</td>
+    <td>${event.patientName && event.surveyId
+      ? `<button type="button" class="audit-patient-link" data-action="open-audit-survey" data-id="${escapeHtml(event.surveyId)}">${escapeHtml(event.patientName)}</button>`
+      : escapeHtml(event.patientName || "-")}</td>
     <td>${escapeHtml(event.clinic || "-")}</td>
     <td>${escapeHtml(event.details || "-")}</td>
   </tr>`).join("");
-  return html`<section class="panel"><div class="section-title"><div><h2>Журнал действий</h2><p class="muted">Последние ${state.admin.activityEvents?.length || 0} событий. Пароли и медицинские значения сюда не записываются.</p></div></div><div class="table-wrap"><table><thead><tr><th>Дата</th><th>Пользователь</th><th>Действие</th><th>Пациент</th><th>Поликлиника</th><th>Описание</th></tr></thead><tbody>${rows || `<tr><td colspan="6">Событий пока нет</td></tr>`}</tbody></table></div></section>`;
+  return html`<section class="panel"><div class="section-title"><div><h2>Журнал действий</h2><p class="muted">Последние ${state.admin.activityEvents?.length || 0} событий. Нажмите на имя пациента, чтобы открыть его анкету.</p></div></div><div class="table-wrap"><table><thead><tr><th>Дата</th><th>Пользователь</th><th>Действие</th><th>Пациент</th><th>Поликлиника</th><th>Описание</th></tr></thead><tbody>${rows || `<tr><td colspan="6">Событий пока нет</td></tr>`}</tbody></table></div>${renderAuditSurveyModal()}</section>`;
+}
+
+function auditValue(value, fallback = "-") {
+  return value === undefined || value === null || value === "" ? fallback : String(value);
+}
+
+function auditYesNo(value) {
+  if (value === "yes") return "Да";
+  if (value === "no") return "Нет";
+  return auditValue(value);
+}
+
+function renderAuditSurveyModal() {
+  const record = state.auditSurvey;
+  if (!record?.survey) return "";
+  const survey = record.survey;
+  const patient = survey.patient || {};
+  const measurements = survey.measurements || {};
+  const answers = survey.answers || {};
+  const details = [
+    ["Пациент", fullName(patient)],
+    ["Дата рождения", patient.birthDate],
+    ["Пол", patient.sex === "male" ? "Мужской" : patient.sex === "female" ? "Женский" : patient.sex],
+    ["Телефон", patient.phone],
+    ["Адрес", patient.address],
+    ["Поликлиника", patient.clinic || survey.clinic],
+    ["Медсестра", survey.nurse?.fullName],
+    ["Дата анкеты", survey.createdAt ? new Date(survey.createdAt).toLocaleString("ru-RU") : ""],
+    ["Рост", measurements.height ? `${measurements.height} см` : ""],
+    ["Вес", measurements.weight || measurements.rabitoWeight ? `${measurements.weight || measurements.rabitoWeight} кг` : ""],
+    ["ИМТ", measurements.bmi],
+    ["Талия", measurements.rabitoWaist ? `${measurements.rabitoWaist} см` : ""],
+    ["Артериальное давление", measurements.systolic || measurements.diastolic ? `${auditValue(measurements.systolic)}/${auditValue(measurements.diastolic)}` : ""],
+    ["Физическая активность", auditYesNo(answers.activity)],
+    ["Овощи и фрукты ежедневно", auditYesNo(answers.vegetables)],
+    ["Препараты от давления", auditYesNo(answers.bpMeds)],
+    ["Ранее повышенный сахар", auditYesNo(answers.highGlucose)],
+    ["Диабет у родственников", answers.familyDiabetes === "first" ? "Да, первая линия" : answers.familyDiabetes === "second" ? "Да, вторая линия" : "Нет"],
+    ["Курение", auditYesNo(answers.smoker)],
+    ["FINDRISC", `${auditValue(survey.findrisc?.score, "0")} — ${auditValue(survey.findrisc?.level)}`],
+    ["Сердечно-сосудистый риск", `${auditValue(survey.score2?.percent, "0")}% — ${auditValue(survey.score2?.level)}`],
+    ["Решение", survey.needsDoctor ? `Направить к врачу: ${referralReasonText(survey)}` : "Повышенный риск не выявлен"]
+  ];
+  return html`
+    <div class="language-modal audit-survey-modal" role="dialog" aria-modal="true" aria-labelledby="auditSurveyTitle">
+      <section class="language-modal__panel audit-survey-modal__panel">
+        <div class="section-title">
+          <div><h2 id="auditSurveyTitle">Анкета пациента</h2><p class="muted">Полные данные выбранной записи</p></div>
+          <button type="button" class="secondary" data-action="close-audit-survey">Закрыть</button>
+        </div>
+        <div class="audit-survey-grid">
+          ${details.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(auditValue(value))}</strong></div>`).join("")}
+        </div>
+        <div class="actions"><button type="button" data-action="close-audit-survey">Закрыть анкету</button></div>
+      </section>
+    </div>
+  `;
 }
 
 function renderAccessAdmin() {

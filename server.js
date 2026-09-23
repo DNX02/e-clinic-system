@@ -1730,6 +1730,18 @@ async function handleApi(req, res, url) {
     return send(res, 200, { targets: db.settings.clinicTargets });
   }
 
+  if (req.method === "GET" && url.pathname.startsWith("/api/admin/patients/")) {
+    if (!requireAdmin(session)) return send(res, 403, { error: "Нет доступа" });
+    const id = decodeURIComponent(url.pathname.split("/").pop());
+    const survey = db.nurseSurveys.find((item) => item.id === id);
+    if (!survey) return send(res, 404, { error: "Анкета пациента не найдена" });
+    return send(res, 200, {
+      survey,
+      visits: (db.doctorVisits || []).filter((item) => item.surveyId === id),
+      tasks: (db.patientTasks || []).filter((item) => item.surveyId === id)
+    });
+  }
+
   if (req.method === "PUT" && url.pathname.startsWith("/api/admin/patients/")) {
     if (!canMutateAdmin(session, db)) return send(res, 403, { error: "Недостаточно прав для изменения данных" });
     const id = decodeURIComponent(url.pathname.split("/").pop());

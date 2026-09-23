@@ -108,6 +108,11 @@ try {
   assert.equal(dashboard.trainingAttempts, undefined, "Initial admin dashboard must load training details lazily");
   const auditDashboard = await request(admin, "/api/admin/dashboard?tab=audit");
   assert.ok(auditDashboard.activityEvents.some((event) => event.type === "patient_task_updated"));
+  const nurseSurveyEvent = auditDashboard.activityEvents.find((event) => event.type === "doctor_patient_created");
+  assert.equal(nurseSurveyEvent.surveyId, createdSurvey.survey.id);
+  const adminPatient = await request(admin, `/api/admin/patients/${createdSurvey.survey.id}`);
+  assert.equal(adminPatient.survey.id, createdSurvey.survey.id);
+  assert.equal(adminPatient.survey.patient.lastName, patient.lastName);
   const operationsDashboard = await request(admin, "/api/admin/dashboard?tab=operations");
   assert.equal(operationsDashboard.reminderQueue.length, 1);
   assert.deepEqual(operationsDashboard.surveyClinics, ["Поликлиника №1"]);
