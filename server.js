@@ -1915,7 +1915,9 @@ async function handleApi(req, res, url) {
     return send(res, 200, {
       survey,
       visits: (db.doctorVisits || []).filter((item) => item.surveyId === id),
-      tasks: (db.patientTasks || []).filter((item) => item.surveyId === id)
+      tasks: (db.patientTasks || []).filter((item) => item.surveyId === id),
+      events: (db.activityEvents || []).filter((item) => item.surveyId === id).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)),
+      nextAction: buildCareControl(db).registry.find((item) => item.id === id)?.nextAction || "Наблюдение по плану"
     });
   }
 

@@ -2794,6 +2794,8 @@ function renderAuditSurveyModal() {
         <div class="audit-survey-grid">
           ${details.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(auditValue(value))}</strong></div>`).join("")}
         </div>
+        <section class="patient-next-step"><h3>Следующий шаг</h3><p>${escapeHtml(record.nextAction || "Наблюдение по плану")}</p></section>
+        <section class="patient-timeline"><h3>История пациента</h3>${[...(record.events || []), ...(record.visits || []).map(item => ({ createdAt: item.createdAt, actorName: item.doctorName || "Врач", details: "Осмотр врача" })), ...(record.tasks || []).map(item => ({ createdAt: item.createdAt, actorName: "Система", details: `Задача: ${item.title}` }))].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).map(item => `<article><time>${escapeHtml(new Date(item.createdAt).toLocaleString("ru-RU"))}</time><strong>${escapeHtml(item.actorName || "Система")}</strong><span>${escapeHtml(item.details || "")}</span></article>`).join("") || `<p class="muted">История пока пуста</p>`}</section>
         ${historyPanel(survey.changeHistory || [])}
         <div class="actions"><button type="button" data-action="close-audit-survey">Закрыть анкету</button></div>
       </section>
