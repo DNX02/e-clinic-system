@@ -2,15 +2,16 @@ import { mkdir } from "node:fs/promises";
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || "playwright");
 
 const baseUrl = process.env.TUTORIAL_URL || "http://127.0.0.1:34321";
-const outputDir = process.env.TUTORIAL_FRAMES || "artifacts/nurse-tutorial-frames";
+const language = process.env.TUTORIAL_LANGUAGE || "ru";
+const outputDir = process.env.TUTORIAL_FRAMES || `artifacts/nurse-tutorial-frames${language === "ru" ? "" : `-${language}`}`;
 await mkdir(outputDir, { recursive: true });
 
 const browser = await chromium.launch({ channel: "chrome", headless: true });
 const page = await browser.newPage({ viewport: { width: 430, height: 820 }, deviceScaleFactor: 1 });
 await page.goto(`${baseUrl}/app-3-patient-survey`, { waitUntil: "networkidle" });
-await page.evaluate(() => localStorage.setItem("eclinic_survey_language_confirmed", "ru"));
+await page.evaluate((selectedLanguage) => localStorage.setItem("eclinic_survey_language_confirmed", selectedLanguage), language);
 await page.reload({ waitUntil: "networkidle" });
-await page.locator('[data-survey-lang-choice="ru"]').click();
+await page.locator(`[data-survey-lang-choice="${language}"]`).click();
 
 const shot = async (name) => {
   await page.screenshot({ path: `${outputDir}/${name}.png` });
@@ -24,14 +25,14 @@ const focus = async (name) => {
 };
 
 await shot("01-open");
-await fill("nurseName", "Медсестра Демо");
-await fill("lastName", "Иванова");
-await fill("firstName", "Анна");
-await fill("middleName", "Тестовна");
+await fill("nurseName", language === "tg" ? "Ҳамшираи омӯзишӣ" : "Медсестра Демо");
+await fill("lastName", language === "tg" ? "Иванова" : "Иванова");
+await fill("firstName", language === "tg" ? "Анна" : "Анна");
+await fill("middleName", language === "tg" ? "Омӯзишӣ" : "Тестовна");
 await fill("birthDate", "1966-01-01");
 await select("sex", "female");
 await fill("phone", "900000000");
-await fill("address", "Учебный пример");
+await fill("address", language === "tg" ? "Намунаи омӯзишӣ" : "Учебный пример");
 await focus("nurseName");
 await shot("02-passport");
 

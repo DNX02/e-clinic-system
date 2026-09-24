@@ -6,7 +6,8 @@ import { spawn } from "node:child_process";
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || "playwright");
 const port = 34322;
 const baseUrl = `http://127.0.0.1:${port}`;
-const outputDir = process.env.TUTORIAL_FRAMES || "artifacts/doctor-tutorial-frames";
+const language = process.env.TUTORIAL_LANGUAGE || "ru";
+const outputDir = process.env.TUTORIAL_FRAMES || `artifacts/doctor-tutorial-frames${language === "ru" ? "" : `-${language}`}`;
 const dataDir = await mkdtemp(join(tmpdir(), "eclinic-doctor-tutorial-"));
 const adminPassword = "TutorialAdmin123";
 const doctorKey = "TutorialDoctor123";
@@ -45,11 +46,11 @@ try {
   let admin = await request("/api/login/admin", { method: "POST", body: { username: "admin", password: adminPassword } });
   await request("/api/admin/doctors", {
     method: "POST", cookie: admin.cookie,
-    body: { fullName: "Врач Демо", login: "doctor-demo", accessKey: doctorKey, passport: "Учебная запись", clinic: "Поликлиника №1", specialty: "Семейный врач", experienceYears: 5 }
+    body: { fullName: language === "tg" ? "Духтури омӯзишӣ" : "Врач Демо", login: "doctor-demo", accessKey: doctorKey, passport: language === "tg" ? "Сабти омӯзишӣ" : "Учебная запись", clinic: "Поликлиника №1", specialty: language === "tg" ? "Табиби оилавӣ" : "Семейный врач", experienceYears: 5 }
   });
   const patient = {
-    nurseName: "Медсестра Демо", lastName: "Иванова", firstName: "Анна", middleName: "Учебная", birthDate: "1966-01-01",
-    phone: "900000000", address: "Учебный пример", clinic: "Поликлиника №1", sex: "female", age: 60,
+    nurseName: language === "tg" ? "Ҳамшираи омӯзишӣ" : "Медсестра Демо", lastName: "Иванова", firstName: "Анна", middleName: language === "tg" ? "Омӯзишӣ" : "Учебная", birthDate: "1966-01-01",
+    phone: "900000000", address: language === "tg" ? "Намунаи омӯзишӣ" : "Учебный пример", clinic: "Поликлиника №1", sex: "female", age: 60,
     height: 160, weight: 77, bmi: 30.1, systolic: 140, diastolic: 90, rabitoWaist: 89,
     activity: "no", vegetables: "no", bpMeds: "yes", highGlucose: "no", familyDiabetes: "none", smoker: "no"
   };
@@ -60,14 +61,17 @@ try {
   const shot = (name) => page.screenshot({ path: `${outputDir}/${name}.png` });
 
   await page.goto(`${baseUrl}/app-2-doctor`, { waitUntil: "networkidle" });
-  await page.locator('[data-doctor-lang-choice="ru"]').click();
+  await page.locator(`[data-doctor-lang-choice="${language}"]`).click();
   await page.locator('[name="login"]').fill("doctor-demo");
   await page.locator('[name="accessKey"]').fill(doctorKey);
   await shot("01-login");
-  await page.locator("#doctorLogin button").click();
-  await page.waitForURL("**/app-2-doctor");
+  const [loginResponse] = await Promise.all([
+    page.waitForResponse((response) => response.url().includes("/api/login/doctor")),
+    page.locator("#doctorLogin button").click()
+  ]);
+  if (!loginResponse.ok()) throw new Error(`Doctor tutorial login failed: ${await loginResponse.text()}`);
   await page.waitForSelector("#patientSearch");
-  const languageChoice = page.locator('[data-doctor-lang-choice="ru"]');
+  const languageChoice = page.locator(`[data-doctor-lang-choice="${language}"]`);
   if (await languageChoice.isVisible().catch(() => false)) await languageChoice.click();
   await shot("02-patients");
 
@@ -83,7 +87,7 @@ try {
   await fill("height", "160");
   await fill("glucose", "7.2");
   await page.locator('[name="glucoseType"]').last().selectOption("fasting");
-  await fill("diagnosis", "Сахарный диабет");
+  await fill("diagnosis", language === "tg" ? "Диабети қанд" : "Сахарный диабет");
   await fill("systolic", "138");
   await fill("diastolic", "86");
   await fill("followUpDays", "14");
@@ -91,27 +95,32 @@ try {
   await shot("05-measurements");
 
   await page.locator('[name="referrals"][value="Эндокринолог"]').check();
-  await page.locator('[name="treatmentPlan"]').fill("Контроль сахара крови и повторный осмотр");
+  await page.locator('[name="treatmentPlan"]').fill(language === "tg" ? "Назорати қанди хун ва муоинаи такрорӣ" : "Контроль сахара крови и повторный осмотр");
   await page.locator('[name="lifestyleRecommendations"][value="diabetesDiet"]').check();
   await page.locator('[name="treatmentPlan"]').scrollIntoViewIfNeeded();
   await shot("06-plan");
 
-  await page.getByRole("button", { name: "Сохранить осмотр" }).scrollIntoViewIfNeeded();
+  await page.locator("#visitForm button").last().scrollIntoViewIfNeeded();
   await shot("07-save");
-  await page.evaluate(async ({ surveyId }) => {
+  await page.evaluate(async ({ surveyId, visitDiagnosis, visitPlan, successMessage }) => {
     const response = await fetch("/api/doctor/visits", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         surveyId, weight: 77, height: 160, bmi: 30.1, glucose: 7.2, glucoseType: "fasting",
-        diagnosis: "Сахарный диабет", systolic: 138, diastolic: 86, followUpDays: 14,
-        referrals: ["Эндокринолог"], treatmentPlan: "Контроль сахара крови и повторный осмотр",
+        diagnosis: visitDiagnosis, systolic: 138, diastolic: 86, followUpDays: 14,
+        referrals: ["Эндокринолог"], treatmentPlan: visitPlan,
         laboratoryTests: [], diabetesDrugs: [], hypertensionDrugs: [], lifestyleRecommendations: ["diabetesDiet"]
       })
     });
     if (!response.ok) throw new Error("Не удалось сохранить учебный осмотр");
-    document.querySelector("#visitResult").innerHTML = '<div class="notice ok">Осмотр сохранён и отправлен администратору.</div>';
-  }, { surveyId: createdSurvey.payload.survey.id });
+    document.querySelector("#visitResult").innerHTML = `<div class="notice ok">${successMessage}</div>`;
+  }, {
+    surveyId: createdSurvey.payload.survey.id,
+    visitDiagnosis: language === "tg" ? "Диабети қанд" : "Сахарный диабет",
+    visitPlan: language === "tg" ? "Назорати қанди хун ва муоинаи такрорӣ" : "Контроль сахара крови и повторный осмотр",
+    successMessage: language === "tg" ? "Муоина сабт ва ба маъмур фиристода шуд." : "Осмотр сохранён и отправлен администратору."
+  });
   await page.waitForSelector("#visitResult .notice", { timeout: 10000 });
   await page.locator("#visitResult").scrollIntoViewIfNeeded();
   await shot("08-result");
