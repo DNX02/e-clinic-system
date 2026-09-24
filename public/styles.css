@@ -18,6 +18,7 @@
 .workflow-help video { display: block; width: min(100%, 820px); max-height: 65vh; margin-top: 14px; background: #102b27; }
 .workflow-help li { margin: 10px 0; }
 .draft-notice { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.install-app-hint { display: flex; gap: 10px; align-items: center; margin: 12px auto; max-width: 900px; }
 .change-history article { border-top: 1px solid var(--line); padding: 12px 0; overflow-wrap: anywhere; }
 .patient-next-step { background: #fff8dc; border: 1px solid #f0d98a; border-radius: 10px; padding: 12px 16px; margin-top: 16px; }
 .patient-next-step p { margin: 0; font-weight: 700; color: #76520b; }

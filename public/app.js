@@ -55,6 +55,8 @@ const initialState = () => ({
 });
 let state = initialState();
 let offlineSurveyOnlineListenerBound = false;
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (event) => { event.preventDefault(); deferredInstallPrompt = event; document.querySelector('#installSurveyApp')?.removeAttribute('hidden'); });
 let monitorRefreshTimer = null;
 const ADMIN_APP_PATH = "/app-1-admin-panel";
 const DOCTOR_APP_PATH = "/app-2-doctor";
@@ -1031,6 +1033,13 @@ function setPage(content) {
       catch (error) { alert(error.message); }
       finally { select.disabled = false; }
     }));
+    document.querySelector('#installSurveyApp')?.addEventListener('click', async () => {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      document.querySelector('#installSurveyApp')?.setAttribute('hidden', '');
+    });
   });
 }
 
@@ -3209,6 +3218,7 @@ function renderNurseSurvey() {
   const clinicText = (text) => surveyLanguage() === "tg" ? String(text).replace("Поликлиника №", "Поликлиникаи №") : text;
   setPage(html`
     <main class="container">
+      <div class="install-app-hint"><button id="installSurveyApp" type="button" class="secondary" hidden>Установить приложение на телефон</button><span class="muted">Можно добавить «Опросник» на главный экран Android.</span></div>
       <form class="panel form" id="surveyForm">
         ${helpPanel('nurse', surveyLanguage())}
         <h1>${escapeHtml(t("Опросник медсестры"))}</h1>
