@@ -3173,6 +3173,7 @@ function buildCareControl(db) {
     const followUpPlanned = Boolean(lastVisit?.followUpDays || tasks.length);
     const followUpCompleted = visits.length > 1;
     const stage = followUpCompleted ? "Повторный контроль выполнен" : followUpPlanned ? "Повторный контроль запланирован" : visits.length ? "Осмотр врача выполнен" : viewed ? "Карточка открыта врачом" : survey.needsDoctor ? "Ожидает врача" : "Первичный скрининг";
+    const nextAction = stage === "Ожидает врача" ? "Назначить врача" : missingChecklist.length ? `Назначить: ${missingChecklist.join(", ")}` : followUpPlanned && !followUpCompleted ? "Проверить повторный визит" : !visits.length ? "Провести осмотр" : "Наблюдение по плану";
     const surveyFlags = qualityFlagsForSurvey(survey);
     const visitFlags = lastVisit ? qualityFlagsForVisit(lastVisit) : [];
     return {
@@ -3188,6 +3189,7 @@ function buildCareControl(db) {
       glucose: lastVisit?.glucose || survey.measurements?.glucoseLevel || 0,
       bloodPressure: `${lastVisit?.systolic || survey.measurements?.systolic || "—"}/${lastVisit?.diastolic || survey.measurements?.diastolic || "—"}`,
       stage,
+      nextAction,
       needsDoctor: Boolean(survey.needsDoctor),
       visits: visits.length,
       checklist,

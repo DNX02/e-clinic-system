@@ -2709,7 +2709,7 @@ function renderCareControlAdmin() {
   const rows = registry.slice(0, 300).map((row) => html`<tr>
     <td><button type="button" class="audit-patient-link" data-action="open-audit-survey" data-id="${escapeHtml(row.id)}">${escapeHtml(row.patientName)}</button><div class="muted">${escapeHtml(row.birthDate)}</div></td>
     <td>${escapeHtml(row.clinic)}</td><td>${escapeHtml(row.nurseName)}</td><td>${escapeHtml(row.doctorName || "—")}</td>
-    <td><span class="pill ${row.stage.includes("выполнен") ? "ok" : row.stage === "Ожидает врача" ? "warn" : ""}">${escapeHtml(row.stage)}</span></td>
+    <td><span class="pill ${row.stage.includes("выполнен") ? "ok" : row.stage === "Ожидает врача" ? "warn" : ""}">${escapeHtml(row.stage)}</span><div class="muted">Следующий шаг: ${escapeHtml(row.nextAction || "—")}</div></td>
     <td>${row.findrisc}</td><td>${escapeHtml(row.glucose || "—")}</td><td>${escapeHtml(row.bloodPressure)}</td>
     <td>${row.missingChecklist?.length ? `<span class="pill warn">${escapeHtml(row.missingChecklist.join(", "))}</span>` : `<span class="pill ok">Заполнено</span>`}</td>
     <td>${row.qualityFlags?.length ? `<span class="pill warn">${escapeHtml(row.qualityFlags.join("; "))}</span>` : "—"}</td>
