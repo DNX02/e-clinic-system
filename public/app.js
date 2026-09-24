@@ -1084,6 +1084,15 @@ document.addEventListener("click", async (event) => {
     state.careSearch = "";
     renderAdmin();
   }
+  if (action === "import-patients") {
+    const file = document.querySelector("#patientImportFile")?.files?.[0];
+    if (!file) return alert("Выберите CSV-файл, сохранённый из Excel.");
+    try {
+      const result = await api("/api/admin/patients/import", { method: "POST", body: JSON.stringify({ rows: parseImportCsv(await file.text()) }) });
+      alert(`Импортировано: ${result.imported.length}; дублей пропущено: ${result.skipped.length}; ошибок: ${result.errors.length}`);
+      await loadAdmin();
+    } catch (error) { alert(error.message); }
+  }
   if (action === "create-backup") {
     try {
       await api("/api/admin/backup", { method: "POST", body: "{}" });
@@ -2701,6 +2710,18 @@ function renderAuditAdmin() {
     <div class="table-wrap"><table><thead><tr><th>Дата</th><th>Пользователь</th><th>Действие</th><th>Пациент</th><th>Поликлиника</th><th>Описание</th></tr></thead><tbody>${rows || `<tr><td colspan="6">По вашему запросу записи не найдены</td></tr>`}</tbody></table></div>${renderAuditSurveyModal()}</section>`;
 }
 
+function parseImportCsv(text) {
+  const lines = String(text || '').replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean);
+  if (lines.length < 2) return [];
+  const delimiter = lines[0].includes(';') ? ';' : ',';
+  const headers = lines.shift().split(delimiter).map(item => item.trim().replace(/^"|"$/g, ''));
+  const aliases = { 'Фамилия': 'lastName', 'Имя': 'firstName', 'Отчество': 'middleName', 'Дата рождения': 'birthDate', 'Телефон': 'phone', 'Адрес': 'address', 'Поликлиника': 'clinic', 'Пол': 'sex', 'Возраст': 'age', 'Рост': 'height', 'Вес': 'weight', 'Талия': 'rabitoWaist', 'САД': 'systolic', 'ДАД': 'diastolic', 'Медсестра': 'nurseName' };
+  return lines.map(line => {
+    const values = line.split(delimiter).map(item => item.trim().replace(/^"|"$/g, ''));
+    return Object.fromEntries(headers.map((header, index) => [aliases[header] || header, values[index] || '']));
+  });
+}
+
 function renderCareControlAdmin() {
   const control = state.admin.careControl || { summary: {}, registry: [], nurseDaily: [], quality: [], duplicates: [] };
   const s = control.summary || {};
@@ -2727,6 +2748,7 @@ function renderCareControlAdmin() {
         <div class="card metric">Повтор запланирован<strong>${money(s.followUpPlanned)}</strong></div><div class="card metric">Повтор выполнен<strong>${money(s.followUpCompleted)}</strong></div><div class="card metric">Проверить данные<strong>${money(s.qualityWarnings)}</strong></div>
       </div>
     </section>
+    <section class="panel"><div class="section-title"><div><h2>Импорт из Excel</h2><p class="muted">Сохраните таблицу Excel как CSV UTF‑8. Дубли будут пропущены автоматически.</p></div></div><div class="actions"><input id="patientImportFile" type="file" accept=".csv,text/csv"/><button type="button" data-action="import-patients" ${state.admin.canEdit ? "" : "disabled"}>Импортировать пациентов</button></div></section>
     <section class="panel">
       <div class="section-title"><div><h2>Регистр и этапы пациента</h2><p class="muted">Нажмите на имя, чтобы открыть полную анкету.</p></div></div>
       <form id="careSearchForm" class="audit-search-form"><label>Поиск</label><div class="actions"><input name="query" type="search" value="${escapeHtml(state.careSearch)}" placeholder="Пациент, поликлиника, медсестра или этап"/><button>Найти</button>${state.careSearch ? `<button type="button" class="secondary" data-action="clear-care-search">Сбросить</button>` : ""}</div></form>
