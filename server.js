@@ -3293,6 +3293,25 @@ async function sendTelegramReport(db, overrideChatId = "") {
   return { sentAt: new Date().toISOString(), chatIdMasked: chatId.length > 4 ? `***${chatId.slice(-4)}` : "***" };
 }
 
+async function sendDueTelegramReminders(db) {
+  if (!TELEGRAM_BOT_TOKEN) return 0;
+  const now = Date.now();
+  let sentCount = 0;
+  for (const reminder of db.reminderQueue || []) {
+    if (reminder.status !== "queued" || reminder.channel !== "telegram" || !reminder.scheduledAt || new Date(reminder.scheduledAt).getTime() > now) continue;
+    const survey = (db.nurseSurveys || []).find((item) => item.id === reminder.surveyId);
+    const chatId = String(survey?.patient?.telegramChatId || "").trim();
+    if (!survey?.patient?.reminderConsent || !chatId) { reminder.status = "blocked"; reminder.reason = "Нет согласия или Telegram Chat ID"; continue; }
+    try {
+      const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: reminder.message }) });
+      if (!response.ok) throw new Error("Telegram не принял напоминание");
+      reminder.status = "sent"; reminder.sentAt = new Date().toISOString(); reminder.reason = "Отправлено"; sentCount += 1;
+    } catch (error) { reminder.status = "error"; reminder.reason = String(error.message || error).slice(0, 300); }
+  }
+  if (sentCount || (db.reminderQueue || []).some((item) => item.status === "error")) await writeDb(db);
+  return sentCount;
+}
+
 function buildPublicOperationsMonitorRows(db) {
   const rows = buildOperationsMonitorRows(db);
   return {
@@ -3468,6 +3487,7 @@ async function runScheduledMaintenance() {
       await createSecureBackup(db, "daily");
     }
     const reports = db.settings?.dailyReports;
+    await sendDueTelegramReminders(db);
     if (reports?.enabled && reports.time === clock.time && reports.lastSentDate !== clock.date) {
       const sent = await sendTelegramReport(db);
       reports.lastSentDate = clock.date;
