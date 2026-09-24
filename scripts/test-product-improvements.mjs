@@ -113,6 +113,9 @@ try {
   const adminPatient = await request(admin, `/api/admin/patients/${createdSurvey.survey.id}`);
   assert.equal(adminPatient.survey.id, createdSurvey.survey.id);
   assert.equal(adminPatient.survey.patient.lastName, patient.lastName);
+  assert.ok(Array.isArray(adminPatient.events));
+  assert.ok(adminPatient.events.length >= 1, "Patient timeline must include activity events");
+  assert.equal(typeof adminPatient.nextAction, "string");
   const operationsDashboard = await request(admin, "/api/admin/dashboard?tab=operations");
   assert.equal(operationsDashboard.reminderQueue.length, 1);
   assert.deepEqual(operationsDashboard.surveyClinics, ["Поликлиника №1"]);
