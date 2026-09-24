@@ -57,6 +57,14 @@ button {
   transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible {
+  outline: 3px solid #f0b429;
+  outline-offset: 2px;
+}
+
+.table-wrap tbody tr:hover { background: #f5faf7; }
+.topbar .nav button { white-space: nowrap; }
+
 button:hover {
   background: var(--primary-dark);
   box-shadow: 0 8px 20px rgba(17, 106, 91, 0.16);
