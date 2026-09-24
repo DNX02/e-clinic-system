@@ -206,6 +206,30 @@ try {
   assert.equal(persistedMeasured?.measurements.weightSource, "measured");
   assert.equal(persistedMeasured?.measurements.bmi, 25);
 
+  const controlDashboard = await request(admin, "/api/admin/dashboard?tab=control");
+  assert.ok(controlDashboard.careControl.summary.patients >= 1);
+  assert.ok(controlDashboard.careControl.registry.some((row) => row.id === createdSurvey.survey.id));
+  assert.ok(controlDashboard.careControl.nurseDaily.some((row) => row.nurseName === "Тестовая Медсестра"));
+  const excelReport = await request(admin, "/api/admin/care-control.xls");
+  assert.match(excelReport, /<Worksheet ss:Name="Регистр">/);
+  const backup = await request(admin, "/api/admin/backup", { method: "POST", expected: 201, body: {} });
+  assert.equal(backup.status.reason, "manual");
+  await request(admin, "/api/admin/daily-reports", { method: "PUT", body: { enabled: false, time: "18:30", chatId: "123456789" } });
+  const configuredControl = await request(admin, "/api/admin/dashboard?tab=control");
+  assert.equal(configuredControl.careControl.dailyReports.time, "18:30");
+
+  await request(admin, "/api/admin/admins", {
+    method: "POST", expected: 201,
+    body: { name: "Старшая медсестра №1", username: "head-nurse-1", password: "Nurse12345", role: "head_nurse", clinic: "Поликлиника №1" }
+  });
+  const headNurse = session();
+  await request(headNurse, "/api/login/admin", { method: "POST", body: { username: "head-nurse-1", password: "Nurse12345" } });
+  const headNurseControl = await request(headNurse, "/api/admin/dashboard?tab=control");
+  assert.equal(headNurseControl.clinicScope, "1");
+  assert.ok(headNurseControl.careControl.registry.every((row) => row.clinic === "Поликлиника №1"));
+  assert.equal(headNurseControl.careControl.dailyReports.chatId, "");
+  await request(headNurse, "/api/admin/backup", { method: "POST", expected: 403, body: {} });
+
   await request(doctor, "/api/doctor/account", { method: "PUT", expected: 401, body: { login: "test-doctor", currentAccessKey: "wrong-password", accessKey: doctorNewPassword } });
   await request(doctor, "/api/doctor/account", { method: "PUT", body: { login: "test-doctor", currentAccessKey: doctorPassword, accessKey: doctorNewPassword } });
   const doctorRelogin = session();

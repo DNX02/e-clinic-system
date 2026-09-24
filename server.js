@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rename, readdir, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,6 +20,8 @@ const PG_TIMEOUT_MS = Number(process.env.PG_TIMEOUT_MS || 8000);
 const GOOGLE_CLOUD_PROJECT = process.env.GOOGLE_CLOUD_PROJECT || "";
 const GOOGLE_CLOUD_LOCATION = process.env.GOOGLE_CLOUD_LOCATION || "global";
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+const TELEGRAM_REPORT_CHAT_ID = process.env.TELEGRAM_REPORT_CHAT_ID || "";
 const INITIAL_ADMIN_PASSWORD = process.env.INITIAL_ADMIN_PASSWORD || "";
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 12 * 60 * 60 * 1000);
 const MAX_JSON_BODY_BYTES = Number(process.env.MAX_JSON_BODY_BYTES || 1024 * 1024);
@@ -76,6 +78,7 @@ const seedAdmins = [
 const adminRoles = {
   owner: "Главный администратор",
   manager: "Администратор",
+  head_nurse: "Старшая медсестра",
   observer: "Наблюдатель"
 };
 
@@ -935,6 +938,49 @@ function extractGeminiText(payload) {
   return parts.join("\n").trim() || "Не удалось получить ответ консультанта.";
 }
 
+function adminAccount(session, db) {
+  if (!session || session.userType !== "admin") return null;
+  return db.admins.find((admin) => admin.id === session.userId) || null;
+}
+
+function adminClinicScope(session, db) {
+  const admin = adminAccount(session, db);
+  return admin?.role === "head_nurse" ? clinicKey(admin.clinic) : "";
+}
+
+function adminCanAccessClinic(session, db, clinic) {
+  const scope = adminClinicScope(session, db);
+  return !scope || scope === clinicKey(clinic);
+}
+
+function scopedDbForAdmin(db, session) {
+  const scope = adminClinicScope(session, db);
+  if (!scope) return db;
+  const surveys = (db.nurseSurveys || []).filter((survey) => clinicKey(survey.patient?.clinic || survey.clinic) === scope);
+  const surveyIds = new Set(surveys.map((survey) => survey.id));
+  const doctors = (db.doctors || []).filter((doctor) => clinicKey(doctor.clinic) === scope);
+  const doctorIds = new Set(doctors.map((doctor) => doctor.id));
+  const trainingParticipants = (db.trainingParticipants || []).filter((item) => clinicKey(item.clinic) === scope);
+  const trainingIds = new Set(trainingParticipants.map((item) => item.id));
+  const nurseTrainingParticipants = (db.nurseTrainingParticipants || []).filter((item) => clinicKey(item.clinic) === scope);
+  const nurseTrainingIds = new Set(nurseTrainingParticipants.map((item) => item.id));
+  return {
+    ...db,
+    doctors,
+    nurseSurveys: surveys,
+    doctorVisits: (db.doctorVisits || []).filter((visit) => surveyIds.has(visit.surveyId) || doctorIds.has(visit.doctorId)),
+    patientTasks: (db.patientTasks || []).filter((item) => surveyIds.has(item.surveyId)),
+    appointments: (db.appointments || []).filter((item) => surveyIds.has(item.surveyId)),
+    reminderQueue: (db.reminderQueue || []).filter((item) => !item.surveyId || surveyIds.has(item.surveyId)),
+    activityEvents: (db.activityEvents || []).filter((event) => clinicKey(event.clinic) === scope || (event.surveyId && surveyIds.has(event.surveyId))),
+    trainingParticipants,
+    trainingAttempts: (db.trainingAttempts || []).filter((item) => trainingIds.has(item.participantId)),
+    nurseTrainingParticipants,
+    nurseTrainingAttempts: (db.nurseTrainingAttempts || []).filter((item) => nurseTrainingIds.has(item.participantId)),
+    admins: (db.admins || []).filter((admin) => admin.id === session.userId)
+  };
+}
+
 async function getGoogleAccessToken() {
   if (googleAccessToken && Date.now() < googleAccessTokenExpiresAt - 60_000) return googleAccessToken;
   const response = await fetch(
@@ -1282,7 +1328,7 @@ function buildNurseSurvey(body) {
   const rabitoWeight = calculateRabito(body);
   const score2 = calculateScore2Lite(body);
   const reasons = referralReasons(body, findrisc, score2);
-  return {
+  const survey = {
     id: crypto.randomUUID(),
     patient: {
       lastName: body.lastName,
@@ -1320,6 +1366,8 @@ function buildNurseSurvey(body) {
     needsDoctor: reasons.length > 0,
     createdAt: new Date().toISOString()
   };
+  survey.qualityWarnings = qualityFlagsForSurvey(survey);
+  return survey;
 }
 
 function appendActivity(db, event) {
@@ -1645,7 +1693,7 @@ async function handleApi(req, res, url) {
     if (!session) return send(res, 200, { user: null });
     if (session.userType === "admin") {
       const admin = db.admins.find((item) => item.id === session.userId);
-      return send(res, 200, { user: { type: "admin", id: admin.id, name: admin.name, role: admin.role } });
+      return send(res, 200, { user: { type: "admin", id: admin.id, name: admin.name, role: admin.role, clinic: admin.clinic || "" } });
     }
     const doctor = db.doctors.find((item) => item.id === session.userId);
     return send(res, 200, { user: { type: "doctor", id: doctor.id, name: doctor.fullName, specialty: doctor.specialty, clinic: doctor.clinic } });
@@ -1654,43 +1702,86 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/admin/dashboard") {
     if (!requireAdmin(session)) return send(res, 403, { error: "Нет доступа" });
     const tab = url.searchParams.get("tab") || "stats";
-    const diabetesDrugCounts = countSelected(db.doctorVisits.flatMap((visit) => visit.diabetesDrugs || []));
-    const hypertensionDrugCounts = countSelected(db.doctorVisits.flatMap((visit) => visit.hypertensionDrugs || []));
+    const viewDb = scopedDbForAdmin(db, session);
+    const diabetesDrugCounts = countSelected(viewDb.doctorVisits.flatMap((visit) => visit.diabetesDrugs || []));
+    const hypertensionDrugCounts = countSelected(viewDb.doctorVisits.flatMap((visit) => visit.hypertensionDrugs || []));
     const dashboard = {
-      stats: buildStats(db),
+      stats: buildStats(viewDb),
       canEdit: canMutateAdmin(session, db),
       canManageAdmins: canManageAdmins(session, db),
       adminRoles,
       drugStats: { diabetesDrugCounts, hypertensionDrugCounts },
-      trainingStats: buildTrainingStats(db),
-      nurseTrainingStats: buildNurseTrainingStats(db)
+      trainingStats: buildTrainingStats(viewDb),
+      nurseTrainingStats: buildNurseTrainingStats(viewDb),
+      clinicScope: adminClinicScope(session, db)
     };
-    if (tab === "doctors") dashboard.doctors = db.doctors.map(publicDoctor);
+    if (tab === "control") {
+      dashboard.careControl = buildCareControl(viewDb);
+      if (!canManageAdmins(session, db)) dashboard.careControl.dailyReports.chatId = "";
+    }
+    if (tab === "doctors") dashboard.doctors = viewDb.doctors.map(publicDoctor);
     if (tab === "training") {
-      dashboard.trainingParticipants = db.trainingParticipants.map(publicParticipant);
-      dashboard.trainingAttempts = db.trainingAttempts.map(enrichTrainingAttempt);
+      dashboard.trainingParticipants = viewDb.trainingParticipants.map(publicParticipant);
+      dashboard.trainingAttempts = viewDb.trainingAttempts.map(enrichTrainingAttempt);
     }
     if (tab === "nurseTraining") {
-      dashboard.nurseTrainingParticipants = db.nurseTrainingParticipants.map(publicNurseParticipant);
-      dashboard.nurseTrainingAttempts = db.nurseTrainingAttempts;
+      dashboard.nurseTrainingParticipants = viewDb.nurseTrainingParticipants.map(publicNurseParticipant);
+      dashboard.nurseTrainingAttempts = viewDb.nurseTrainingAttempts;
     }
-    if (tab === "surveys") dashboard.surveys = db.nurseSurveys;
+    if (tab === "surveys") dashboard.surveys = viewDb.nurseSurveys;
     if (tab === "visits") {
-      dashboard.visits = db.doctorVisits;
-      dashboard.doctors = db.doctors.map(({ id, fullName, clinic }) => ({ id, fullName, clinic }));
-      dashboard.surveys = db.nurseSurveys.map(({ id, patient }) => ({
+      dashboard.visits = viewDb.doctorVisits;
+      dashboard.doctors = viewDb.doctors.map(({ id, fullName, clinic }) => ({ id, fullName, clinic }));
+      dashboard.surveys = viewDb.nurseSurveys.map(({ id, patient }) => ({
         id,
         patient: { lastName: patient?.lastName, firstName: patient?.firstName, middleName: patient?.middleName, clinic: patient?.clinic }
       }));
     }
     if (tab === "operations") {
-      dashboard.surveyClinics = [...new Set(db.nurseSurveys.map((survey) => survey.patient?.clinic || survey.clinic).filter(Boolean))];
-      dashboard.reminderQueue = db.reminderQueue || [];
+      dashboard.surveyClinics = [...new Set(viewDb.nurseSurveys.map((survey) => survey.patient?.clinic || survey.clinic).filter(Boolean))];
+      dashboard.reminderQueue = viewDb.reminderQueue || [];
       dashboard.clinicTargets = db.settings?.clinicTargets || {};
     }
-    if (tab === "audit") dashboard.activityEvents = [...(db.activityEvents || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 1000);
-    if (tab === "access") dashboard.admins = db.admins.map(publicAdmin);
+    if (tab === "audit") dashboard.activityEvents = [...(viewDb.activityEvents || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 1000);
+    if (tab === "access") dashboard.admins = (canManageAdmins(session, db) ? db.admins : viewDb.admins).map(publicAdmin);
     return send(res, 200, dashboard);
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/admin/care-control.xls") {
+    if (!requireAdmin(session)) return send(res, 403, { error: "Нет доступа" });
+    const report = buildCareControlExcel(scopedDbForAdmin(db, session));
+    return send(res, 200, report, {
+      "Content-Type": "application/vnd.ms-excel; charset=utf-8",
+      "Content-Disposition": `attachment; filename="e-clinic-control-${dateKey(new Date().toISOString())}.xls"`
+    });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/backup") {
+    if (!canManageAdmins(session, db)) return send(res, 403, { error: "Только главный администратор может создавать резервные копии" });
+    const status = await createSecureBackup(db, "manual");
+    return send(res, 201, { status });
+  }
+
+  if (req.method === "PUT" && url.pathname === "/api/admin/daily-reports") {
+    if (!canManageAdmins(session, db)) return send(res, 403, { error: "Только главный администратор может настраивать отчёты" });
+    const body = await parseBody(req);
+    db.settings ||= {};
+    db.settings.dailyReports = {
+      enabled: Boolean(body.enabled),
+      time: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(body.time || "")) ? String(body.time) : "18:00",
+      chatId: cleanText(body.chatId, "Telegram Chat ID", { max: 50 }),
+      timezone: "Asia/Dushanbe",
+      lastSentDate: db.settings.dailyReports?.lastSentDate || ""
+    };
+    await writeDb(db);
+    return send(res, 200, { settings: { ...db.settings.dailyReports, tokenConfigured: Boolean(TELEGRAM_BOT_TOKEN) } });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/daily-reports/test") {
+    if (!canManageAdmins(session, db)) return send(res, 403, { error: "Только главный администратор может отправлять тестовый отчёт" });
+    const body = await parseBody(req);
+    const result = await sendTelegramReport(scopedDbForAdmin(db, session), body.chatId);
+    return send(res, 200, result);
   }
 
   if (req.method === "PUT" && url.pathname === "/api/admin/account") {
@@ -1735,6 +1826,7 @@ async function handleApi(req, res, url) {
     const id = decodeURIComponent(url.pathname.split("/").pop());
     const survey = db.nurseSurveys.find((item) => item.id === id);
     if (!survey) return send(res, 404, { error: "Анкета пациента не найдена" });
+    if (!adminCanAccessClinic(session, db, survey.patient?.clinic || survey.clinic)) return send(res, 403, { error: "Нет доступа к этой поликлинике" });
     return send(res, 200, {
       survey,
       visits: (db.doctorVisits || []).filter((item) => item.surveyId === id),
@@ -1797,6 +1889,7 @@ async function handleApi(req, res, url) {
     const username = String(body.username || "").trim();
     const password = validateNewPassword(body.password, "Пароль");
     const role = adminRoles[body.role] ? body.role : "observer";
+    const clinic = role === "head_nurse" ? allowedClinic(body.clinic) : "";
     if (!name || !username || !password) return send(res, 400, { error: "ФИО, логин и пароль обязательны" });
     if (db.admins.some((admin) => admin.username === username)) return send(res, 409, { error: "Такой логин уже используется" });
     const admin = {
@@ -1804,6 +1897,7 @@ async function handleApi(req, res, url) {
       name,
       username,
       role,
+      clinic,
       passwordHash: hashPassword(password),
       createdAt: new Date().toISOString()
     };
@@ -1824,6 +1918,7 @@ async function handleApi(req, res, url) {
     const username = String(body.username || "").trim();
     const password = String(body.password || "").trim();
     const role = adminRoles[body.role] ? body.role : admin.role;
+    const clinic = role === "head_nurse" ? allowedClinic(body.clinic || admin.clinic) : "";
     if (!name || !username) return send(res, 400, { error: "ФИО и логин обязательны" });
     if (db.admins.some((item) => item.id !== admin.id && item.username === username)) return send(res, 409, { error: "Такой логин уже используется" });
     const ownerCount = db.admins.filter((item) => item.role === "owner").length;
@@ -1831,6 +1926,7 @@ async function handleApi(req, res, url) {
     admin.name = name;
     admin.username = username;
     admin.role = role;
+    admin.clinic = clinic;
     if (password) {
       admin.passwordHash = hashPassword(validateNewPassword(password, "Новый пароль"));
       invalidateUserSessions(db, "admin", admin.id);
@@ -2226,6 +2322,7 @@ async function handleApi(req, res, url) {
       },
       createdAt: new Date().toISOString()
     };
+    visit.qualityWarnings = qualityFlagsForVisit(visit);
     db.doctorVisits.push(visit);
     let followUpTask = null;
     if (visit.followUpDays > 0) {
@@ -2904,6 +3001,204 @@ function buildOperationsMonitor(db, filters = {}) {
   };
 }
 
+function qualityFlagsForSurvey(survey) {
+  const flags = [];
+  const m = survey.measurements || {};
+  if (!m.weight && !m.rabitoWeight) flags.push("Не указан вес");
+  if (!m.height) flags.push("Не указан рост");
+  if (!m.systolic || !m.diastolic) flags.push("Не указано артериальное давление");
+  if (m.bmi && (m.bmi < 15 || m.bmi > 60)) flags.push("Проверьте индекс массы тела");
+  if (m.systolic >= 180 || m.diastolic >= 120) flags.push("Очень высокое артериальное давление");
+  if (!survey.nurse?.fullName && !survey.createdByDoctorId) flags.push("Не указана медсестра");
+  return flags;
+}
+
+function qualityFlagsForVisit(visit) {
+  const flags = [];
+  if (!visit.systolic || !visit.diastolic) flags.push("В осмотре не указано давление");
+  if (!visit.weight) flags.push("В осмотре не указан вес");
+  if (!visit.glucose) flags.push("Не указан уровень сахара в крови");
+  if (!visit.diagnosis && !(visit.referrals || []).length && !visit.treatmentPlan) flags.push("Нет решения врача");
+  return flags;
+}
+
+function duplicatePatientSuggestions(db) {
+  const groups = new Map();
+  for (const survey of (db.nurseSurveys || []).filter((item) => !item.archivedAt)) {
+    const patient = survey.patient || {};
+    const identity = normalizePatientIdentity(patient);
+    const phone = String(patient.phone || "").replace(/\D/g, "");
+    const keys = [`identity:${clinicKey(patient.clinic || survey.clinic)}:${identity}`];
+    if (phone.length >= 7) keys.push(`phone:${clinicKey(patient.clinic || survey.clinic)}:${phone}`);
+    for (const key of keys) (groups.get(key) || groups.set(key, []).get(key)).push(survey);
+  }
+  const seen = new Set();
+  const suggestions = [];
+  for (const [key, items] of groups) {
+    if (items.length < 2) continue;
+    const ids = items.map((item) => item.id).sort();
+    const signature = ids.join("|");
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    suggestions.push({
+      reason: key.startsWith("phone:") ? "Одинаковый телефон" : "Совпадают ФИО и дата рождения",
+      clinic: items[0].patient?.clinic || items[0].clinic || "",
+      patients: items.map((item) => ({ id: item.id, name: patientNameFromSurvey(item), birthDate: item.patient?.birthDate || "", phone: item.patient?.phone || "", createdAt: item.createdAt }))
+    });
+  }
+  return suggestions.slice(0, 100);
+}
+
+function careChecklist(visits = []) {
+  const text = visits.flatMap((visit) => [
+    ...(visit.laboratoryTests || []).flatMap((lab) => [lab.test, lab.name, lab.result, ...Object.keys(lab.fields || {})]),
+    ...(visit.referrals || [])
+  ]).filter(Boolean).join(" ").toLocaleLowerCase("ru-RU");
+  return {
+    hba1c: /hba1c|гликир|гликирован/.test(text),
+    kidney: /креатинин|скф|почек|альбумин/.test(text),
+    lipids: /лпнп|холестерин|липид/.test(text),
+    eyes: /офтальм|глаз|сетчат/.test(text),
+    feet: /стоп|подолог|нейропат/.test(text)
+  };
+}
+
+function buildCareControl(db) {
+  const doctorsById = Object.fromEntries((db.doctors || []).map((doctor) => [doctor.id, doctor]));
+  const eventsBySurvey = {};
+  for (const event of db.activityEvents || []) (eventsBySurvey[event.surveyId] ||= []).push(event);
+  const visitsBySurvey = {};
+  for (const visit of db.doctorVisits || []) (visitsBySurvey[visit.surveyId] ||= []).push(visit);
+  const tasksBySurvey = {};
+  for (const task of db.patientTasks || []) (tasksBySurvey[task.surveyId] ||= []).push(task);
+  const registry = (db.nurseSurveys || []).filter((survey) => !survey.archivedAt).map((survey) => {
+    const visits = (visitsBySurvey[survey.id] || []).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    const lastVisit = visits.at(-1) || null;
+    const checklist = careChecklist(visits);
+    const missingChecklist = Object.entries(checklist).filter(([, ok]) => !ok).map(([key]) => ({ hba1c: "HbA1c", kidney: "Почки", lipids: "Липиды", eyes: "Глаза", feet: "Стопы" }[key]));
+    const tasks = tasksBySurvey[survey.id] || [];
+    const viewed = (eventsBySurvey[survey.id] || []).some((event) => event.type === "doctor_survey_viewed");
+    const followUpPlanned = Boolean(lastVisit?.followUpDays || tasks.length);
+    const followUpCompleted = tasks.some((task) => task.status === "completed") || visits.length > 1;
+    const stage = followUpCompleted ? "Повторный контроль выполнен" : followUpPlanned ? "Повторный контроль запланирован" : visits.length ? "Осмотр врача выполнен" : viewed ? "Карточка открыта врачом" : survey.needsDoctor ? "Ожидает врача" : "Первичный скрининг";
+    const surveyFlags = qualityFlagsForSurvey(survey);
+    const visitFlags = lastVisit ? qualityFlagsForVisit(lastVisit) : [];
+    return {
+      id: survey.id,
+      patientName: patientNameFromSurvey(survey),
+      birthDate: survey.patient?.birthDate || "",
+      clinic: survey.patient?.clinic || survey.clinic || "",
+      nurseName: survey.nurse?.fullName || (survey.createdByDoctorId ? "Добавил врач" : "Не указана"),
+      doctorName: doctorsById[lastVisit?.doctorId]?.fullName || "",
+      createdAt: survey.createdAt,
+      lastVisitAt: lastVisit?.createdAt || "",
+      findrisc: survey.findrisc?.score || 0,
+      glucose: lastVisit?.glucose || survey.measurements?.glucoseLevel || 0,
+      bloodPressure: `${lastVisit?.systolic || survey.measurements?.systolic || "—"}/${lastVisit?.diastolic || survey.measurements?.diastolic || "—"}`,
+      stage,
+      needsDoctor: Boolean(survey.needsDoctor),
+      visits: visits.length,
+      checklist,
+      missingChecklist,
+      qualityFlags: [...surveyFlags, ...visitFlags]
+    };
+  }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const nurseDailyMap = {};
+  for (const row of buildOperationsMonitorRows(db).surveyRows) {
+    const day = dateKey(row.createdAt);
+    const key = `${row.clinic}|${row.nurseName}|${day}`;
+    nurseDailyMap[key] ||= { clinic: row.clinic, nurseName: row.nurseName, date: day, screened: 0, needsDoctor: 0 };
+    nurseDailyMap[key].screened += 1;
+    if (row.needsDoctor) nurseDailyMap[key].needsDoctor += 1;
+  }
+  const quality = registry.filter((row) => row.qualityFlags.length).map((row) => ({ id: row.id, patientName: row.patientName, clinic: row.clinic, flags: row.qualityFlags }));
+  const duplicates = duplicatePatientSuggestions(db);
+  const summary = {
+    patients: registry.length,
+    awaitingDoctor: registry.filter((row) => row.stage === "Ожидает врача").length,
+    withDoctorVisit: registry.filter((row) => row.visits > 0).length,
+    followUpPlanned: registry.filter((row) => row.stage.includes("запланирован")).length,
+    followUpCompleted: registry.filter((row) => row.stage.includes("выполнен")).length,
+    qualityWarnings: quality.length,
+    duplicateGroups: duplicates.length
+  };
+  return {
+    summary,
+    registry,
+    nurseDaily: Object.values(nurseDailyMap).sort((a, b) => b.date.localeCompare(a.date) || a.clinic.localeCompare(b.clinic, "ru")),
+    quality,
+    duplicates,
+    backupStatus: db.settings?.backupStatus || null,
+    dailyReports: { ...(db.settings?.dailyReports || {}), tokenConfigured: Boolean(TELEGRAM_BOT_TOKEN), defaultChatConfigured: Boolean(TELEGRAM_REPORT_CHAT_ID) }
+  };
+}
+
+function excelXmlCell(value, type = "String") {
+  const escaped = String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;");
+  return `<Cell><Data ss:Type="${type}">${escaped}</Data></Cell>`;
+}
+
+function excelXmlSheet(name, headers, rows) {
+  const header = `<Row ss:StyleID="Header">${headers.map((item) => excelXmlCell(item)).join("")}</Row>`;
+  const body = rows.map((row) => `<Row>${row.map((item) => excelXmlCell(item, typeof item === "number" ? "Number" : "String")).join("")}</Row>`).join("");
+  return `<Worksheet ss:Name="${name}"><Table>${header}${body}</Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane></WorksheetOptions></Worksheet>`;
+}
+
+function buildCareControlExcel(db) {
+  const control = buildCareControl(db);
+  const sheets = [
+    excelXmlSheet("Регистр", ["Пациент", "Дата рождения", "Поликлиника", "Медсестра", "Врач", "Этап", "FINDRISC", "Сахар", "АД", "Осмотров", "Не выполнено"], control.registry.map((row) => [row.patientName, row.birthDate, row.clinic, row.nurseName, row.doctorName, row.stage, row.findrisc, row.glucose || "", row.bloodPressure, row.visits, row.missingChecklist.join(", ")])),
+    excelXmlSheet("Медсестры", ["Дата", "Поликлиника", "Медсестра", "Осмотрено", "К врачу"], control.nurseDaily.map((row) => [row.date, row.clinic, row.nurseName, row.screened, row.needsDoctor])),
+    excelXmlSheet("Качество", ["Пациент", "Поликлиника", "Предупреждения"], control.quality.map((row) => [row.patientName, row.clinic, row.flags.join("; ")])),
+    excelXmlSheet("Дубликаты", ["Причина", "Поликлиника", "Карточки"], control.duplicates.map((group) => [group.reason, group.clinic, group.patients.map((item) => `${item.name} (${item.birthDate})`).join("; ")]))
+  ].join("");
+  return `<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="Header"><Font ss:Bold="1"/><Interior ss:Color="#D9EDE8" ss:Pattern="Solid"/></Style></Styles>${sheets}</Workbook>`;
+}
+
+async function createSecureBackup(db, reason = "manual") {
+  const backupDir = join(dataDir, "backups");
+  await mkdir(backupDir, { recursive: true });
+  const createdAt = new Date().toISOString();
+  const filename = `e-clinic-${createdAt.replace(/[:.]/g, "-")}.json`;
+  const path = join(backupDir, filename);
+  const tempPath = `${path}.tmp`;
+  const snapshot = { ...db, sessions: {} };
+  const serialized = JSON.stringify(snapshot);
+  await writeFile(tempPath, serialized, { encoding: "utf8", mode: 0o600 });
+  await rename(tempPath, path);
+  const verification = JSON.parse(await readFile(path, "utf8"));
+  if (!Array.isArray(verification.nurseSurveys) || !Array.isArray(verification.doctorVisits)) throw new Error("Проверка резервной копии не пройдена");
+  const checksum = crypto.createHash("sha256").update(serialized).digest("hex");
+  const files = (await readdir(backupDir)).filter((item) => /^e-clinic-.*\.json$/.test(item)).sort().reverse();
+  for (const old of files.slice(14)) await unlink(join(backupDir, old)).catch(() => {});
+  db.settings ||= {};
+  db.settings.backupStatus = { createdAt, verifiedAt: new Date().toISOString(), verified: true, checksum, filename, reason, retained: Math.min(files.length, 14) };
+  await writeDb(db);
+  return db.settings.backupStatus;
+}
+
+function dailyReportText(db) {
+  const control = buildCareControl(db);
+  const today = dateKey(new Date().toISOString());
+  const nurses = control.nurseDaily.filter((row) => row.date === today);
+  const screened = nurses.reduce((sum, row) => sum + row.screened, 0);
+  const referred = nurses.reduce((sum, row) => sum + row.needsDoctor, 0);
+  return [`E-Clinic — отчёт за ${today}`, `Осмотрено пациентов: ${screened}`, `Направлено к врачу: ${referred}`, `Ожидают врача всего: ${control.summary.awaitingDoctor}`, `Предупреждений по качеству данных: ${control.summary.qualityWarnings}`].join("\n");
+}
+
+async function sendTelegramReport(db, overrideChatId = "") {
+  if (!TELEGRAM_BOT_TOKEN) throw new Error("TELEGRAM_BOT_TOKEN не настроен на сервере");
+  const chatId = String(overrideChatId || db.settings?.dailyReports?.chatId || TELEGRAM_REPORT_CHAT_ID || "").trim();
+  if (!chatId) throw new Error("Telegram Chat ID не указан");
+  const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, text: dailyReportText(db) })
+  });
+  if (!response.ok) throw new Error("Telegram не принял отчёт");
+  return { sentAt: new Date().toISOString(), chatIdMasked: chatId.length > 4 ? `***${chatId.slice(-4)}` : "***" };
+}
+
 function buildPublicOperationsMonitorRows(db) {
   const rows = buildOperationsMonitorRows(db);
   return {
@@ -3042,6 +3337,45 @@ function getLanUrls() {
   return urls;
 }
 
+function dushanbeClock() {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Dushanbe", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+  }).formatToParts(new Date()).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
+}
+
+let maintenanceRunning = false;
+async function runScheduledMaintenance() {
+  if (maintenanceRunning) return;
+  maintenanceRunning = true;
+  try {
+    const db = await loadDb();
+    const clock = dushanbeClock();
+    if (db.settings?.backupStatus?.createdAt?.slice(0, 10) !== new Date().toISOString().slice(0, 10)) {
+      await createSecureBackup(db, "daily");
+    }
+    const reports = db.settings?.dailyReports;
+    if (reports?.enabled && reports.time === clock.time && reports.lastSentDate !== clock.date) {
+      const sent = await sendTelegramReport(db);
+      reports.lastSentDate = clock.date;
+      reports.lastSentAt = sent.sentAt;
+      reports.lastError = "";
+      await writeDb(db);
+    }
+  } catch (error) {
+    console.error("Scheduled maintenance failed:", error.message || error);
+    try {
+      const db = await loadDb();
+      if (db.settings?.dailyReports) {
+        db.settings.dailyReports.lastError = String(error.message || error).slice(0, 300);
+        await writeDb(db);
+      }
+    } catch {}
+  } finally {
+    maintenanceRunning = false;
+  }
+}
+
 createServer(async (req, res) => {
   req.requestId = crypto.randomUUID();
   res.setHeader("X-Request-Id", req.requestId);
@@ -3081,4 +3415,6 @@ createServer(async (req, res) => {
     console.log(`  Investor:     ${baseUrl}${INVESTOR_APP_PATH}`);
     console.log(`  Monitor:      ${baseUrl}${MONITOR_APP_PATH}`);
   }
+  setTimeout(() => runScheduledMaintenance(), 5000);
+  setInterval(() => runScheduledMaintenance(), 60 * 1000).unref();
 });

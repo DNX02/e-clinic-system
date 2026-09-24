@@ -6,6 +6,7 @@ const initialState = () => ({
   adminLoadError: "",
   auditSurvey: null,
   auditSearch: "",
+  careSearch: "",
   doctor: null,
   tab: "stats",
   doctorSection: "patients",
@@ -894,7 +895,7 @@ function showDoctorLanguagePrompt(onChoose) {
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js?v=20260924glucoselabel").catch(() => {});
+  navigator.serviceWorker.register("/sw.js?v=20260924carecontrol").catch(() => {});
 }
 
 async function boot() {
@@ -1054,6 +1055,24 @@ document.addEventListener("click", async (event) => {
   if (action === "clear-audit-search") {
     state.auditSearch = "";
     renderAdmin();
+  }
+  if (action === "clear-care-search") {
+    state.careSearch = "";
+    renderAdmin();
+  }
+  if (action === "create-backup") {
+    try {
+      await api("/api/admin/backup", { method: "POST", body: "{}" });
+      alert("Защищённая резервная копия создана на сервере.");
+      await loadAdmin();
+    } catch (error) { alert(error.message); }
+  }
+  if (action === "test-daily-report") {
+    const chatId = document.querySelector("#dailyReportForm [name='chatId']")?.value || "";
+    try {
+      await api("/api/admin/daily-reports/test", { method: "POST", body: JSON.stringify({ chatId }) });
+      alert("Тестовая сводка отправлена в Telegram.");
+    } catch (error) { alert(error.message); }
   }
   if (action === "generate-doctor-key") {
     const input = event.target.closest(".doctor-key-form")?.elements.accessKey;
@@ -1953,8 +1972,11 @@ async function loadAdmin() {
 }
 
 function renderAdmin() {
-  const nav = ["stats", "doctors", "training", "nurseTraining", "surveys", "visits", "operations", "audit", "access", "qr"].map((tab) => {
-    const names = { stats: "Статистика", doctors: "Врачи", training: "Обучение №4", nurseTraining: "Медсестры №5", surveys: "Пациенты", visits: "Назначения", operations: "План и сообщения", audit: "Журнал", access: "Доступы", qr: "QR" };
+  const visibleTabs = state.me?.role === "head_nurse"
+    ? ["stats", "control", "surveys", "operations", "audit"]
+    : ["stats", "control", "doctors", "training", "nurseTraining", "surveys", "visits", "operations", "audit", "access", "qr"];
+  const nav = visibleTabs.map((tab) => {
+    const names = { stats: "Статистика", control: "Контроль диабета", doctors: "Врачи", training: "Обучение №4", nurseTraining: "Медсестры №5", surveys: "Пациенты", visits: "Назначения", operations: "План и сообщения", audit: "Журнал", access: "Доступы", qr: "QR" };
     return `<button data-action="admin-tab" data-tab="${tab}" class="${state.tab === tab ? "active" : ""}">${names[tab]}</button>`;
   }).join("");
   setPage(html`
@@ -1971,6 +1993,7 @@ function renderAdmin() {
 }
 
 function adminTab() {
+  if (state.tab === "control") return renderCareControlAdmin();
   if (state.tab === "doctors") return renderDoctorsAdmin();
   if (state.tab === "training") return renderTrainingAdmin();
   if (state.tab === "nurseTraining") return renderNurseTrainingAdmin();
@@ -2591,6 +2614,7 @@ function adminRoleOptions(selected = "observer") {
   const roles = [
     ["owner", "Главный администратор"],
     ["manager", "Администратор"],
+    ["head_nurse", "Старшая медсестра"],
     ["observer", "Наблюдатель"]
   ];
   return roles.map(([value, text]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${text}</option>`).join("");
@@ -2640,6 +2664,47 @@ function renderAuditAdmin() {
       <div class="muted">Показано записей: ${events.length} из ${state.admin.activityEvents?.length || 0}</div>
     </form>
     <div class="table-wrap"><table><thead><tr><th>Дата</th><th>Пользователь</th><th>Действие</th><th>Пациент</th><th>Поликлиника</th><th>Описание</th></tr></thead><tbody>${rows || `<tr><td colspan="6">По вашему запросу записи не найдены</td></tr>`}</tbody></table></div>${renderAuditSurveyModal()}</section>`;
+}
+
+function renderCareControlAdmin() {
+  const control = state.admin.careControl || { summary: {}, registry: [], nurseDaily: [], quality: [], duplicates: [] };
+  const s = control.summary || {};
+  const query = String(state.careSearch || "").trim().toLocaleLowerCase("ru-RU");
+  const registry = (control.registry || []).filter((row) => !query || [row.patientName, row.clinic, row.nurseName, row.doctorName, row.stage].some((value) => String(value || "").toLocaleLowerCase("ru-RU").includes(query)));
+  const rows = registry.slice(0, 300).map((row) => html`<tr>
+    <td><button type="button" class="audit-patient-link" data-action="open-audit-survey" data-id="${escapeHtml(row.id)}">${escapeHtml(row.patientName)}</button><div class="muted">${escapeHtml(row.birthDate)}</div></td>
+    <td>${escapeHtml(row.clinic)}</td><td>${escapeHtml(row.nurseName)}</td><td>${escapeHtml(row.doctorName || "—")}</td>
+    <td><span class="pill ${row.stage.includes("выполнен") ? "ok" : row.stage === "Ожидает врача" ? "warn" : ""}">${escapeHtml(row.stage)}</span></td>
+    <td>${row.findrisc}</td><td>${escapeHtml(row.glucose || "—")}</td><td>${escapeHtml(row.bloodPressure)}</td>
+    <td>${row.missingChecklist?.length ? `<span class="pill warn">${escapeHtml(row.missingChecklist.join(", "))}</span>` : `<span class="pill ok">Заполнено</span>`}</td>
+    <td>${row.qualityFlags?.length ? `<span class="pill warn">${escapeHtml(row.qualityFlags.join("; "))}</span>` : "—"}</td>
+  </tr>`).join("");
+  const nurses = (control.nurseDaily || []).slice(0, 200).map((row) => `<tr><td>${escapeHtml(row.date)}</td><td>${escapeHtml(row.clinic)}</td><td>${escapeHtml(row.nurseName)}</td><td>${row.screened}</td><td>${row.needsDoctor}</td></tr>`).join("");
+  const duplicates = (control.duplicates || []).map((group) => `<tr><td>${escapeHtml(group.reason)}</td><td>${escapeHtml(group.clinic)}</td><td>${group.patients.map((item) => `<div><strong>${escapeHtml(item.name)}</strong> · ${escapeHtml(item.birthDate)} · ${escapeHtml(item.phone || "без телефона")}</div>`).join("")}</td></tr>`).join("");
+  const reports = control.dailyReports || {};
+  const backup = control.backupStatus;
+  return html`
+    <section class="panel care-control-hero">
+      <div class="section-title"><div><h2>Контроль диабета</h2><p class="muted">Единый регистр, движение пациентов, качество данных и работа медсестёр. Подсказки не заменяют решение врача.</p></div><a class="button-link" href="/api/admin/care-control.xls">Скачать Excel</a></div>
+      <div class="grid three care-metrics">
+        <div class="card metric">Пациентов<strong>${money(s.patients)}</strong></div><div class="card metric">Ожидают врача<strong>${money(s.awaitingDoctor)}</strong></div><div class="card metric">Осмотрены врачом<strong>${money(s.withDoctorVisit)}</strong></div>
+        <div class="card metric">Повтор запланирован<strong>${money(s.followUpPlanned)}</strong></div><div class="card metric">Повтор выполнен<strong>${money(s.followUpCompleted)}</strong></div><div class="card metric">Проверить данные<strong>${money(s.qualityWarnings)}</strong></div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="section-title"><div><h2>Регистр и этапы пациента</h2><p class="muted">Нажмите на имя, чтобы открыть полную анкету.</p></div></div>
+      <form id="careSearchForm" class="audit-search-form"><label>Поиск</label><div class="actions"><input name="query" type="search" value="${escapeHtml(state.careSearch)}" placeholder="Пациент, поликлиника, медсестра или этап"/><button>Найти</button>${state.careSearch ? `<button type="button" class="secondary" data-action="clear-care-search">Сбросить</button>` : ""}</div></form>
+      <div class="table-wrap"><table><thead><tr><th>Пациент</th><th>Поликлиника</th><th>Медсестра</th><th>Врач</th><th>Этап</th><th>FINDRISC</th><th>Сахар</th><th>АД</th><th>Чек-лист диабета</th><th>Качество</th></tr></thead><tbody>${rows || `<tr><td colspan="10">Записи не найдены</td></tr>`}</tbody></table></div>
+      ${renderAuditSurveyModal()}
+    </section>
+    <section class="grid two">
+      <section class="panel"><h2>Ежедневный отчёт старшей медсестры</h2><div class="table-wrap"><table><thead><tr><th>Дата</th><th>Поликлиника</th><th>Медсестра</th><th>Осмотрено</th><th>К врачу</th></tr></thead><tbody>${nurses || `<tr><td colspan="5">Пока нет данных</td></tr>`}</tbody></table></div></section>
+      <section class="panel"><h2>Возможные дубликаты</h2><p class="muted">Система только предлагает совпадения. Объединение выполняется вручную в разделе «Пациенты».</p><div class="table-wrap"><table><thead><tr><th>Причина</th><th>Поликлиника</th><th>Карточки</th></tr></thead><tbody>${duplicates || `<tr><td colspan="3">Подозрительных дублей нет</td></tr>`}</tbody></table></div></section>
+    </section>
+    <section class="grid two">
+      <section class="panel"><h2>Резервное копирование</h2><p>${backup ? `Последняя копия: <strong>${new Date(backup.createdAt).toLocaleString("ru-RU")}</strong><br><span class="pill ${backup.verified ? "ok" : "warn"}">${backup.verified ? "Файл проверен" : "Нужна проверка"}</span><br><span class="muted">Хранится на сервере, сохранено до 14 копий.</span>` : "Резервная копия ещё не создавалась."}</p><button type="button" data-action="create-backup" ${state.admin.canManageAdmins ? "" : "disabled"}>Создать и проверить копию</button></section>
+      <section class="panel"><h2>Ежедневная сводка Telegram</h2><p class="muted">Отправляется только агрегированная статистика без ФИО пациентов.</p><form id="dailyReportForm" class="form"><label class="checkbox"><input type="checkbox" name="enabled" ${reports.enabled ? "checked" : ""}/> Включить ежедневный отчёт</label><label>Время<input name="time" type="time" value="${escapeHtml(reports.time || "18:00")}"/></label><label>Telegram Chat ID<input name="chatId" value="${escapeHtml(reports.chatId || "")}" placeholder="Например, 123456789"/></label><div class="notice ${reports.tokenConfigured ? "ok" : "warn"}">${reports.tokenConfigured ? "Telegram-бот настроен на сервере." : "На сервере не задан TELEGRAM_BOT_TOKEN."}${reports.lastSentAt ? `<br>Последняя отправка: ${new Date(reports.lastSentAt).toLocaleString("ru-RU")}` : ""}${reports.lastError ? `<br>Последняя ошибка: ${escapeHtml(reports.lastError)}` : ""}</div><div class="actions"><button ${state.admin.canManageAdmins ? "" : "disabled"}>Сохранить</button><button type="button" class="secondary" data-action="test-daily-report" ${state.admin.canManageAdmins ? "" : "disabled"}>Отправить тест</button></div></form></section>
+    </section>`;
 }
 
 function auditValue(value, fallback = "-") {
@@ -2702,12 +2767,13 @@ function renderAuditSurveyModal() {
 function renderAccessAdmin() {
   const canManage = Boolean(state.admin.canManageAdmins);
   const admins = (state.admin.admins || []).slice().sort((a, b) => {
-    const rank = { owner: 0, manager: 1, observer: 2 };
+    const rank = { owner: 0, manager: 1, head_nurse: 2, observer: 3 };
     return (rank[a.role] ?? 9) - (rank[b.role] ?? 9) || String(a.name || "").localeCompare(String(b.name || ""), "ru");
   });
   const roleHint = {
     owner: "Все права: данные, врачи, анкеты, обучение, статистика и управление доступами.",
     manager: "Может работать с данными системы, но не может управлять администраторами.",
+    head_nurse: "Только просмотр пациентов и отчётов своей поликлиники.",
     observer: "Только просмотр. Изменять и удалять данные нельзя."
   };
   const rows = admins.map((admin) => html`
@@ -2717,7 +2783,7 @@ function renderAccessAdmin() {
         ${admin.id === state.me?.id ? "<span class='pill ok'>Вы</span>" : ""}
         <div class="muted">${escapeHtml(roleHint[admin.role] || "")}</div>
       </td>
-      <td><span class="pill">${escapeHtml(admin.roleLabel || admin.role)}</span></td>
+      <td><span class="pill">${escapeHtml(admin.roleLabel || admin.role)}</span>${admin.clinic ? `<div class="muted">${escapeHtml(admin.clinic)}</div>` : ""}</td>
       <td><code>${escapeHtml(admin.username)}</code></td>
       <td><span class="pill ok">Хранится защищённо</span></td>
       <td>${admin.createdAt ? new Date(admin.createdAt).toLocaleDateString("ru-RU") : ""}</td>
@@ -2730,6 +2796,7 @@ function renderAccessAdmin() {
               <div class="form-row"><label>Логин</label><input name="username" value="${escapeHtml(admin.username)}" required /></div>
               <div class="form-row"><label>Новый пароль</label><input name="password" type="password" minlength="5" placeholder="Оставьте пустым, если не менять" /></div>
               <div class="form-row"><label>Роль</label><select name="role">${adminRoleOptions(admin.role)}</select></div>
+              <div class="form-row"><label>Поликлиника (для старшей медсестры)</label><select name="clinic"><option value="">Не ограничивать</option>${clinicOptions.map(([value, text]) => `<option value="${value}" ${admin.clinic === value ? "selected" : ""}>${text}</option>`).join("")}</select></div>
             </section>
             <div class="actions">
               <button ${canManage ? "" : "disabled"}>Сохранить</button>
@@ -2770,6 +2837,7 @@ function renderAccessAdmin() {
             <div class="form-row"><label>Логин</label><input name="username" required /></div>
             <div class="form-row"><label>Пароль</label><input name="password" type="password" minlength="5" required /></div>
             <div class="form-row"><label>Роль</label><select name="role">${adminRoleOptions("observer")}</select></div>
+            <div class="form-row"><label>Поликлиника (для старшей медсестры)</label><select name="clinic"><option value="">Выберите поликлинику</option>${clinicOptions.map(([value, text]) => `<option value="${value}">${text}</option>`).join("")}</select></div>
           </section>
           <div class="actions">
             <button ${canManage ? "" : "disabled"}>Добавить доступ</button>
@@ -2846,6 +2914,22 @@ function renderQrAdmin() {
 
 function bindAdminForms() {
   bindAdminTrainingFilters();
+  document.querySelector("#careSearchForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    state.careSearch = String(new FormData(event.currentTarget).get("query") || "").trim();
+    renderAdmin();
+  });
+  document.querySelector("#dailyReportForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = Object.fromEntries(new FormData(form));
+    data.enabled = form.elements.enabled.checked;
+    try {
+      await api("/api/admin/daily-reports", { method: "PUT", body: JSON.stringify(data) });
+      alert("Настройки ежедневной сводки сохранены.");
+      await loadAdmin();
+    } catch (error) { alert(error.message); }
+  });
   document.querySelector("#auditSearchForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
     state.auditSearch = String(new FormData(event.currentTarget).get("query") || "").trim();
@@ -3154,7 +3238,7 @@ function writeOfflineSurveyQueue(queue) {
 
 function saveOfflineSurvey(data) {
   const queue = offlineSurveyQueue();
-  queue.push({ id: crypto.randomUUID(), savedAt: new Date().toISOString(), data });
+  queue.push({ id: crypto.randomUUID(), savedAt: new Date().toISOString(), attempts: 0, lastError: "", data });
   writeOfflineSurveyQueue(queue);
 }
 
@@ -3225,6 +3309,8 @@ function updateOfflineSurveyStatus() {
   if (!status || !button) return;
   const count = offlineSurveyQueue().length;
   status.textContent = count ? `${translateSurveyText("Ожидают синхронизации")}: ${count}` : translateSurveyText("Все анкеты отправлены.");
+  const failed = offlineSurveyQueue().filter((item) => item.lastError);
+  status.title = failed.length ? failed.map((item) => `${new Date(item.savedAt).toLocaleString("ru-RU")}: ${item.lastError}`).join("\n") : "";
   button.disabled = count === 0;
 }
 
@@ -3253,8 +3339,8 @@ async function syncOfflineSurveys() {
     try {
       await sendNurseSurvey(item.data);
       sent += 1;
-    } catch {
-      remaining.push(item);
+    } catch (error) {
+      remaining.push({ ...item, attempts: Number(item.attempts || 0) + 1, lastTriedAt: new Date().toISOString(), lastError: String(error.message || "Ошибка сети").slice(0, 200) });
     }
   }
   writeOfflineSurveyQueue(remaining);
@@ -3280,7 +3366,7 @@ function writeOfflineDoctorQueue(queue) {
 
 function saveOfflineDoctorAction(action) {
   const queue = offlineDoctorQueue();
-  queue.push({ id: crypto.randomUUID(), savedAt: new Date().toISOString(), ...action });
+  queue.push({ id: crypto.randomUUID(), savedAt: new Date().toISOString(), attempts: 0, lastError: "", ...action });
   writeOfflineDoctorQueue(queue);
 }
 
@@ -3290,6 +3376,8 @@ function updateOfflineDoctorStatus() {
   if (!status || !button) return;
   const count = offlineDoctorQueue().length;
   status.textContent = count ? `${translateDoctorText("Ожидают синхронизации")}: ${count}` : translateDoctorText("Все записи отправлены.");
+  const failed = offlineDoctorQueue().filter((item) => item.lastError);
+  status.title = failed.length ? failed.map((item) => `${new Date(item.savedAt).toLocaleString("ru-RU")}: ${item.lastError}`).join("\n") : "";
   button.disabled = count === 0;
 }
 
@@ -3312,8 +3400,8 @@ async function syncOfflineDoctorActions() {
       const { survey } = await api("/api/doctor/surveys", { method: "POST", body: JSON.stringify(item.data) });
       surveyIdMap[item.localSurveyId] = survey.id;
       sent += 1;
-    } catch {
-      remaining.push(item);
+    } catch (error) {
+      remaining.push({ ...item, attempts: Number(item.attempts || 0) + 1, lastTriedAt: new Date().toISOString(), lastError: String(error.message || "Ошибка сети").slice(0, 200) });
     }
   }
 
@@ -3322,14 +3410,14 @@ async function syncOfflineDoctorActions() {
     const data = { ...item.data };
     if (surveyIdMap[data.surveyId]) data.surveyId = surveyIdMap[data.surveyId];
     if (String(data.surveyId || "").startsWith("local-")) {
-      remaining.push(item);
+      remaining.push({ ...item, attempts: Number(item.attempts || 0) + 1, lastTriedAt: new Date().toISOString(), lastError: "Сначала нужно синхронизировать анкету пациента" });
       continue;
     }
     try {
       await api("/api/doctor/visits", { method: "POST", body: JSON.stringify(data) });
       sent += 1;
-    } catch {
-      remaining.push({ ...item, data });
+    } catch (error) {
+      remaining.push({ ...item, data, attempts: Number(item.attempts || 0) + 1, lastTriedAt: new Date().toISOString(), lastError: String(error.message || "Ошибка сети").slice(0, 200) });
     }
   }
 
