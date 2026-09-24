@@ -1,3 +1,4 @@
+import { bindDraft, clearDraft, clearUserDrafts, helpPanel, historyPanel, waitingPanel } from './workflow-ui.js?v=20260924workflow';
 const app = document.querySelector("#app");
 const initialState = () => ({
   me: null,
@@ -895,7 +896,7 @@ function showDoctorLanguagePrompt(onChoose) {
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js?v=20260924carecontrol").catch(() => {});
+  navigator.serviceWorker.register("/sw.js?v=20260924workflow").catch(() => {});
 }
 
 async function boot() {
@@ -1009,6 +1010,28 @@ async function route() {
 
 function setPage(content) {
   app.innerHTML = content;
+  document.body.classList.toggle('easy-reading', localStorage.getItem('eclinic-easy-reading') === 'true');
+  queueMicrotask(() => {
+    for (const id of ['surveyForm', 'doctorPatientSurveyForm', 'visitForm']) {
+      bindDraft(document.getElementById(id), { userId: state.me?.id || 'nurse', language: id === 'surveyForm' ? surveyLanguage() : doctorLanguage(),
+        collectLabs: id === 'visitForm' ? collectDoctorLabs : undefined,
+        restoreLabs: id === 'visitForm' ? labs => { document.querySelector('#doctorLabList').innerHTML = labs.map(lab => doctorLabRow(lab.test, { ...lab.fields, ...lab })).join(''); bindDoctorLabControls(); } : undefined });
+    }
+    document.querySelectorAll('[data-help-language]').forEach(select => select.addEventListener('change', () => {
+      const video = select.closest('details').querySelector('video');
+      video.src = `/help/${video.dataset.helpRole}-${select.value}.mp4`;
+      video.load();
+    }));
+    document.querySelectorAll('[data-waiting-search]').forEach(input => input.addEventListener('input', () => {
+      input.closest('section').querySelectorAll('[data-waiting-row]').forEach(row => { row.hidden = !row.textContent.toLowerCase().includes(input.value.trim().toLowerCase()); });
+    }));
+    document.querySelectorAll('[data-outreach-id]').forEach(select => select.addEventListener('change', async () => {
+      select.disabled = true;
+      try { await api('/api/patient-outreach', { method: 'PUT', body: JSON.stringify({ surveyId: select.dataset.outreachId, status: select.value }) }); }
+      catch (error) { alert(error.message); }
+      finally { select.disabled = false; }
+    }));
+  });
 }
 
 function topbar(title, nav = "") {
@@ -1028,6 +1051,7 @@ document.addEventListener("click", async (event) => {
   const action = event.target.closest("[data-action]")?.dataset.action;
   if (!action) return;
   if (action === "logout") {
+    clearUserDrafts(state.me?.id || 'nurse');
     await api("/api/logout", { method: "POST", body: "{}" });
     state = initialState();
     window.location.href = "/";
@@ -1097,6 +1121,10 @@ document.addEventListener("click", async (event) => {
     }
   }
   if (action === "doctor-tab") {
+    if (event.target.dataset.tab === 'waiting') {
+      try { state.waitingPatients = (await api('/api/doctor/waiting-patients')).patients; }
+      catch (error) { alert(error.message); return; }
+    }
     state.doctorSection = event.target.dataset.tab;
     if (state.doctorSection !== "patients") {
       state.doctorMode = "list";
@@ -1113,6 +1141,12 @@ document.addEventListener("click", async (event) => {
     state.doctorPatientSearch = "";
     state.doctorPatientPage = 1;
     renderDoctor();
+  }
+  if (action === 'toggle-easy-reading') {
+    const enabled = localStorage.getItem('eclinic-easy-reading') !== 'true';
+    localStorage.setItem('eclinic-easy-reading', String(enabled));
+    document.body.classList.toggle('easy-reading', enabled);
+    event.target.setAttribute('aria-pressed', String(enabled));
   }
   if (action === "doctor-task-status") {
     const id = event.target.dataset.id;
@@ -2606,7 +2640,8 @@ function doctorLabSummary(labs = []) {
     const fields = lab.fields && typeof lab.fields === "object"
       ? Object.entries(lab.fields).filter(([, value]) => value).map(([key, value]) => `${key}: ${value}`).join(", ")
       : "";
-    return `${lab.test || "Анализ"}${fields ? ` (${fields})` : lab.result ? `: ${lab.result}` : ""}`;
+    const status = lab.status === 'ordered' ? 'Назначен' : 'Результат получен';
+    return `${lab.test || "Анализ"} — ${status}${lab.resultDate ? ` (${lab.resultDate})` : lab.orderedDate ? ` (${lab.orderedDate})` : ''}${lab.result ? `: ${lab.result}` : ''}${fields ? ` (${fields})` : ''}`;
   }).join("; ");
 }
 
@@ -2684,6 +2719,7 @@ function renderCareControlAdmin() {
   const reports = control.dailyReports || {};
   const backup = control.backupStatus;
   return html`
+    ${waitingPanel(control.waitingPatients || [], state.admin.canEdit || state.me?.role === 'head_nurse')}
     <section class="panel care-control-hero">
       <div class="section-title"><div><h2>Контроль диабета</h2><p class="muted">Единый регистр, движение пациентов, качество данных и работа медсестёр. Подсказки не заменяют решение врача.</p></div><a class="button-link" href="/api/admin/care-control.xls">Скачать Excel</a></div>
       <div class="grid three care-metrics">
@@ -2758,6 +2794,7 @@ function renderAuditSurveyModal() {
         <div class="audit-survey-grid">
           ${details.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(auditValue(value))}</strong></div>`).join("")}
         </div>
+        ${historyPanel(survey.changeHistory || [])}
         <div class="actions"><button type="button" data-action="close-audit-survey">Закрыть анкету</button></div>
       </section>
     </div>
@@ -3148,6 +3185,7 @@ function renderNurseSurvey() {
   setPage(html`
     <main class="container">
       <form class="panel form" id="surveyForm">
+        ${helpPanel('nurse', surveyLanguage())}
         <h1>${escapeHtml(t("Опросник медсестры"))}</h1>
         ${surveyLanguageControl()}
         <div class="form-row"><label>${escapeHtml(t("ФИО медсестры"))}</label><input name="nurseName" required /></div>
@@ -3462,6 +3500,7 @@ function bindBirthDateAge(form) {
     form.elements.age.value = age >= 0 && age < 130 ? String(age) : "";
   };
   form.elements.birthDate.addEventListener("input", calculateAge);
+  form.addEventListener('draft-restored', calculateAge);
   calculateAge();
 }
 
@@ -3508,6 +3547,7 @@ function bindNurseSurveyCalculations(form) {
   });
   form.elements.sex.addEventListener("change", calculate);
   form.addEventListener("reset", () => queueMicrotask(calculate));
+  form.addEventListener('draft-restored', calculate);
   calculate();
 }
 
@@ -4526,12 +4566,13 @@ function renderDoctor() {
   const t = (value) => translateDoctorText(value);
   const doctorNav = [
     ["patients", "Пациенты"],
+    ["waiting", "Ожидают врача"],
     ["calendar", "Календарь"],
     ["tasks", "Задачи"],
     ["profile", "Кабинет"],
     ["stats", "Статистика"]
-  ].map(([tab, label]) => `<button data-action="doctor-tab" data-tab="${tab}" class="${state.doctorSection === tab ? "active" : ""}">${escapeHtml(t(label))}</button>`).join("");
-  const content = state.doctorSection === "calendar"
+  ].map(([tab, label]) => `<button data-action="doctor-tab" data-tab="${tab}" class="${state.doctorSection === tab ? "active" : ""}">${escapeHtml(t(label))}</button>`).join("") + `<button type="button" data-action="toggle-easy-reading" aria-pressed="${localStorage.getItem('eclinic-easy-reading') === 'true'}">${doctorLanguage() === 'tg' ? 'Ҳарфҳои калон' : 'Крупный шрифт'}</button>`;
+  const content = state.doctorSection === 'waiting' ? waitingPanel(state.waitingPatients || []) : state.doctorSection === "calendar"
     ? doctorCalendarPanel()
     : state.doctorSection === "tasks"
     ? doctorTasksPanel()
@@ -4544,6 +4585,7 @@ function renderDoctor() {
     <div class="layout doctor-layout">
       ${topbar(escapeHtml(t("Кабинет врача")), doctorNav)}
       <main class="container grid two doctor-workspace">
+        ${helpPanel('doctor', doctorLanguage())}
         ${content}
       </main>
     </div>
@@ -4751,6 +4793,8 @@ function doctorVisitForm(survey) {
       ${doctorSurveySummary(survey)}
       ${doctorTrendChart(survey)}
       ${doctorVisitHistory(survey.id)}
+      ${historyPanel(survey.changeHistory || [])}
+      ${doctorPendingLabs(survey.id)}
       ${doctorPatientTasks(survey.id)}
       <input type="hidden" name="surveyId" value="${survey.id}" />
       <section class="grid two">
@@ -4810,6 +4854,9 @@ function doctorLabRow(testName = "Сахар крови", values = {}) {
   return html`
     <div class="card lab-row" data-lab-row="${rowId}">
       <section class="grid two">
+        <label>${t('Статус')}<select class="doctorLabStatus"><option value="ordered" ${values.status !== 'received' ? 'selected' : ''}>${doctorLanguage() === 'tg' ? 'Таъин шудааст' : 'Назначен'}</option><option value="received" ${values.status === 'received' ? 'selected' : ''}>${doctorLanguage() === 'tg' ? 'Натиҷа гирифта шуд' : 'Результат получен'}</option></select></label>
+        <label>${doctorLanguage() === 'tg' ? 'Санаи таъин' : 'Дата назначения'}<input class="doctorLabOrderedDate" type="date" value="${escapeHtml(values.orderedDate || new Date().toLocaleDateString('en-CA'))}" /></label>
+        <label>${doctorLanguage() === 'tg' ? 'Санаи натиҷа' : 'Дата результата'}<input class="doctorLabResultDate" type="date" value="${escapeHtml(values.resultDate || '')}" /></label>
         <div class="form-row">
           <label>${escapeHtml(t("Лабораторный анализ"))}</label>
           <select class="doctorLabTest">
@@ -4842,10 +4889,11 @@ function renderDoctorLabRows() {
       const row = select.closest(".lab-row");
       row.outerHTML = doctorLabRow(select.value);
       bindDoctorLabControls();
+      document.querySelector('#visitForm')?.dispatchEvent(new Event('draft-change'));
     });
   });
   list.querySelectorAll('[data-action="remove-lab-row"]').forEach((button) => {
-    button.addEventListener("click", () => button.closest(".lab-row")?.remove());
+    button.addEventListener("click", () => { button.closest(".lab-row")?.remove(); document.querySelector('#visitForm')?.dispatchEvent(new Event('draft-change')); });
   });
 }
 
@@ -4858,6 +4906,7 @@ function addDoctorLabRow(testName = "Сахар крови") {
   if (!list) return;
   list.insertAdjacentHTML("beforeend", doctorLabRow(testName));
   bindDoctorLabControls();
+  document.querySelector('#visitForm')?.dispatchEvent(new Event('draft-change'));
 }
 
 function collectDoctorLabs() {
@@ -4865,13 +4914,22 @@ function collectDoctorLabs() {
     const test = row.querySelector(".doctorLabTest")?.value || "";
     const fields = Object.fromEntries(Array.from(row.querySelectorAll(".doctorLabField")).map((input) => [input.dataset.field, input.value]));
     const result = row.querySelector(".doctorLabGenericResult")?.value || "";
-    return { test, result, fields };
-  }).filter((item) => item.test && (item.result || Object.values(item.fields).some(Boolean)));
+    return { test, result, fields, status: row.querySelector('.doctorLabStatus')?.value || 'ordered',
+      orderedDate: row.querySelector('.doctorLabOrderedDate')?.value || '', resultDate: row.querySelector('.doctorLabResultDate')?.value || '' };
+  }).filter((item) => item.test);
+}
+
+function doctorPendingLabs(surveyId) {
+  const items = (state.doctor.visits || []).filter(visit => visit.surveyId === surveyId).flatMap(visit =>
+    (visit.laboratoryTests || []).map((lab, index) => ({ lab, visitId: visit.id, index })).filter(({lab}) => lab.status === 'ordered'));
+  if (!items.length) return '';
+  return `<section><h3>Ожидаемые результаты анализов</h3>${items.map(({ lab, visitId, index }) => `<div class="card pending-lab"><strong>${escapeHtml(lab.test)}</strong><p>Назначен: ${escapeHtml(lab.orderedDate || 'дата не указана')}</p><label>Результат<input data-lab-result maxlength="200"/></label><label>Дата результата<input type="date" data-lab-date /></label><button type="button" data-save-lab="${escapeHtml(visitId)}" data-index="${index}">Сохранить результат</button><span role="status" data-lab-message></span></div>`).join('')}</section>`;
 }
 
 function bindDoctorVisit() {
   const form = document.querySelector("#visitForm");
   if (!form) return;
+  if (!form.elements.weight || !form.elements.height || !form.elements.glucose || !form.elements.glucoseType) return;
   const calculateBmi = () => {
     const weight = Number(String(form.elements.weight.value).replace(",", "."));
     const heightCm = Number(String(form.elements.height.value).replace(",", "."));
@@ -4902,6 +4960,17 @@ function bindDoctorVisit() {
     input.addEventListener("change", updateLifestyleRecommendationPanels);
   });
   updateLifestyleRecommendationPanels();
+  form.addEventListener('draft-restored', () => { calculateBmi(); updateLifestyleRecommendationPanels(); });
+  form.querySelectorAll('[data-save-lab]').forEach(button => button.addEventListener('click', async () => {
+    const card = button.closest('.pending-lab');
+    button.disabled = true;
+    try {
+      const { visit } = await api('/api/doctor/lab-result', { method: 'PUT', body: JSON.stringify({ visitId: button.dataset.saveLab, index: Number(button.dataset.index),
+        result: card.querySelector('[data-lab-result]').value, resultDate: card.querySelector('[data-lab-date]').value }) });
+      state.doctor.visits = state.doctor.visits.map(item => item.id === visit.id ? visit : item);
+      card.querySelector('[data-lab-message]').textContent = 'Результат сохранён';
+    } catch (error) { card.querySelector('[data-lab-message]').textContent = error.message; button.disabled = false; }
+  }));
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(form));
@@ -4983,6 +5052,7 @@ function bindDoctorPatientSurvey() {
     const data = Object.fromEntries(new FormData(form));
     try {
       const { survey } = await api("/api/doctor/surveys", { method: "POST", body: JSON.stringify(data) });
+      clearDraft(form);
       state.doctor.surveys = [survey, ...state.doctor.surveys.filter((item) => item.id !== survey.id)];
       state.selectedSurvey = survey;
       state.doctorMode = "visit";
@@ -5028,6 +5098,7 @@ function bindDoctorPatientSurvey() {
         offline: true
       };
       saveOfflineDoctorAction({ type: "survey", localSurveyId, data });
+      clearDraft(form);
       state.doctor.surveys = [localSurvey, ...state.doctor.surveys];
       state.selectedSurvey = localSurvey;
       state.doctorMode = "visit";

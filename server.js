@@ -1,11 +1,13 @@
 import { createServer } from "node:http";
 import { readFile, writeFile, mkdir, rename, readdir, unlink } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, createReadStream } from "node:fs";
+import { stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { networkInterfaces } from "node:os";
 import crypto from "node:crypto";
 import { gzipSync } from "node:zlib";
+import { labHasResult, patientChanges, waitingPatients, verifyBackupRestore } from './care-workflow.js';
 import PDFDocument from "pdfkit";
 import { buildWeeklyMonitorReportDocx, monitorReportPeriod } from "./weekly-monitor-report.js";
 
@@ -68,7 +70,8 @@ const mime = {
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".txt": "text/plain; charset=utf-8",
-  ".xml": "application/xml; charset=utf-8"
+  ".xml": "application/xml; charset=utf-8",
+  ".mp4": "video/mp4"
 };
 
 const seedAdmins = [
@@ -1257,6 +1260,12 @@ function validateSurveyInput(body, clinicOverride = "") {
   return input;
 }
 
+function cleanLabDate(value, label, required = false) {
+  const text = cleanText(value, label, { required, max: 10 });
+  if (text && (!/^\d{4}-\d{2}-\d{2}$/.test(text) || !Number.isFinite(Date.parse(text)) || new Date(text).toISOString().slice(0, 10) !== text || text > dushanbeClock().date)) invalidInput(`${label}: недопустимая дата`);
+  return text;
+}
+
 function validateVisitInput(body) {
   const laboratoryTests = Array.isArray(body.laboratoryTests) ? body.laboratoryTests : [];
   if (laboratoryTests.length > 20) invalidInput("Лабораторные анализы: слишком много значений");
@@ -1273,6 +1282,9 @@ function validateVisitInput(body) {
     followUpDays: cleanNumber(body.followUpDays, "Срок повторного осмотра", { min: 0, max: 3650 }),
     laboratoryTests: laboratoryTests.map((item) => ({
       test: cleanText(item?.test || item?.name, "Название анализа", { required: true, max: 100 }),
+      status: item?.status === 'ordered' ? 'ordered' : labHasResult(item || {}) ? 'received' : 'ordered',
+      orderedDate: cleanLabDate(item?.orderedDate || dushanbeClock().date, 'Дата назначения'),
+      resultDate: cleanLabDate(item?.resultDate, 'Дата результата'),
       result: cleanText(item?.result, "Результат анализа", { max: 200 }),
       fields: Object.fromEntries(Object.entries(item?.fields && typeof item.fields === "object" ? item.fields : {}).slice(0, 20).map(([key, value]) => [
         cleanText(key, "Поле анализа", { required: true, max: 100 }),
@@ -1287,6 +1299,10 @@ function validateVisitInput(body) {
   };
   validateBloodPressure(input.systolic, input.diastolic);
   if (input.glucose && (input.glucose < 1.5 || input.glucose > 35)) invalidInput("Уровень сахара: допустимый диапазон 1,5–35");
+  for (const lab of input.laboratoryTests) {
+    if (lab.status === 'ordered' && labHasResult(lab)) invalidInput('Для анализа с результатом выберите «Результат получен»');
+    if (lab.status === 'received' && !lab.resultDate) invalidInput('Укажите дату полученного результата анализа');
+  }
   return input;
 }
 
@@ -1762,6 +1778,54 @@ async function handleApi(req, res, url) {
     return send(res, 201, { status });
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/doctor/waiting-patients') {
+    if (session?.userType !== 'doctor') return send(res, 403, { error: 'Нет доступа' });
+    const doctor = db.doctors.find(item => item.id === session.userId);
+    return send(res, 200, { patients: waitingPatients(db).filter(row => clinicKey(row.clinic) === clinicKey(doctor?.clinic)) });
+  }
+
+  if (req.method === 'PUT' && url.pathname === '/api/patient-outreach') {
+    if (!session) return send(res, 403, { error: 'Нет доступа' });
+    const body = await parseBody(req);
+    const survey = db.nurseSurveys.find(item => item.id === body.surveyId);
+    if (!survey) return send(res, 404, { error: 'Пациент не найден' });
+    const actor = session.userType === 'doctor' ? db.doctors.find(item => item.id === session.userId) : adminAccount(session, db);
+    const allowed = session.userType === 'doctor' ? doctorCanAccessSurvey(actor, survey)
+      : canMutateAdmin(session, db) || (actor?.role === 'head_nurse' && adminCanAccessClinic(session, db, survey.patient?.clinic || survey.clinic));
+    if (!allowed) return send(res, 403, { error: 'Нет доступа' });
+    const status = cleanEnum(body.status, 'Статус контакта', ['pending', 'called', 'scheduled', 'declined']);
+    const before = survey.outreach?.status || 'pending';
+    survey.outreach = { status, updatedAt: new Date().toISOString(), actorId: session.userId };
+    survey.changeHistory ||= [];
+    survey.changeHistory.push({ id: crypto.randomUUID(), createdAt: survey.outreach.updatedAt, actorId: session.userId,
+      actorName: actor?.fullName || actor?.name || '', changes: [{ field: 'outreach', before, after: status }] });
+    appendActivity(db, { type: 'patient_outreach', actorRole: session.userType, actorId: session.userId, actorName: actor?.fullName || actor?.name || '',
+      surveyId: survey.id, patientName: patientNameFromSurvey(survey), clinic: survey.patient?.clinic || survey.clinic, details: `Контакт с пациентом: ${status}` });
+    await writeDb(db);
+    return send(res, 200, { outreach: survey.outreach });
+  }
+
+  if (req.method === 'PUT' && url.pathname === '/api/doctor/lab-result') {
+    if (session?.userType !== 'doctor') return send(res, 403, { error: 'Нет доступа' });
+    const body = await parseBody(req);
+    const visit = db.doctorVisits.find(item => item.id === body.visitId);
+    const survey = db.nurseSurveys.find(item => item.id === visit?.surveyId);
+    const actor = db.doctors.find(item => item.id === session.userId);
+    if (!visit || !survey || !doctorCanAccessSurvey(actor, survey)) return send(res, 403, { error: 'Нет доступа к анализу' });
+    const index = Number(body.index);
+    const previous = Number.isInteger(index) && index >= 0 ? visit.laboratoryTests?.[index] : null;
+    if (!previous) return send(res, 404, { error: 'Анализ не найден' });
+    const result = cleanText(body.result, 'Результат', { required: true, max: 200 });
+    const resultDate = cleanLabDate(body.resultDate, 'Дата результата', true);
+    const updated = { ...previous, result, resultDate, status: 'received' };
+    visit.laboratoryTests[index] = updated;
+    survey.changeHistory ||= [];
+    survey.changeHistory.push({ id: crypto.randomUUID(), createdAt: new Date().toISOString(), actorId: actor.id, actorName: actor.fullName,
+      changes: patientChanges(previous, updated).map(change => ({ ...change, field: `${previous.test}: ${change.field}` })) });
+    await writeDb(db);
+    return send(res, 200, { visit });
+  }
+
   if (req.method === "PUT" && url.pathname === "/api/admin/daily-reports") {
     if (!canManageAdmins(session, db)) return send(res, 403, { error: "Только главный администратор может настраивать отчёты" });
     const body = await parseBody(req);
@@ -1840,7 +1904,14 @@ async function handleApi(req, res, url) {
     const survey = db.nurseSurveys.find((item) => item.id === id);
     if (!survey) return send(res, 404, { error: "Пациент не найден" });
     const body = await parseBody(req);
-    survey.patient = validatePatientProfileInput(body, survey.patient || {});
+    const updatedPatient = validatePatientProfileInput(body, survey.patient || {});
+    const changes = patientChanges(survey.patient || {}, updatedPatient);
+    survey.patient = updatedPatient;
+    if (changes.length) {
+      survey.changeHistory ||= [];
+      survey.changeHistory.push({ id: crypto.randomUUID(), createdAt: new Date().toISOString(), actorId: session.userId,
+        actorName: adminAccount(session, db)?.name || '', changes });
+    }
     survey.updatedAt = new Date().toISOString();
     const actor = db.admins.find((item) => item.id === session.userId);
     appendActivity(db, { type: "patient_updated", actorRole: "admin", actorId: session.userId, actorName: actor?.name || "", clinic: survey.patient.clinic, surveyId: survey.id, patientName: patientNameFromSurvey(survey), details: "Обновлена карточка пациента" });
@@ -3051,8 +3122,8 @@ function duplicatePatientSuggestions(db) {
 
 function careChecklist(visits = []) {
   const text = visits.flatMap((visit) => [
-    ...(visit.laboratoryTests || []).flatMap((lab) => [lab.test, lab.name, lab.result, ...Object.keys(lab.fields || {})]),
-    ...(visit.referrals || [])
+    ...(visit.laboratoryTests || []).filter(lab => lab.status !== 'ordered' && labHasResult(lab)).flatMap((lab) => [lab.test, lab.name]),
+    ...(visit.completedExaminations || [])
   ]).filter(Boolean).join(" ").toLocaleLowerCase("ru-RU");
   return {
     hba1c: /hba1c|гликир|гликирован/.test(text),
@@ -3079,7 +3150,7 @@ function buildCareControl(db) {
     const tasks = tasksBySurvey[survey.id] || [];
     const viewed = (eventsBySurvey[survey.id] || []).some((event) => event.type === "doctor_survey_viewed");
     const followUpPlanned = Boolean(lastVisit?.followUpDays || tasks.length);
-    const followUpCompleted = tasks.some((task) => task.status === "completed") || visits.length > 1;
+    const followUpCompleted = visits.length > 1;
     const stage = followUpCompleted ? "Повторный контроль выполнен" : followUpPlanned ? "Повторный контроль запланирован" : visits.length ? "Осмотр врача выполнен" : viewed ? "Карточка открыта врачом" : survey.needsDoctor ? "Ожидает врача" : "Первичный скрининг";
     const surveyFlags = qualityFlagsForSurvey(survey);
     const visitFlags = lastVisit ? qualityFlagsForVisit(lastVisit) : [];
@@ -3118,13 +3189,14 @@ function buildCareControl(db) {
     awaitingDoctor: registry.filter((row) => row.stage === "Ожидает врача").length,
     withDoctorVisit: registry.filter((row) => row.visits > 0).length,
     followUpPlanned: registry.filter((row) => row.stage.includes("запланирован")).length,
-    followUpCompleted: registry.filter((row) => row.stage.includes("выполнен")).length,
+    followUpCompleted: registry.filter((row) => row.stage === 'Повторный контроль выполнен').length,
     qualityWarnings: quality.length,
     duplicateGroups: duplicates.length
   };
   return {
     summary,
     registry,
+    waitingPatients: waitingPatients(db),
     nurseDaily: Object.values(nurseDailyMap).sort((a, b) => b.date.localeCompare(a.date) || a.clinic.localeCompare(b.clinic, "ru")),
     quality,
     duplicates,
@@ -3169,10 +3241,11 @@ async function createSecureBackup(db, reason = "manual") {
   const verification = JSON.parse(await readFile(path, "utf8"));
   if (!Array.isArray(verification.nurseSurveys) || !Array.isArray(verification.doctorVisits)) throw new Error("Проверка резервной копии не пройдена");
   const checksum = crypto.createHash("sha256").update(serialized).digest("hex");
+  const restoreCheck = await verifyBackupRestore(verification, { pool: DATABASE_URL ? await pgPool() : null, directory: backupDir, collections: Object.keys(normalizedCollectionTables) });
   const files = (await readdir(backupDir)).filter((item) => /^e-clinic-.*\.json$/.test(item)).sort().reverse();
   for (const old of files.slice(14)) await unlink(join(backupDir, old)).catch(() => {});
   db.settings ||= {};
-  db.settings.backupStatus = { createdAt, verifiedAt: new Date().toISOString(), verified: true, checksum, filename, reason, retained: Math.min(files.length, 14) };
+  db.settings.backupStatus = { createdAt, verifiedAt: new Date().toISOString(), verified: true, restoreCheck, checksum, filename, reason, retained: Math.min(files.length, 14) };
   await writeDb(db);
   return db.settings.backupStatus;
 }
@@ -3304,6 +3377,25 @@ async function serveStatic(req, res, url) {
   const filePath = join(publicDir, safePath);
   if (!filePath.startsWith(publicDir)) return send(res, 403, "Нет доступа");
   try {
+    if (route.startsWith('/help/') && extname(filePath) === '.mp4') {
+      const { size } = await stat(filePath);
+      const headers = { ...securityHeaders(), 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes', 'Cache-Control': 'public, max-age=86400' };
+      let start = 0, end = size - 1;
+      if (req.headers.range) {
+        const match = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range);
+        if (!match || (!match[1] && !match[2])) return send(res, 416, '', { 'Content-Range': `bytes */${size}` });
+        start = match[1] ? Number(match[1]) : Math.max(0, size - Number(match[2]));
+        end = match[1] && match[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= size) return send(res, 416, '', { 'Content-Range': `bytes */${size}` });
+        headers['Content-Range'] = `bytes ${start}-${end}/${size}`;
+      }
+      res.writeHead(req.headers.range ? 206 : 200, { ...headers, 'Content-Length': end - start + 1 });
+      if (req.method === 'HEAD') return res.end();
+      const stream = createReadStream(filePath, { start, end });
+      stream.on('error', () => res.destroy());
+      res.on('close', () => stream.destroy());
+      return stream.pipe(res);
+    }
     const content = await readFile(filePath);
     const privatePages = new Set([
       "/admin.html",
@@ -3349,7 +3441,7 @@ async function runScheduledMaintenance() {
   if (maintenanceRunning) return;
   maintenanceRunning = true;
   try {
-    const db = await loadDb();
+    const db = await readDb();
     const clock = dushanbeClock();
     if (db.settings?.backupStatus?.createdAt?.slice(0, 10) !== new Date().toISOString().slice(0, 10)) {
       await createSecureBackup(db, "daily");
@@ -3365,7 +3457,7 @@ async function runScheduledMaintenance() {
   } catch (error) {
     console.error("Scheduled maintenance failed:", error.message || error);
     try {
-      const db = await loadDb();
+      const db = await readDb();
       if (db.settings?.dailyReports) {
         db.settings.dailyReports.lastError = String(error.message || error).slice(0, 300);
         await writeDb(db);

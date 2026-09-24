@@ -13,6 +13,21 @@
   --ok: #15803d;
 }
 
+.workflow-help, .waiting-panel { grid-column: 1 / -1; }
+.workflow-help summary, .change-history summary { cursor: pointer; font-weight: 700; padding: 12px 0; }
+.workflow-help video { display: block; width: min(100%, 820px); max-height: 65vh; margin-top: 14px; background: #102b27; }
+.workflow-help li { margin: 10px 0; }
+.draft-notice { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.change-history article { border-top: 1px solid var(--line); padding: 12px 0; overflow-wrap: anywhere; }
+.pending-lab { display: grid; gap: 10px; margin: 10px 0; }
+.easy-reading .doctor-layout { font-size: 20px; line-height: 1.55; }
+.easy-reading .doctor-layout .muted { font-size: 17px; }
+.easy-reading .doctor-layout input, .easy-reading .doctor-layout select, .easy-reading .doctor-layout textarea,
+.easy-reading .doctor-layout button { font-size: 19px; min-height: 50px; }
+.easy-reading .doctor-workspace { max-width: 1500px; }
+.easy-reading .doctor-layout .table-wrap { overflow-x: auto; }
+@media (max-width: 1000px) { .easy-reading .doctor-workspace { grid-template-columns: 1fr; } }
+
 * {
   box-sizing: border-box;
 }

@@ -230,6 +230,39 @@ try {
   assert.equal(headNurseControl.careControl.dailyReports.chatId, "");
   await request(headNurse, "/api/admin/backup", { method: "POST", expected: 403, body: {} });
 
+  const referral = await request(nurse, '/api/nurse-surveys', { method: 'POST', expected: 201,
+    body: { ...measuredPatient, lastName: 'ОжидаетВрача', systolic: 160 } });
+  const otherClinic = await request(nurse, '/api/nurse-surveys', { method: 'POST', expected: 201,
+    body: { ...measuredPatient, lastName: 'ДругаяПоликлиника', clinic: 'Поликлиника №2', systolic: 160 } });
+  const waiting = await request(doctor, '/api/doctor/waiting-patients');
+  assert.ok(waiting.patients.some(row => row.id === referral.survey.id));
+  assert.ok(!waiting.patients.some(row => row.id === otherClinic.survey.id));
+  await request(doctor, '/api/patient-outreach', { method: 'PUT', body: { surveyId: referral.survey.id, status: 'called' } });
+  await request(headNurse, '/api/patient-outreach', { method: 'PUT', expected: 403, body: { surveyId: otherClinic.survey.id, status: 'called' } });
+  await request(headNurse, `/api/admin/patients/${otherClinic.survey.id}`, { expected: 403 });
+  const edited = await request(admin, `/api/admin/patients/${referral.survey.id}`, { method: 'PUT', body: { address: 'Новый тестовый адрес' } });
+  assert.ok(edited.survey.changeHistory.some(event => event.changes.some(change => change.field === 'address' && change.after === 'Новый тестовый адрес')));
+  const labVisit = await request(doctor, '/api/doctor/visits', { method: 'POST', expected: 201,
+    body: { surveyId: referral.survey.id, weight: 81, height: 180, systolic: 130, diastolic: 80,
+      laboratoryTests: [{ test: 'HbA1c', status: 'ordered', orderedDate: '2026-01-01' }] } });
+  let care = (await request(admin, '/api/admin/dashboard?tab=control')).careControl;
+  assert.equal(care.registry.find(row => row.id === referral.survey.id).checklist.hba1c, false);
+  assert.ok(!care.waitingPatients.some(row => row.id === referral.survey.id));
+  await request(doctor, '/api/doctor/lab-result', { method: 'PUT', expected: 400,
+    body: { visitId: labVisit.visit.id, index: 0, result: '6.2%', resultDate: '2026-02-30' } });
+  await request(doctor, '/api/doctor/lab-result', { method: 'PUT',
+    body: { visitId: labVisit.visit.id, index: 0, result: '6.2%', resultDate: '2026-01-02' } });
+  care = (await request(admin, '/api/admin/dashboard?tab=control')).careControl;
+  assert.equal(care.registry.find(row => row.id === referral.survey.id).checklist.hba1c, true);
+  const restoreBackup = await request(admin, '/api/admin/backup', { method: 'POST', expected: 201, body: {} });
+  assert.equal(restoreBackup.status.restoreCheck.mode, 'isolated-file-database');
+  assert.ok(restoreBackup.status.restoreCheck.counts.nurseSurveys > 0);
+  for (const file of ['doctor-ru', 'doctor-tg', 'nurse-ru', 'nurse-tg']) {
+    const video = await fetch(`${baseUrl}/help/${file}.mp4`, { headers: { Range: 'bytes=0-31' } });
+    assert.equal(video.status, 206);
+    assert.equal((await video.arrayBuffer()).byteLength, 32);
+  }
+
   await request(doctor, "/api/doctor/account", { method: "PUT", expected: 401, body: { login: "test-doctor", currentAccessKey: "wrong-password", accessKey: doctorNewPassword } });
   await request(doctor, "/api/doctor/account", { method: "PUT", body: { login: "test-doctor", currentAccessKey: doctorPassword, accessKey: doctorNewPassword } });
   const doctorRelogin = session();

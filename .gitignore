@@ -22,6 +22,7 @@ desktop.ini
 # Node dependencies and caches
 node_modules/
 artifacts/
+data/backups/
 __pycache__/
 *.pyc
 npm-debug.log*
