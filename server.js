@@ -1921,6 +1921,31 @@ async function handleApi(req, res, url) {
     });
   }
 
+  if (req.method === "POST" && url.pathname === "/api/admin/patients/import") {
+    if (!canMutateAdmin(session, db)) return send(res, 403, { error: "Недостаточно прав для импорта" });
+    const body = await parseBody(req);
+    const rows = Array.isArray(body.rows) ? body.rows.slice(0, 1000) : [];
+    if (!rows.length) return send(res, 400, { error: "Передайте строки CSV/Excel" });
+    const imported = [], skipped = [], errors = [];
+    for (const [index, row] of rows.entries()) {
+      try {
+        const input = validateSurveyInput({
+          ...row,
+          sex: row.sex === "male" || row.sex === "Мужской" ? "male" : "female",
+          age: Number(row.age || 0), weight: row.weight === "" ? undefined : Number(row.weight || 0), height: row.height === "" ? undefined : Number(row.height || 0),
+          clinic: allowedClinic(row.clinic), nurseName: row.nurseName || "Импорт из файла", activity: row.activity || "no", vegetables: row.vegetables || "no", bpMeds: row.bpMeds || "no", highGlucose: row.highGlucose || "no", familyDiabetes: row.familyDiabetes || "none", smoker: row.smoker || "no"
+        });
+        const duplicate = findDuplicateSurvey(db, input);
+        if (duplicate) { skipped.push({ row: index + 2, reason: "Дубликат", duplicateId: duplicate.id }); continue; }
+        const survey = buildNurseSurvey(input);
+        db.nurseSurveys.push(survey);
+        imported.push({ row: index + 2, id: survey.id, patientName: patientNameFromSurvey(survey) });
+      } catch (error) { errors.push({ row: index + 2, error: String(error.message || error) }); }
+    }
+    if (imported.length) { appendActivity(db, { type: "patients_imported", actorRole: "admin", actorId: session.userId, actorName: adminAccount(session, db)?.name || "", details: `Импортировано пациентов: ${imported.length}` }); await writeDb(db); }
+    return send(res, 200, { imported, skipped, errors });
+  }
+
   if (req.method === "PUT" && url.pathname.startsWith("/api/admin/patients/")) {
     if (!canMutateAdmin(session, db)) return send(res, 403, { error: "Недостаточно прав для изменения данных" });
     const id = decodeURIComponent(url.pathname.split("/").pop());
