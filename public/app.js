@@ -269,7 +269,7 @@ const TAJIK_TEXT = {
   "Отмена": "Бекор кардан",
   "Пациент добавлен. Анкета сохранена и отправлена администратору.": "Бемор илова шуд. Анкета нигоҳ дошта шуд ва ба маъмур фиристода шуд.",
   "Вес по весам, кг": "Вазн бо тарозу, кг",
-  "Сахар крови, ммоль/л": "Қанди хун, ммол/л",
+  "Уровень сахара в крови, ммоль/л": "Сатҳи қанди хун, ммол/л",
   "Повторное САД": "Фишори систоликии такрорӣ",
   "Повторное ДАД": "Фишори диастоликии такрорӣ",
   "Направление": "Равонасозӣ",
@@ -894,7 +894,7 @@ function showDoctorLanguagePrompt(onChoose) {
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js?v=20260924doctorsearch").catch(() => {});
+  navigator.serviceWorker.register("/sw.js?v=20260924glucoselabel").catch(() => {});
 }
 
 async function boot() {
@@ -4611,7 +4611,7 @@ function doctorPatientSurveyForm() {
         ${input(t("Диастолическое АД"), "diastolic", true, "number")}
       </section>
       ${surveyRabitoFields(t)}
-      ${input(t("Уровень сахара"), "glucoseLevel", true, "number")}
+      ${input(t("Уровень сахара в крови, ммоль/л"), "glucoseLevel", true, "number")}
       <div class="actions">
         <button type="submit">${escapeHtml(t("Отправить анкету"))}</button>
         <button type="button" class="secondary" data-action="cancel-doctor-patient">${escapeHtml(t("Отмена"))}</button>
@@ -4647,7 +4647,7 @@ function doctorSurveySummary(survey) {
           <div class="muted">FINDRISC: ${survey.findrisc?.score ?? "-"} (${escapeHtml(translateDoctorDynamicText(survey.findrisc?.level || "-"))})</div>
           <div class="muted">${escapeHtml(t("Сердечно-сосудистый риск"))}: ${survey.score2?.percent ?? "-"}% (${escapeHtml(translateDoctorDynamicText(survey.score2?.level || "-"))})</div>
           <div class="muted">${escapeHtml(t("Расчетный вес Rabito"))}: ${measurements.rabitoWeight || "-"} кг</div>
-          <div class="muted">${escapeHtml(t("Уровень сахара"))}: ${measurements.glucoseLevel || "-"}</div>
+          <div class="muted">${escapeHtml(t("Уровень сахара в крови, ммоль/л"))}: ${measurements.glucoseLevel || "-"}</div>
         </div>
       </div>
       ${survey.needsDoctor ? `<div class="notice warn"><strong>${escapeHtml(t("Причины направления"))}</strong><ul>${reasons}</ul></div>` : ""}
@@ -4669,7 +4669,7 @@ function doctorVisitForm(survey) {
         ${input(t("Вес по весам, кг"), "weight", true, "number")}
         ${input(t("Рост, см"), "height", true, "number")}
         <div class="form-row"><label>${escapeHtml(t("Индекс массы тела"))}</label><input name="bmi" inputmode="decimal" readonly required /></div>
-        ${input(t("Сахар крови, ммоль/л"), "glucose", false, "number")}
+        ${input(t("Уровень сахара в крови, ммоль/л"), "glucose", false, "number")}
         ${select(t("Тип сахара"), "glucoseType", [["fasting", t("Натощак")], ["random", t("Случайный замер")], ["postMeal", t("Через 2 часа после еды")], ["hba1c", "HbA1c"]])}
         <div class="form-row"><label>${escapeHtml(t("Диагноз"))}</label><input name="diagnosis" id="doctorDiagnosis" /></div>
         ${input(t("Повторное САД"), "systolic", true, "number")}
