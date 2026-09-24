@@ -13,6 +13,7 @@ const initialState = () => ({
   doctorMode: "list",
   doctorRiskFirst: false,
   doctorPatientFilter: "all",
+  doctorPatientSearch: "",
   doctorTaskFilter: "open",
   doctorPatientPage: 1,
   lastDoctorKey: null,
@@ -893,7 +894,7 @@ function showDoctorLanguagePrompt(onChoose) {
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js?v=20260924auditsearch").catch(() => {});
+  navigator.serviceWorker.register("/sw.js?v=20260924doctorsearch").catch(() => {});
 }
 
 async function boot() {
@@ -1088,6 +1089,11 @@ document.addEventListener("click", async (event) => {
     state.doctorRiskFirst = !state.doctorRiskFirst;
     state.doctorPatientPage = 1;
     renderDoctorPatientList();
+  }
+  if (action === "clear-doctor-patient-search") {
+    state.doctorPatientSearch = "";
+    state.doctorPatientPage = 1;
+    renderDoctor();
   }
   if (action === "doctor-task-status") {
     const id = event.target.dataset.id;
@@ -4408,7 +4414,14 @@ function doctorPatientsPanel() {
       </div>
       <div class="muted" id="doctorSyncStatus"></div>
       <div id="doctorSyncResult"></div>
-      <input id="patientSearch" placeholder="${escapeHtml(t("Введите имя или фамилию"))}" />
+      <div class="doctor-patient-search">
+        <label for="patientSearch">Поиск пациента</label>
+        <div class="actions">
+          <input id="patientSearch" type="search" value="${escapeHtml(state.doctorPatientSearch)}" placeholder="${escapeHtml(t("Введите имя или фамилию"))}" autocomplete="off" />
+          ${state.doctorPatientSearch ? `<button type="button" class="secondary" data-action="clear-doctor-patient-search">Сбросить</button>` : ""}
+        </div>
+        <small class="muted">Можно искать по ФИО, телефону, дате рождения или поликлинике</small>
+      </div>
       <select id="doctorPatientFilter" aria-label="Фильтр пациентов">
         <option value="all" ${state.doctorPatientFilter === "all" ? "selected" : ""}>Все пациенты</option>
         <option value="risk" ${state.doctorPatientFilter === "risk" ? "selected" : ""}>Повышенный риск</option>
@@ -4451,6 +4464,7 @@ function renderDoctor() {
   document.querySelector("#doctorSyncButton")?.addEventListener("click", syncOfflineDoctorActions);
   updateOfflineDoctorStatus();
   document.querySelector("#patientSearch")?.addEventListener("input", (event) => {
+    state.doctorPatientSearch = event.target.value;
     state.doctorPatientPage = 1;
     renderDoctorPatientList();
   });
@@ -4495,19 +4509,18 @@ function doctorSortedSurveys(surveys) {
 }
 
 function renderDoctorPatientList() {
-  const search = document.querySelector("#patientSearch");
   const patientList = document.querySelector("#patientList");
   if (!patientList) return;
-  const query = (search?.value || "").trim().toLowerCase();
-  const list = doctorFilteredSurveys(query);
+  const list = doctorFilteredSurveys();
   patientList.innerHTML = doctorPaginatedSurveyList(doctorSortedSurveys(list));
 }
 
-function doctorFilteredSurveys(query = "") {
+function doctorFilteredSurveys(query = state.doctorPatientSearch || "") {
+  const terms = String(query).trim().toLocaleLowerCase("ru-RU").split(/\s+/).filter(Boolean);
   const openOverdueSurveyIds = new Set((state.doctor.tasks || []).filter((task) => task.status !== "completed" && new Date(task.dueAt) < new Date()).map((task) => task.surveyId));
   return state.doctor.surveys.filter((survey) => {
-    const haystack = [fullName(survey.patient), survey.patient?.phone, survey.patient?.clinic].join(" ").toLowerCase();
-    if (query && !haystack.includes(query)) return false;
+    const haystack = [fullName(survey.patient), survey.patient?.phone, survey.patient?.birthDate, survey.patient?.clinic].join(" ").toLocaleLowerCase("ru-RU");
+    if (terms.length && !terms.every((term) => haystack.includes(term))) return false;
     const measurements = survey.measurements || {};
     if (state.doctorPatientFilter === "risk" && !survey.needsDoctor) return false;
     if (state.doctorPatientFilter === "pressure" && Number(measurements.systolic || 0) < 140) return false;

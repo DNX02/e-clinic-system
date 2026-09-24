@@ -836,6 +836,21 @@ th {
   margin-top: 0;
 }
 
+.doctor-patient-search {
+  margin-top: 12px;
+}
+
+.doctor-patient-search > label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.doctor-patient-search input#patientSearch {
+  flex: 1 1 240px;
+  margin-top: 0;
+}
+
 .audit-patient-link {
   background: none;
   border: 0;
