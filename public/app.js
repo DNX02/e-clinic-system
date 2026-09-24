@@ -1076,6 +1076,7 @@ document.addEventListener("click", async (event) => {
     state.auditSurvey = null;
     renderAdmin();
   }
+  if (action === "print-patient-card") window.print();
   if (action === "clear-audit-search") {
     state.auditSearch = "";
     renderAdmin();
@@ -2811,7 +2812,7 @@ function renderAuditSurveyModal() {
       <section class="language-modal__panel audit-survey-modal__panel">
         <div class="section-title">
           <div><h2 id="auditSurveyTitle">Анкета пациента</h2><p class="muted">Полные данные выбранной записи</p></div>
-          <button type="button" class="secondary" data-action="close-audit-survey">Закрыть</button>
+          <div class="actions"><button type="button" class="secondary" data-action="print-patient-card">Печать / PDF</button><button type="button" class="secondary" data-action="close-audit-survey">Закрыть</button></div>
         </div>
         <div class="audit-survey-grid">
           ${details.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(auditValue(value))}</strong></div>`).join("")}
