@@ -51,8 +51,6 @@ try {
   await waitForServer();
   const admin = session();
   await request(admin, "/api/login/admin", { method: "POST", body: { username: "admin", password: adminPassword } });
-  const imported = await request(admin, "/api/admin/patients/import", { method: "POST", body: { rows: [{ lastName: "Импорт", firstName: "Тест", birthDate: "1985-01-01", clinic: "Поликлиника №1", sex: "female", age: 41, height: 165, weight: 70, rabitoWaist: 85, systolic: 120, diastolic: 80, nurseName: "Тестовая медсестра" }] } });
-  assert.equal(imported.imported.length, 1);
   const createdDoctor = await request(admin, "/api/admin/doctors", {
     method: "POST",
     expected: 201,
@@ -276,6 +274,8 @@ try {
   await request(admin, "/api/admin/account", { method: "PUT", body: { currentPassword: adminPassword, newPassword: adminNewPassword } });
   const adminRelogin = session();
   await request(adminRelogin, "/api/login/admin", { method: "POST", body: { username: "admin", password: adminNewPassword } });
+  const imported = await request(adminRelogin, "/api/admin/patients/import", { method: "POST", body: { rows: [{ lastName: "Импорт", firstName: "Тест", birthDate: "1985-01-01", clinic: "Поликлиника №1", sex: "female", age: 41, height: 165, weight: 70, rabitoWaist: 85, systolic: 120, diastolic: 80, nurseName: "Тестовая медсестра" }] } });
+  assert.equal(imported.imported.length, 1);
   console.log("Product workflow integration test passed.");
 } finally {
   server.kill("SIGTERM");
