@@ -5,6 +5,7 @@ const initialState = () => ({
   adminLoading: false,
   adminLoadError: "",
   auditSurvey: null,
+  auditSearch: "",
   doctor: null,
   tab: "stats",
   doctorSection: "patients",
@@ -892,7 +893,7 @@ function showDoctorLanguagePrompt(onChoose) {
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js?v=20260923auditform").catch(() => {});
+  navigator.serviceWorker.register("/sw.js?v=20260924auditsearch").catch(() => {});
 }
 
 async function boot() {
@@ -1047,6 +1048,10 @@ document.addEventListener("click", async (event) => {
   }
   if (action === "close-audit-survey") {
     state.auditSurvey = null;
+    renderAdmin();
+  }
+  if (action === "clear-audit-search") {
+    state.auditSearch = "";
     renderAdmin();
   }
   if (action === "generate-doctor-key") {
@@ -2602,7 +2607,13 @@ function renderAuditAdmin() {
     admin_updated: "Изменён администратор",
     admin_deleted: "Удалён администратор"
   };
-  const rows = (state.admin.activityEvents || []).map((event) => html`<tr>
+  const query = String(state.auditSearch || "").trim().toLocaleLowerCase("ru-RU");
+  const events = (state.admin.activityEvents || []).filter((event) => {
+    if (!query) return true;
+    return [event.patientName, event.actorName, event.clinic, event.details, labels[event.type] || event.type]
+      .some((value) => String(value || "").toLocaleLowerCase("ru-RU").includes(query));
+  });
+  const rows = events.map((event) => html`<tr>
     <td>${new Date(event.createdAt).toLocaleString("ru-RU")}</td>
     <td>${escapeHtml(event.actorName || event.actorRole || "Система")}</td>
     <td>${escapeHtml(labels[event.type] || event.type)}</td>
@@ -2612,7 +2623,17 @@ function renderAuditAdmin() {
     <td>${escapeHtml(event.clinic || "-")}</td>
     <td>${escapeHtml(event.details || "-")}</td>
   </tr>`).join("");
-  return html`<section class="panel"><div class="section-title"><div><h2>Журнал действий</h2><p class="muted">Последние ${state.admin.activityEvents?.length || 0} событий. Нажмите на имя пациента, чтобы открыть его анкету.</p></div></div><div class="table-wrap"><table><thead><tr><th>Дата</th><th>Пользователь</th><th>Действие</th><th>Пациент</th><th>Поликлиника</th><th>Описание</th></tr></thead><tbody>${rows || `<tr><td colspan="6">Событий пока нет</td></tr>`}</tbody></table></div>${renderAuditSurveyModal()}</section>`;
+  return html`<section class="panel"><div class="section-title"><div><h2>Журнал действий</h2><p class="muted">Найдите пациента по фамилии, медсестре или поликлинике и нажмите на имя, чтобы открыть анкету.</p></div></div>
+    <form id="auditSearchForm" class="audit-search-form">
+      <label for="auditSearch">Поиск в журнале</label>
+      <div class="actions">
+        <input id="auditSearch" name="query" type="search" value="${escapeHtml(state.auditSearch)}" placeholder="Фамилия пациента, медсестра или поликлиника" autocomplete="off" />
+        <button type="submit">Найти</button>
+        ${state.auditSearch ? `<button type="button" class="secondary" data-action="clear-audit-search">Сбросить</button>` : ""}
+      </div>
+      <div class="muted">Показано записей: ${events.length} из ${state.admin.activityEvents?.length || 0}</div>
+    </form>
+    <div class="table-wrap"><table><thead><tr><th>Дата</th><th>Пользователь</th><th>Действие</th><th>Пациент</th><th>Поликлиника</th><th>Описание</th></tr></thead><tbody>${rows || `<tr><td colspan="6">По вашему запросу записи не найдены</td></tr>`}</tbody></table></div>${renderAuditSurveyModal()}</section>`;
 }
 
 function auditValue(value, fallback = "-") {
@@ -2819,6 +2840,11 @@ function renderQrAdmin() {
 
 function bindAdminForms() {
   bindAdminTrainingFilters();
+  document.querySelector("#auditSearchForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    state.auditSearch = String(new FormData(event.currentTarget).get("query") || "").trim();
+    renderAdmin();
+  });
   document.querySelectorAll(".patient-edit-form").forEach((patientForm) => patientForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     try {

@@ -848,6 +848,25 @@ th {
   text-underline-offset: 3px;
 }
 
+.audit-search-form {
+  background: #f4f8f6;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 16px;
+  padding: 12px;
+}
+
+.audit-search-form > label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.audit-search-form input {
+  flex: 1 1 320px;
+  min-width: min(100%, 280px);
+}
+
 .audit-survey-modal {
   z-index: 80;
 }
