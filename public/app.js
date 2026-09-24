@@ -2007,10 +2007,10 @@ async function loadAdmin() {
 
 function renderAdmin() {
   const visibleTabs = state.me?.role === "head_nurse"
-    ? ["stats", "control", "surveys", "operations", "audit"]
-    : ["stats", "control", "doctors", "training", "nurseTraining", "surveys", "visits", "operations", "audit", "access", "qr"];
+    ? ["stats", "center", "surveys", "operations", "audit"]
+    : ["stats", "center", "control", "doctors", "training", "nurseTraining", "surveys", "visits", "operations", "audit", "access", "qr"];
   const nav = visibleTabs.map((tab) => {
-    const names = { stats: "Статистика", control: "Контроль диабета", doctors: "Врачи", training: "Обучение №4", nurseTraining: "Медсестры №5", surveys: "Пациенты", visits: "Назначения", operations: "План и сообщения", audit: "Журнал", access: "Доступы", qr: "QR" };
+    const names = { stats: "Статистика", center: "Диабет-контроль 2.0", control: "Контроль диабета", doctors: "Врачи", training: "Обучение №4", nurseTraining: "Медсестры №5", surveys: "Пациенты", visits: "Назначения", operations: "План и сообщения", audit: "Журнал", access: "Доступы", qr: "QR" };
     return `<button data-action="admin-tab" data-tab="${tab}" class="${state.tab === tab ? "active" : ""}">${names[tab]}</button>`;
   }).join("");
   setPage(html`
@@ -2027,7 +2027,7 @@ function renderAdmin() {
 }
 
 function adminTab() {
-  if (state.tab === "control") return renderCareControlAdmin();
+  if (state.tab === "center" || state.tab === "control") return renderCareControlAdmin();
   if (state.tab === "doctors") return renderDoctorsAdmin();
   if (state.tab === "training") return renderTrainingAdmin();
   if (state.tab === "nurseTraining") return renderNurseTrainingAdmin();

@@ -1752,7 +1752,7 @@ async function handleApi(req, res, url) {
       nurseTrainingStats: buildNurseTrainingStats(viewDb),
       clinicScope: adminClinicScope(session, db)
     };
-    if (tab === "control") {
+    if (tab === "control" || tab === "center") {
       dashboard.careControl = buildCareControl(viewDb);
       if (!canManageAdmins(session, db)) dashboard.careControl.dailyReports.chatId = "";
     }
