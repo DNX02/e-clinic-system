@@ -716,6 +716,26 @@ function clientIp(req) {
   return String(req.headers["cf-connecting-ip"] || req.headers["x-real-ip"] || req.socket.remoteAddress || "unknown").trim();
 }
 
+const securityAlertState = new Map();
+function queueSecurityAlert(req, event, details = {}) {
+  const ip = clientIp(req);
+  const now = Date.now();
+  const current = securityAlertState.get(ip) || { count: 0, windowStartedAt: now, lastSentAt: 0 };
+  if (now - current.windowStartedAt > 10 * 60 * 1000) { current.count = 0; current.windowStartedAt = now; }
+  current.count += 1;
+  securityAlertState.set(ip, current);
+  if (current.count < 5 || now - current.lastSentAt < 30 * 60 * 1000) return;
+  current.lastSentAt = now;
+  Promise.resolve().then(async () => {
+    if (!TELEGRAM_BOT_TOKEN) return;
+    const db = await readDb();
+    const chatId = String(db.settings?.dailyReports?.chatId || TELEGRAM_REPORT_CHAT_ID || "").trim();
+    if (!chatId) return;
+    const text = [`E-Clinic — предупреждение безопасности`, `Событие: ${event}`, `IP: ${ip}`, `Попыток за 10 минут: ${current.count}`, `Путь: ${String(req.url || "").split("?", 1)[0]}`, details.scope ? `Раздел: ${details.scope}` : ""].filter(Boolean).join("\n");
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text }) });
+  }).catch((error) => console.error("Security alert failed:", error.message || error));
+}
+
 function securityEvent(event, req, details = {}) {
   const pathname = String(req.url || "").split("?", 1)[0] || "/";
   console.warn(JSON.stringify({
@@ -729,6 +749,7 @@ function securityEvent(event, req, details = {}) {
     path: pathname,
     ...details
   }));
+  if (["rate_limited", "login_failed"].includes(event)) queueSecurityAlert(req, event, details);
 }
 
 function consumeRateLimit(key, limit, windowMs) {
