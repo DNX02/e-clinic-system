@@ -1946,6 +1946,41 @@ async function handleApi(req, res, url) {
     return send(res, 200, { imported, skipped, errors });
   }
 
+  if (req.method === "PUT" && /^\/api\/admin\/patients\/[^/]+\/answers$/.test(url.pathname)) {
+    if (!canManageAdmins(session, db)) return send(res, 403, { error: "Исправление доступно главному администратору" });
+    const id = decodeURIComponent(url.pathname.split('/').at(-2));
+    const survey = db.nurseSurveys.find(item => item.id === id);
+    if (!survey) return send(res, 404, { error: "Анкета не найдена" });
+    const body = await parseBody(req);
+    const input = { ...survey.answers, ...survey.measurements, ...survey.patient };
+    const changes = [];
+    for (const field of ['activity', 'vegetables', 'bpMeds', 'highGlucose', 'familyDiabetes', 'smoker', 'systolic', 'diastolic']) {
+      if (body[field] === undefined) continue;
+      const value = ['systolic', 'diastolic'].includes(field)
+        ? cleanNumber(body[field], field, { min: 1, max: field === 'systolic' ? 300 : 200 })
+        : cleanEnum(body[field], field, field === 'familyDiabetes' ? ['none', 'second', 'first'] : ['yes', 'no']);
+      if (input[field] !== value) changes.push({ field, before: input[field] ?? '', after: value });
+      input[field] = value;
+    }
+    validateBloodPressure(input.systolic, input.diastolic);
+    if (changes.length) {
+      survey.answers = { ...survey.answers, ...Object.fromEntries(changes.map(item => [item.field, item.after])) };
+      survey.measurements.systolic = input.systolic;
+      survey.measurements.diastolic = input.diastolic;
+      survey.findrisc = calculateFindrisc(input);
+      survey.score2 = calculateScore2Lite(input);
+      survey.referralReasons = referralReasons(input, survey.findrisc, survey.score2);
+      survey.needsDoctor = survey.referralReasons.length > 0;
+      survey.qualityWarnings = qualityFlagsForSurvey(survey);
+      survey.updatedAt = new Date().toISOString();
+      survey.changeHistory ||= [];
+      survey.changeHistory.push({ id: crypto.randomUUID(), createdAt: survey.updatedAt, actorId: session.userId, actorName: adminAccount(session, db)?.name || '', changes });
+      appendActivity(db, { type: 'survey_answers_corrected', actorRole: 'admin', actorId: session.userId, actorName: adminAccount(session, db)?.name || '', surveyId: id, clinic: survey.patient.clinic, patientName: patientNameFromSurvey(survey), details: 'Исправлены ответы анкеты, риск пересчитан' });
+      await writeDb(db);
+    }
+    return send(res, 200, { survey });
+  }
+
   if (req.method === "PUT" && url.pathname.startsWith("/api/admin/patients/")) {
     if (!canMutateAdmin(session, db)) return send(res, 403, { error: "Недостаточно прав для изменения данных" });
     const id = decodeURIComponent(url.pathname.split("/").pop());

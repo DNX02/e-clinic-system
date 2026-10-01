@@ -1014,6 +1014,19 @@ function setPage(content) {
   app.innerHTML = content;
   document.body.classList.toggle('easy-reading', localStorage.getItem('eclinic-easy-reading') === 'true');
   queueMicrotask(() => {
+    document.querySelector('#correctSurveyAnswers')?.addEventListener('submit', async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = form.querySelector('button[type=submit]');
+      button.disabled = true;
+      try {
+        const id = state.auditSurvey.survey.id;
+        await api(`/api/admin/patients/${encodeURIComponent(id)}/answers`, { method: 'PUT', body: JSON.stringify(Object.fromEntries(new FormData(form))) });
+        state.auditSurvey = await api(`/api/admin/patients/${encodeURIComponent(id)}`);
+        await loadAdmin();
+      } catch (error) { form.querySelector('[role=status]').textContent = error.message; }
+      finally { button.disabled = false; }
+    });
     for (const id of ['surveyForm', 'doctorPatientSurveyForm', 'visitForm']) {
       bindDraft(document.getElementById(id), { userId: state.me?.id || 'nurse', language: id === 'surveyForm' ? surveyLanguage() : doctorLanguage(),
         collectLabs: id === 'visitForm' ? collectDoctorLabs : undefined,
@@ -2829,6 +2842,12 @@ function renderAuditSurveyModal() {
         <section class="patient-next-step"><h3>Следующий шаг</h3><p>${escapeHtml(record.nextAction || "Наблюдение по плану")}</p></section>
         <section class="patient-timeline"><h3>История пациента</h3>${[...(record.events || []), ...(record.visits || []).map(item => ({ createdAt: item.createdAt, actorName: item.doctorName || "Врач", details: "Осмотр врача" })), ...(record.tasks || []).map(item => ({ createdAt: item.createdAt, actorName: "Система", details: `Задача: ${item.title}` }))].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).map(item => `<article><time>${escapeHtml(new Date(item.createdAt).toLocaleString("ru-RU"))}</time><strong>${escapeHtml(item.actorName || "Система")}</strong><span>${escapeHtml(item.details || "")}</span></article>`).join("") || `<p class="muted">История пока пуста</p>`}</section>
         ${historyPanel(survey.changeHistory || [])}
+        ${state.admin.canManageAdmins ? `<details><summary>Исправить анкету</summary><form id="correctSurveyAnswers" class="form">
+          ${[['activity','Физическая активность'],['vegetables','Овощи и фрукты ежедневно'],['bpMeds','Препараты от давления'],['highGlucose','Ранее повышенный сахар'],['smoker','Курение'],['familyDiabetes','Диабет у родственников']].map(([key,label]) => `<label>${label}<select name="${key}" required>${(key === 'familyDiabetes' ? [['none','Нет'],['second','Да, вторая линия'],['first','Да, первая линия']] : [['yes','Да'],['no','Нет']]).map(([value,text]) => `<option value="${value}" ${answers[key] === value ? 'selected' : ''}>${text}</option>`).join('')}</select></label>`).join('')}
+          <label>Систолическое давление<input name="systolic" type="number" min="1" max="300" required value="${escapeHtml(measurements.systolic || '')}"/></label>
+          <label>Диастолическое давление<input name="diastolic" type="number" min="1" max="200" required value="${escapeHtml(measurements.diastolic || '')}"/></label>
+          <p>Баллы и направление будут пересчитаны. Изменения сохранятся в истории.</p><button type="submit">Сохранить исправления</button><div role="status"></div>
+        </form></details>` : ''}
         <div class="actions"><button type="button" data-action="close-audit-survey">Закрыть анкету</button></div>
       </section>
     </div>
