@@ -2841,15 +2841,15 @@ function renderAuditSurveyModal() {
         <div class="audit-survey-grid">
           ${details.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(auditValue(value))}</strong></div>`).join("")}
         </div>
-        <section class="patient-next-step"><h3>Следующий шаг</h3><p>${escapeHtml(record.nextAction || "Наблюдение по плану")}</p></section>
-        <section class="patient-timeline"><h3>История пациента</h3>${[...(record.events || []), ...(record.visits || []).map(item => ({ createdAt: item.createdAt, actorName: item.doctorName || "Врач", details: "Осмотр врача" })), ...(record.tasks || []).map(item => ({ createdAt: item.createdAt, actorName: "Система", details: `Задача: ${item.title}` }))].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).map(item => `<article><time>${escapeHtml(new Date(item.createdAt).toLocaleString("ru-RU"))}</time><strong>${escapeHtml(item.actorName || "Система")}</strong><span>${escapeHtml(item.details || "")}</span></article>`).join("") || `<p class="muted">История пока пуста</p>`}</section>
-        ${historyPanel(survey.changeHistory || [])}
-        ${state.admin.canManageAdmins ? `<details><summary>Исправить анкету</summary><form id="correctSurveyAnswers" class="form">
+        ${state.admin.canEdit ? `<details open><summary><strong>Исправить анкету</strong></summary><form id="correctSurveyAnswers" class="form">
           ${[['activity','Физическая активность'],['vegetables','Овощи и фрукты ежедневно'],['bpMeds','Препараты от давления'],['highGlucose','Ранее повышенный сахар'],['smoker','Курение'],['familyDiabetes','Диабет у родственников']].map(([key,label]) => `<label>${label}<select name="${key}" required>${(key === 'familyDiabetes' ? [['none','Нет'],['second','Да, вторая линия'],['first','Да, первая линия']] : [['yes','Да'],['no','Нет']]).map(([value,text]) => `<option value="${value}" ${answers[key] === value ? 'selected' : ''}>${text}</option>`).join('')}</select></label>`).join('')}
           <label>Систолическое давление<input name="systolic" type="number" min="1" max="300" required value="${escapeHtml(measurements.systolic || '')}"/></label>
           <label>Диастолическое давление<input name="diastolic" type="number" min="1" max="200" required value="${escapeHtml(measurements.diastolic || '')}"/></label>
           <p>Баллы и направление будут пересчитаны. Изменения сохранятся в истории.</p><button type="submit">Сохранить исправления</button><div role="status"></div>
         </form></details>` : ''}
+        <section class="patient-next-step"><h3>Следующий шаг</h3><p>${escapeHtml(record.nextAction || "Наблюдение по плану")}</p></section>
+        <section class="patient-timeline"><h3>История пациента</h3>${[...(record.events || []), ...(record.visits || []).map(item => ({ createdAt: item.createdAt, actorName: item.doctorName || "Врач", details: "Осмотр врача" })), ...(record.tasks || []).map(item => ({ createdAt: item.createdAt, actorName: "Система", details: `Задача: ${item.title}` }))].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).map(item => `<article><time>${escapeHtml(new Date(item.createdAt).toLocaleString("ru-RU"))}</time><strong>${escapeHtml(item.actorName || "Система")}</strong><span>${escapeHtml(item.details || "")}</span></article>`).join("") || `<p class="muted">История пока пуста</p>`}</section>
+        ${historyPanel(survey.changeHistory || [])}
         <div class="actions"><button type="button" data-action="close-audit-survey">Закрыть анкету</button></div>
       </section>
     </div>

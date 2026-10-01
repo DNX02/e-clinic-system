@@ -116,6 +116,12 @@ try {
   assert.ok(Array.isArray(adminPatient.events));
   assert.ok(adminPatient.events.length >= 1, "Patient timeline must include activity events");
   assert.equal(typeof adminPatient.nextAction, "string");
+  const correctedSurvey = await request(admin, `/api/admin/patients/${createdSurvey.survey.id}/answers`, {
+    method: "PUT",
+    body: { activity: "no", vegetables: "no", bpMeds: "yes", highGlucose: "no", familyDiabetes: "first", smoker: "no", systolic: 125, diastolic: 80 }
+  });
+  assert.equal(correctedSurvey.survey.answers.activity, "no");
+  assert.ok(correctedSurvey.survey.changeHistory.some((event) => event.changes?.some((change) => change.field === "activity")), "Questionnaire correction must be recorded in history");
   const operationsDashboard = await request(admin, "/api/admin/dashboard?tab=operations");
   assert.equal(operationsDashboard.reminderQueue.length, 1);
   assert.deepEqual(operationsDashboard.surveyClinics, ["Поликлиника №1"]);

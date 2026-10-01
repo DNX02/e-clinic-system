@@ -900,7 +900,12 @@ function doctorCanAccessSurvey(doctor, survey) {
 
 function adminRole(session, db) {
   if (!session || session.userType !== "admin") return "";
-  return db.admins.find((admin) => admin.id === session.userId)?.role || "";
+  const admin = db.admins.find((item) => item.id === session.userId);
+  if (!admin) return "";
+  // Older installations may have a single administrator without a role.
+  // A sole administrator must retain owner access after the role migration.
+  if (db.admins.length === 1) return "owner";
+  return admin.role || "";
 }
 
 function canMutateAdmin(session, db) {
@@ -1947,7 +1952,7 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "PUT" && /^\/api\/admin\/patients\/[^/]+\/answers$/.test(url.pathname)) {
-    if (!canManageAdmins(session, db)) return send(res, 403, { error: "Исправление доступно главному администратору" });
+    if (!canMutateAdmin(session, db)) return send(res, 403, { error: "Исправление доступно администратору с правом изменения данных" });
     const id = decodeURIComponent(url.pathname.split('/').at(-2));
     const survey = db.nurseSurveys.find(item => item.id === id);
     if (!survey) return send(res, 404, { error: "Анкета не найдена" });
