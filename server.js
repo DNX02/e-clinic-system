@@ -916,6 +916,12 @@ function canManageAdmins(session, db) {
   return adminRole(session, db) === "owner";
 }
 
+function canCorrectSurvey(session, db, survey) {
+  const role = adminRole(session, db);
+  if (["owner", "manager"].includes(role)) return true;
+  return role === "head_nurse" && adminCanAccessClinic(session, db, survey?.patient?.clinic || survey?.clinic);
+}
+
 function requireAdmin(session) {
   return session?.userType === "admin";
 }
@@ -1750,6 +1756,7 @@ async function handleApi(req, res, url) {
     const dashboard = {
       stats: buildStats(viewDb),
       canEdit: canMutateAdmin(session, db),
+      canCorrectSurveys: ["owner", "manager", "head_nurse"].includes(adminRole(session, db)),
       canManageAdmins: canManageAdmins(session, db),
       adminRoles,
       drugStats: { diabetesDrugCounts, hypertensionDrugCounts },
@@ -1952,10 +1959,10 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "PUT" && /^\/api\/admin\/patients\/[^/]+\/answers$/.test(url.pathname)) {
-    if (!canMutateAdmin(session, db)) return send(res, 403, { error: "Исправление доступно администратору с правом изменения данных" });
     const id = decodeURIComponent(url.pathname.split('/').at(-2));
     const survey = db.nurseSurveys.find(item => item.id === id);
     if (!survey) return send(res, 404, { error: "Анкета не найдена" });
+    if (!canCorrectSurvey(session, db, survey)) return send(res, 403, { error: "Можно исправлять только анкеты своей поликлиники" });
     const body = await parseBody(req);
     const input = { ...survey.answers, ...survey.measurements, ...survey.patient };
     const changes = [];

@@ -2841,7 +2841,7 @@ function renderAuditSurveyModal() {
         <div class="audit-survey-grid">
           ${details.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(auditValue(value))}</strong></div>`).join("")}
         </div>
-        ${state.admin.canEdit ? `<details open><summary><strong>Исправить анкету</strong></summary><form id="correctSurveyAnswers" class="form">
+        ${state.admin.canCorrectSurveys ? `<details open><summary><strong>Исправить анкету</strong></summary><form id="correctSurveyAnswers" class="form">
           ${[['activity','Физическая активность'],['vegetables','Овощи и фрукты ежедневно'],['bpMeds','Препараты от давления'],['highGlucose','Ранее повышенный сахар'],['smoker','Курение'],['familyDiabetes','Диабет у родственников']].map(([key,label]) => `<label>${label}<select name="${key}" required>${(key === 'familyDiabetes' ? [['none','Нет'],['second','Да, вторая линия'],['first','Да, первая линия']] : [['yes','Да'],['no','Нет']]).map(([value,text]) => `<option value="${value}" ${answers[key] === value ? 'selected' : ''}>${text}</option>`).join('')}</select></label>`).join('')}
           <label>Систолическое давление<input name="systolic" type="number" min="1" max="300" required value="${escapeHtml(measurements.systolic || '')}"/></label>
           <label>Диастолическое давление<input name="diastolic" type="number" min="1" max="200" required value="${escapeHtml(measurements.diastolic || '')}"/></label>

@@ -243,6 +243,16 @@ try {
     body: { ...measuredPatient, lastName: 'ОжидаетВрача', systolic: 160 } });
   const otherClinic = await request(nurse, '/api/nurse-surveys', { method: 'POST', expected: 201,
     body: { ...measuredPatient, lastName: 'ДругаяПоликлиника', clinic: 'Поликлиника №2', systolic: 160 } });
+  const headNurseCorrection = await request(headNurse, `/api/admin/patients/${createdSurvey.survey.id}/answers`, {
+    method: 'PUT', body: { activity: 'yes', vegetables: 'no', bpMeds: 'yes', highGlucose: 'no', familyDiabetes: 'first', smoker: 'no', systolic: 126, diastolic: 81 }
+  });
+  assert.equal(headNurseCorrection.survey.measurements.systolic, 126);
+  await request(headNurse, `/api/admin/patients/${otherClinic.survey.id}/answers`, {
+    method: 'PUT', expected: 403, body: { activity: 'yes', vegetables: 'yes', bpMeds: 'no', highGlucose: 'no', familyDiabetes: 'none', smoker: 'no', systolic: 120, diastolic: 80 }
+  });
+  const headNurseAudit = await request(headNurse, '/api/admin/dashboard?tab=audit');
+  assert.equal(headNurseAudit.canCorrectSurveys, true);
+  assert.ok(!headNurseAudit.activityEvents.some((event) => event.surveyId === otherClinic.survey.id), 'Head nurse journal must exclude patients from other clinics');
   const waiting = await request(doctor, '/api/doctor/waiting-patients');
   assert.ok(waiting.patients.some(row => row.id === referral.survey.id));
   assert.ok(!waiting.patients.some(row => row.id === otherClinic.survey.id));
