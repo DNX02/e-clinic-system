@@ -318,6 +318,8 @@ const TAJIK_TEXT = {
   "Проверьте вес и рост: ИМТ не должен превышать 100": "Вазн ва қадро санҷед: индекси массаи бадан набояд аз 100 зиёд бошад",
   "Проверьте окружности для расчёта веса": "Андозаҳои даври баданро барои ҳисоби вазн санҷед",
   "Физическая активность 30 минут в день": "Фаъолияти ҷисмонӣ 30 дақиқа дар рӯз",
+  "Выберите ответ": "Ҷавобро интихоб кунед",
+  "Выберите поликлинику": "Поликлиникаро интихоб кунед",
   "Да": "Ҳа",
   "Нет": "Не",
   "Овощи/фрукты ежедневно": "Сабзавот/мева ҳар рӯз",
@@ -3233,7 +3235,7 @@ function surveyRabitoFields(t) {
 
 function renderNurseSurvey() {
   const t = (value) => translateSurveyText(value);
-  const surveySelect = (label, name, options) => select(t(label), name, options.map(([value, text]) => [value, t(text)]));
+  const surveySelect = (label, name, options) => `<div class="form-row"><label>${escapeHtml(t(label))}</label><select name="${name}" required><option value="" selected disabled>${escapeHtml(t("Выберите ответ"))}</option>${options.map(([value, text]) => `<option value="${value}">${escapeHtml(t(text))}</option>`).join("")}</select></div>`;
   const clinicText = (text) => surveyLanguage() === "tg" ? String(text).replace("Поликлиника №", "Поликлиникаи №") : text;
   setPage(html`
     <main class="container">
@@ -3247,16 +3249,16 @@ function renderNurseSurvey() {
         <section class="grid two">
           ${input(t("Фамилия"), "lastName", true)}
           ${input(t("Имя"), "firstName", true)}
-          ${input(t("Отчество"), "middleName")}
+          ${input(t("Отчество"), "middleName", true)}
           ${input(t("Дата рождения"), "birthDate", true, "date")}
           ${surveySelect("Пол", "sex", [["female", "Женский"], ["male", "Мужской"]])}
           <div class="form-row"><label>${escapeHtml(t("Возраст"))}</label><input name="age" inputmode="numeric" required readonly /></div>
-          ${input(t("Телефон"), "phone")}
-          ${input(t("Адрес"), "address")}
+          ${input(t("Телефон"), "phone", true)}
+          ${input(t("Адрес"), "address", true)}
         </section>
         <div class="form-row">
           <label>${escapeHtml(t("Поликлиника пациента"))}</label>
-          <select name="clinic">${clinicOptions.map(([value, text]) => `<option value="${value}">${escapeHtml(clinicText(text))}</option>`).join("")}</select>
+          <select name="clinic" required><option value="" selected disabled>${escapeHtml(t("Выберите поликлинику"))}</option>${clinicOptions.map(([value, text]) => `<option value="${value}">${escapeHtml(clinicText(text))}</option>`).join("")}</select>
         </div>
         <h3>FINDRISC</h3>
         <p class="muted">${escapeHtml(t("Введите вес по весам. ИМТ рассчитается автоматически по весу и росту."))} ${escapeHtml(t("Окружность талии нужна для FINDRISC при любом способе определения веса."))}</p>
@@ -4760,7 +4762,7 @@ function doctorSurveyList(surveys) {
 
 function doctorPatientSurveyForm() {
   const t = (value) => translateDoctorText(value);
-  const doctorSelect = (label, name, options) => select(t(label), name, options.map(([value, text]) => [value, t(text)]));
+  const doctorSelect = (label, name, options) => `<div class="form-row"><label>${escapeHtml(t(label))}</label><select name="${name}" required><option value="" selected disabled>${escapeHtml(t("Выберите ответ"))}</option>${options.map(([value, text]) => `<option value="${value}">${escapeHtml(t(text))}</option>`).join("")}</select></div>`;
   return html`
     <form class="form" id="doctorPatientSurveyForm">
       <h2>${escapeHtml(t("Добавить пациента"))}</h2>
@@ -4771,12 +4773,12 @@ function doctorPatientSurveyForm() {
       <section class="grid two">
         ${input(t("Фамилия"), "lastName", true)}
         ${input(t("Имя"), "firstName", true)}
-        ${input(t("Отчество"), "middleName")}
+        ${input(t("Отчество"), "middleName", true)}
         ${input(t("Дата рождения"), "birthDate", true, "date")}
         ${doctorSelect("Пол", "sex", [["female", "Женский"], ["male", "Мужской"]])}
         <div class="form-row"><label>${escapeHtml(t("Возраст"))}</label><input name="age" inputmode="numeric" required readonly /></div>
-        ${input(t("Телефон"), "phone")}
-        ${input(t("Адрес"), "address")}
+        ${input(t("Телефон"), "phone", true)}
+        ${input(t("Адрес"), "address", true)}
       </section>
       <h3>FINDRISC</h3>
       <p class="muted">${escapeHtml(t("Введите вес по весам. ИМТ рассчитается автоматически по весу и росту."))} ${escapeHtml(t("Окружность талии нужна для FINDRISC при любом способе определения веса."))}</p>

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -16,6 +16,9 @@ const agents = {
   mobile: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) Mobile/15E148 Safari/604.1"
 };
 try {
+  const appSource = await readFile("public/app.js", "utf8");
+  assert.match(appSource, /<select name="\$\{name\}" required><option value="" selected disabled>/, "questionnaire selects must require an explicit answer");
+  assert.match(appSource, /<select name="clinic" required><option value="" selected disabled>/, "nurse clinic must be selected explicitly");
   for (let i = 0; i < 40; i++) {
     try { if ((await fetch(`http://127.0.0.1:${port}/api/health`)).ok) break; } catch {}
     await new Promise((resolve) => setTimeout(resolve, 100));
