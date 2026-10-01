@@ -22,6 +22,7 @@ try {
   assert.match(appSource, /<select name="clinic" required><option value="" selected disabled>/, "nurse clinic must be selected explicitly");
   assert.match(stylesSource, /\.doctor-layout \.nav[\s\S]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/, "mobile doctor navigation must use a wrapped grid");
   assert.match(stylesSource, /\.easy-reading \.doctor-layout \.nav button[\s\S]*font-size: 13px/, "large text mode must keep mobile navigation readable");
+  assert.match(stylesSource, /\.doctor-layout \.topbar \{[\s\S]*backdrop-filter: none/, "mobile doctor header must not trap fixed navigation");
   for (let i = 0; i < 40; i++) {
     try { if ((await fetch(`http://127.0.0.1:${port}/api/health`)).ok) break; } catch {}
     await new Promise((resolve) => setTimeout(resolve, 100));

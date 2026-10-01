@@ -1605,6 +1605,8 @@ th {
   }
 
   .doctor-layout .topbar {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
     background: rgba(255, 255, 255, 0.96);
     gap: 6px;
   }
