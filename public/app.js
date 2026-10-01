@@ -1062,7 +1062,7 @@ function topbar(title, nav = "") {
   const logoutText = document.body.dataset.app === "doctor" ? translateDoctorText("Выйти") : "Выйти";
   return html`
     <header class="topbar">
-      <div>
+      <div class="topbar-identity">
         <div class="brand">${title}</div>
         <div class="muted">${state.me?.name || ""}</div>
       </div>
