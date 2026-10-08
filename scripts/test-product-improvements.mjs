@@ -143,6 +143,12 @@ try {
     ...patient, lastName: "Измеренный", clinic: "Поликлиника №1", nurseName: "Тестовая Медсестра",
     height: 180, weight: 81, bmi: 18, arm: undefined, calf: undefined, glucoseLevel: undefined
   };
+  await request(nurse, "/api/nurse-surveys", {
+    method: "POST", expected: 400, body: { ...measuredPatient, lastName: "БезТелефона", phone: "" }
+  });
+  await request(nurse, "/api/nurse-surveys", {
+    method: "POST", expected: 400, body: { ...measuredPatient, lastName: "БезФИО", nurseName: "Медсестра" }
+  });
   const measuredMale = await request(nurse, "/api/nurse-surveys", {
     method: "POST", expected: 201, body: measuredPatient
   });

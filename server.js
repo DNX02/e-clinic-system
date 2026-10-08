@@ -1292,6 +1292,15 @@ function validateSurveyInput(body, clinicOverride = "") {
   return input;
 }
 
+function validateNurseSurveyInput(body) {
+  const input = validateSurveyInput(body);
+  if (input.nurseName.trim().split(/\s+/).filter(Boolean).length < 2) {
+    invalidInput("ФИО медсестры: обязательно укажите фамилию и имя");
+  }
+  if (!input.phone) invalidInput("Телефон пациента: обязательное поле");
+  return input;
+}
+
 function cleanLabDate(value, label, required = false) {
   const text = cleanText(value, label, { required, max: 10 });
   if (text && (!/^\d{4}-\d{2}-\d{2}$/.test(text) || !Number.isFinite(Date.parse(text)) || new Date(text).toISOString().slice(0, 10) !== text || text > dushanbeClock().date)) invalidInput(`${label}: недопустимая дата`);
@@ -2305,7 +2314,7 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/nurse-surveys") {
-    const body = validateSurveyInput(await parseBody(req));
+    const body = validateNurseSurveyInput(await parseBody(req));
     const duplicate = findDuplicateSurvey(db, body);
     if (duplicate) return send(res, 409, { error: "Пациент с таким ФИО и датой рождения уже существует в этой поликлинике", duplicateId: duplicate.id });
     const survey = buildNurseSurvey(body);

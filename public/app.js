@@ -320,6 +320,8 @@ const TAJIK_TEXT = {
   "Физическая активность 30 минут в день": "Фаъолияти ҷисмонӣ 30 дақиқа дар рӯз",
   "Выберите ответ": "Ҷавобро интихоб кунед",
   "Выберите поликлинику": "Поликлиникаро интихоб кунед",
+  "Не заполнено обязательное поле": "Майдони ҳатмӣ пур нашудааст",
+  "Заполните это поле и снова нажмите «Отправить анкету».": "Ин майдонро пур кунед ва боз «Фиристодани анкета»-ро пахш кунед.",
   "Да": "Ҳа",
   "Нет": "Не",
   "Овощи/фрукты ежедневно": "Сабзавот/мева ҳар рӯз",
@@ -3233,6 +3235,23 @@ function surveyRabitoFields(t) {
   `;
 }
 
+function validateNurseSurveyForm(form, t) {
+  const invalidField = Array.from(form.elements).find((field) => field.willValidate && !field.validity.valid);
+  if (!invalidField) return true;
+  const label = invalidField.closest(".form-row")?.querySelector("label")?.textContent?.trim()
+    || invalidField.getAttribute("name")
+    || t("обязательное поле");
+  document.querySelector("#surveyResult").innerHTML = html`
+    <div class="notice danger">
+      <strong>${escapeHtml(t("Не заполнено обязательное поле"))}: ${escapeHtml(label)}.</strong><br />
+      ${escapeHtml(t("Заполните это поле и снова нажмите «Отправить анкету»."))}
+    </div>
+  `;
+  invalidField.scrollIntoView({ behavior: "smooth", block: "center" });
+  invalidField.focus({ preventScroll: true });
+  return false;
+}
+
 function renderNurseSurvey() {
   const t = (value) => translateSurveyText(value);
   const surveySelect = (label, name, options) => `<div class="form-row"><label>${escapeHtml(t(label))}</label><select name="${name}" required><option value="" selected disabled>${escapeHtml(t("Выберите ответ"))}</option>${options.map(([value, text]) => `<option value="${value}">${escapeHtml(t(text))}</option>`).join("")}</select></div>`;
@@ -3292,8 +3311,10 @@ function renderNurseSurvey() {
   bindBirthDateAge(form);
   bindOfflineSurveySync(form);
   showSurveyLanguagePrompt(renderNurseSurvey);
+  form.noValidate = true;
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!validateNurseSurveyForm(form, t)) return;
     const data = Object.fromEntries(new FormData(form));
     try {
       const { survey } = await sendNurseSurvey(data);
