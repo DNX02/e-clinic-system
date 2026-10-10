@@ -1165,12 +1165,19 @@ function normalizePatientIdentity(patient = {}) {
     .join("|");
 }
 
+function normalizePatientPhone(patient = {}) {
+  return String(patient.phone || "").replace(/\D/g, "");
+}
+
 function findDuplicateSurvey(db, input) {
   const identity = normalizePatientIdentity(input);
   const clinic = clinicKey(input.clinic);
+  const phone = normalizePatientPhone(input);
+  if (!phone) return null;
   return (db.nurseSurveys || []).find((survey) =>
     clinicKey(survey.patient?.clinic || survey.clinic) === clinic &&
-    normalizePatientIdentity(survey.patient) === identity
+    normalizePatientIdentity(survey.patient) === identity &&
+    normalizePatientPhone(survey.patient) === phone
   );
 }
 
@@ -2316,7 +2323,7 @@ async function handleApi(req, res, url) {
   if (req.method === "POST" && url.pathname === "/api/nurse-surveys") {
     const body = validateNurseSurveyInput(await parseBody(req));
     const duplicate = findDuplicateSurvey(db, body);
-    if (duplicate) return send(res, 409, { error: "Пациент с таким ФИО и датой рождения уже существует в этой поликлинике", duplicateId: duplicate.id });
+    if (duplicate) return send(res, 409, { error: "Пациент с такими ФИО, датой рождения и телефоном уже существует в этой поликлинике", duplicateId: duplicate.id });
     const survey = buildNurseSurvey(body);
     db.nurseSurveys.push(survey);
     appendActivity(db, {
@@ -2421,7 +2428,7 @@ async function handleApi(req, res, url) {
     if (!doctor) return send(res, 404, { error: "Врач не найден" });
     const body = validateSurveyInput(await parseBody(req), doctor.clinic);
     const duplicate = findDuplicateSurvey(db, body);
-    if (duplicate) return send(res, 409, { error: "Пациент с таким ФИО и датой рождения уже существует в этой поликлинике", duplicateId: duplicate.id });
+    if (duplicate) return send(res, 409, { error: "Пациент с такими ФИО, датой рождения и телефоном уже существует в этой поликлинике", duplicateId: duplicate.id });
     const survey = buildNurseSurvey(body);
     survey.createdByDoctorId = doctor.id;
     db.nurseSurveys.push(survey);

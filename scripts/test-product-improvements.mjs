@@ -292,6 +292,11 @@ try {
   await request(doctor, "/api/doctor/account", { method: "PUT", body: { login: "test-doctor", currentAccessKey: doctorPassword, accessKey: doctorNewPassword } });
   const doctorRelogin = session();
   await request(doctorRelogin, "/api/login/doctor", { method: "POST", body: { login: "test-doctor", accessKey: doctorNewPassword } });
+  const namesake = await request(doctorRelogin, "/api/doctor/surveys", {
+    method: "POST", expected: 201, body: { ...patient, phone: "+992900009999" }
+  });
+  assert.equal(namesake.survey.patient.lastName, patient.lastName);
+  assert.notEqual(namesake.survey.patient.phone, createdSurvey.survey.patient.phone);
 
   await request(admin, "/api/admin/account", { method: "PUT", body: { currentPassword: adminPassword, newPassword: adminNewPassword } });
   const adminRelogin = session();
