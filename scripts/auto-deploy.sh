@@ -39,6 +39,8 @@ git -C "$source_dir" archive "$target_sha" | tar -x -C "$staging_dir"
 node --check "$staging_dir/server.js"
 node --check "$staging_dir/public/app.js"
 npm --prefix "$staging_dir" ci --omit=dev
+npm --prefix "$staging_dir" run test:product
+npm --prefix "$staging_dir" run test:ui
 
 install -d -m 700 "$backup_dir" "$state_dir"
 stamp=$(date -u +%Y%m%d-%H%M%S)
@@ -57,6 +59,8 @@ tar \
   -cf - -C "$staging_dir" . | tar -xf - -C "$app_dir"
 chown -R root:root "$app_dir"
 chmod 755 "$app_dir"
+install -d -o eclinic -g eclinic -m 750 "$app_dir/data" "$app_dir/data/backups"
+chown -R eclinic:eclinic "$app_dir/data"
 systemctl restart e-clinic
 
 healthy=false
