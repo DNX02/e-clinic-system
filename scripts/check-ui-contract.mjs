@@ -20,6 +20,8 @@ try {
   const stylesSource = await readFile("public/styles.css", "utf8");
   assert.match(appSource, /<select name="\$\{name\}" required><option value="" selected disabled>/, "questionnaire selects must require an explicit answer");
   assert.match(appSource, /<select name="clinic" required><option value="" selected disabled>/, "nurse clinic must be selected explicitly");
+  assert.match(appSource, /id="surveySearchForm"/, "admin patients must provide a search form");
+  assert.match(appSource, /Фамилия, имя, телефон или дата рождения/, "admin patient search must explain supported fields");
   assert.match(stylesSource, /\.doctor-layout \.nav[\s\S]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/, "mobile doctor navigation must use a wrapped grid");
   assert.match(stylesSource, /\.easy-reading \.doctor-layout \.nav button[\s\S]*font-size: 13px/, "large text mode must keep mobile navigation readable");
   assert.match(stylesSource, /\.doctor-layout \.topbar \{[\s\S]*backdrop-filter: none/, "mobile doctor header must not trap fixed navigation");

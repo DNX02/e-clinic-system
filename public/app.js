@@ -20,6 +20,7 @@ const initialState = () => ({
   doctorPatientPage: 1,
   lastDoctorKey: null,
   surveyClinicFilter: "all",
+  surveySearch: "",
   trainingClinicFilter: ["all"],
   trainingDateFilter: "",
   trainingRegistrationDateFilter: "",
@@ -1107,6 +1108,10 @@ document.addEventListener("click", async (event) => {
     state.auditSearch = "";
     renderAdmin();
   }
+  if (action === "clear-survey-search") {
+    state.surveySearch = "";
+    renderAdmin();
+  }
   if (action === "clear-care-search") {
     state.careSearch = "";
     renderAdmin();
@@ -2084,9 +2089,24 @@ function adminSurveyClinics() {
 }
 
 function filteredAdminSurveys() {
+  const query = String(state.surveySearch || "").trim().toLocaleLowerCase("ru-RU");
   return state.admin.surveys
     .filter((survey) => !isExcludedClinicName(surveyClinic(survey)))
     .filter((survey) => state.surveyClinicFilter === "all" || surveyClinic(survey) === state.surveyClinicFilter)
+    .filter((survey) => {
+      if (!query) return true;
+      const patient = survey.patient || {};
+      return [
+        fullName(patient),
+        patient.lastName,
+        patient.firstName,
+        patient.middleName,
+        patient.birthDate,
+        patient.phone,
+        patient.address,
+        patient.clinic
+      ].some((value) => String(value || "").toLocaleLowerCase("ru-RU").includes(query));
+    })
     .sort((a, b) => {
       const clinicCompare = clinicSortKey(surveyClinic(a)).localeCompare(clinicSortKey(surveyClinic(b)), "ru");
       if (clinicCompare) return clinicCompare;
@@ -2603,6 +2623,14 @@ function renderSurveyTable(surveys) {
     <section class="panel">
       <h2>Анкеты медсестры</h2>
       <details class="compact-admin-form"><summary>Объединить дубликаты пациентов</summary><form id="patientMergeForm" class="form grid two"><label>Карточка-дубликат<select name="sourceId">${patientOptions}</select></label><label>Основная карточка<select name="targetId">${patientOptions}</select></label><button>Объединить</button></form></details>
+      <form id="surveySearchForm" class="audit-search-form">
+        <label for="surveySearch">Поиск пациента</label>
+        <div class="actions">
+          <input id="surveySearch" name="query" type="search" value="${escapeHtml(state.surveySearch)}" placeholder="Фамилия, имя, телефон или дата рождения" autocomplete="off" />
+          <button>Найти</button>
+          ${state.surveySearch ? `<button type="button" class="secondary" data-action="clear-survey-search">Сбросить</button>` : ""}
+        </div>
+      </form>
       <div class="filter-bar">
         <div class="form-row">
           <label>Сортировка пациентов по поликлиникам</label>
@@ -3008,6 +3036,11 @@ function renderQrAdmin() {
 
 function bindAdminForms() {
   bindAdminTrainingFilters();
+  document.querySelector("#surveySearchForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    state.surveySearch = String(new FormData(event.currentTarget).get("query") || "").trim();
+    renderAdmin();
+  });
   document.querySelector("#careSearchForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
     state.careSearch = String(new FormData(event.currentTarget).get("query") || "").trim();
