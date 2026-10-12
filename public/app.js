@@ -3356,7 +3356,7 @@ function renderNurseSurvey() {
         <section class="grid two">
           ${input(t("Фамилия"), "lastName", true)}
           ${input(t("Имя"), "firstName", true)}
-          ${input(t("Отчество"), "middleName", true)}
+          ${input(t("Отчество"), "middleName", false)}
           ${input(t("Дата рождения"), "birthDate", true, "date")}
           ${surveySelect("Пол", "sex", [["female", "Женский"], ["male", "Мужской"]])}
           <div class="form-row"><label>${escapeHtml(t("Возраст"))}</label><input name="age" inputmode="numeric" required readonly /></div>
@@ -4882,7 +4882,7 @@ function doctorPatientSurveyForm() {
       <section class="grid two">
         ${input(t("Фамилия"), "lastName", true)}
         ${input(t("Имя"), "firstName", true)}
-        ${input(t("Отчество"), "middleName", true)}
+        ${input(t("Отчество"), "middleName", false)}
         ${input(t("Дата рождения"), "birthDate", true, "date")}
         ${doctorSelect("Пол", "sex", [["female", "Женский"], ["male", "Мужской"]])}
         <div class="form-row"><label>${escapeHtml(t("Возраст"))}</label><input name="age" inputmode="numeric" required readonly /></div>

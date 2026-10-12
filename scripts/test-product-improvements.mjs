@@ -246,7 +246,8 @@ try {
   await request(headNurse, "/api/admin/backup", { method: "POST", expected: 403, body: {} });
 
   const referral = await request(nurse, '/api/nurse-surveys', { method: 'POST', expected: 201,
-    body: { ...measuredPatient, lastName: 'ОжидаетВрача', systolic: 160 } });
+    body: { ...measuredPatient, lastName: 'ОжидаетВрача', middleName: '', systolic: 160 } });
+  assert.equal(referral.survey.patient.middleName, '');
   const otherClinic = await request(nurse, '/api/nurse-surveys', { method: 'POST', expected: 201,
     body: { ...measuredPatient, lastName: 'ДругаяПоликлиника', clinic: 'Поликлиника №2', systolic: 160 } });
   const headNurseCorrection = await request(headNurse, `/api/admin/patients/${createdSurvey.survey.id}/answers`, {
@@ -307,9 +308,10 @@ try {
   const doctorRelogin = session();
   await request(doctorRelogin, "/api/login/doctor", { method: "POST", body: { login: "test-doctor", accessKey: doctorNewPassword } });
   const namesake = await request(doctorRelogin, "/api/doctor/surveys", {
-    method: "POST", expected: 201, body: { ...patient, phone: "+992900009999" }
+    method: "POST", expected: 201, body: { ...patient, middleName: "", phone: "+992900009999" }
   });
   assert.equal(namesake.survey.patient.lastName, patient.lastName);
+  assert.equal(namesake.survey.patient.middleName, "");
   assert.notEqual(namesake.survey.patient.phone, createdSurvey.survey.patient.phone);
 
   await request(admin, "/api/admin/account", { method: "PUT", body: { currentPassword: adminPassword, newPassword: adminNewPassword } });

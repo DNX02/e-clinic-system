@@ -26,6 +26,7 @@ try {
   assert.match(appSource, /Лекарства и анализы показаны ниже/, "doctor must see where the saved prescription is displayed");
   assert.match(appSource, /Контроль старших медсестёр/, "owner must have a head nurse activity screen");
   assert.match(appSource, /state\.me\?\.role === "owner"/, "head nurse activity tab must be limited to the owner UI");
+  assert.equal((appSource.match(/input\(t\("Отчество"\), "middleName", false\)/g) || []).length, 2, "patronymic must be optional in nurse and doctor questionnaires");
   assert.match(stylesSource, /\.doctor-layout \.nav[\s\S]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/, "mobile doctor navigation must use a wrapped grid");
   assert.match(stylesSource, /\.easy-reading \.doctor-layout \.nav button[\s\S]*font-size: 13px/, "large text mode must keep mobile navigation readable");
   assert.match(stylesSource, /\.doctor-layout \.topbar \{[\s\S]*backdrop-filter: none/, "mobile doctor header must not trap fixed navigation");
