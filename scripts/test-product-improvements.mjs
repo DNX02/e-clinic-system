@@ -269,7 +269,14 @@ try {
   assert.ok(edited.survey.changeHistory.some(event => event.changes.some(change => change.field === 'address' && change.after === 'Новый тестовый адрес')));
   const labVisit = await request(doctor, '/api/doctor/visits', { method: 'POST', expected: 201,
     body: { surveyId: referral.survey.id, weight: 81, height: 180, systolic: 130, diastolic: 80,
-      laboratoryTests: [{ test: 'HbA1c', status: 'ordered', orderedDate: '2026-01-01' }] } });
+      laboratoryTests: [{ test: 'HbA1c', status: 'ordered', orderedDate: '2026-01-01' }],
+      diabetesDrugs: ['Метформин 500 мг 1 раз в день'], lifestyleRecommendations: ['physicalActivity'] } });
+  const workspaceAfterPrescription = await request(doctor, '/api/doctor/workspace');
+  const persistedPrescription = workspaceAfterPrescription.visits.find(item => item.id === labVisit.visit.id);
+  assert.deepEqual(persistedPrescription.diabetesDrugs, ['Метформин 500 мг 1 раз в день']);
+  assert.equal(persistedPrescription.laboratoryTests[0].test, 'HbA1c');
+  assert.equal(persistedPrescription.laboratoryTests[0].status, 'ordered');
+  assert.equal(persistedPrescription.lifestyleRecommendations.physicalActivity, true);
   let care = (await request(admin, '/api/admin/dashboard?tab=control')).careControl;
   assert.equal(care.registry.find(row => row.id === referral.survey.id).checklist.hba1c, false);
   assert.ok(!care.waitingPatients.some(row => row.id === referral.survey.id));

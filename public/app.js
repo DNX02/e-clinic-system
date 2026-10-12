@@ -19,6 +19,8 @@ const initialState = () => ({
   doctorTaskFilter: "open",
   doctorPatientPage: 1,
   lastDoctorKey: null,
+  lastSavedDoctorVisitId: "",
+  doctorVisitNotice: "",
   surveyClinicFilter: "all",
   surveySearch: "",
   trainingClinicFilter: ["all"],
@@ -289,6 +291,7 @@ const TAJIK_TEXT = {
   "Физическая активность": "Фаъолияти ҷисмонӣ",
   "Сохранить осмотр": "Нигоҳ доштани муоина",
   "Осмотр сохранён и отправлен администратору.": "Муоина нигоҳ дошта шуд ва ба маъмур фиристода шуд.",
+  "Осмотр сохранён. Лекарства и анализы показаны ниже в разделе «Предыдущие осмотры».": "Муоина нигоҳ дошта шуд. Доруҳо ва таҳлилҳо дар поён, дар бахши «Муоинаҳои қаблӣ» нишон дода шудаанд.",
   "Меньше сидеть: чаще вставать, ходить, использовать лестницу, постепенно увеличивать нагрузку.": "Камтар нишастан: бештар хестан, роҳ рафтан, аз зина истифода бурдан ва тадриҷан зиёд кардани сарборӣ.",
   "При осложнениях диабета, сердечно-сосудистых симптомах или высоком риске нагрузку подбирать индивидуально.": "Ҳангоми оризаҳои диабет, нишонаҳои дилу раг ё хавфи баланд, сарборӣ бояд инфиродӣ интихоб шавад.",
   "Основа питания: овощи, фрукты, бобовые, цельные злаки и нежирные источники белка.": "Асоси ғизо: сабзавот, мева, лӯбиёгиҳо, ғалладонаҳои бутун ва манбаъҳои камравғани сафеда.",
@@ -1285,6 +1288,8 @@ document.addEventListener("click", async (event) => {
   }
   if (action === "select-survey") {
     state.selectedSurvey = state.doctor.surveys.find((item) => item.id === event.target.dataset.id);
+    state.lastSavedDoctorVisitId = "";
+    state.doctorVisitNotice = "";
     api("/api/doctor/survey-view", { method: "POST", body: JSON.stringify({ surveyId: event.target.dataset.id }) }).catch(() => {});
     state.doctorMode = "visit";
     state.doctorSection = "patients";
@@ -4410,7 +4415,7 @@ function doctorVisitDetails(visit) {
   const hypertensionDrugs = (visit.hypertensionDrugs || []).join("; ");
   const drugs = [diabetesDrugs, hypertensionDrugs].filter(Boolean).join("; ") || "-";
   return html`
-    <details class="answer-details visit-details">
+    <details class="answer-details visit-details"${visit.id === state.lastSavedDoctorVisitId ? " open" : ""}>
       <summary>${new Date(visit.createdAt).toLocaleString("ru-RU")} - ${escapeHtml(t("Диагноз"))}: ${visit.diagnosis ? escapeHtml(t(visit.diagnosis)) : "-"}</summary>
       <div class="grid two">
         <div>
@@ -4900,6 +4905,7 @@ function doctorVisitForm(survey) {
   return html`
     <form class="form" id="visitForm">
       <h2>${escapeHtml(fullName(survey.patient))}</h2>
+      ${state.doctorVisitNotice ? `<div class="notice ok" id="doctorVisitSavedNotice">${escapeHtml(translateDoctorText(state.doctorVisitNotice))}</div>` : ""}
       ${doctorSurveySummary(survey)}
       ${doctorTrendChart(survey)}
       ${doctorVisitHistory(survey.id)}
@@ -5083,6 +5089,8 @@ function bindDoctorVisit() {
   }));
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const submitButton = form.querySelector('button:not([type="button"])');
+    if (submitButton) submitButton.disabled = true;
     const data = Object.fromEntries(new FormData(form));
     data.referrals = new FormData(form).getAll("referrals");
     data.diabetesDrugs = new FormData(form).getAll("diabetesDrugs");
@@ -5093,13 +5101,16 @@ function bindDoctorVisit() {
       const result = await api("/api/doctor/visits", { method: "POST", body: JSON.stringify(data) });
       state.doctor.visits = [result.visit, ...(state.doctor.visits || [])];
       if (result.task) state.doctor.tasks = [...(state.doctor.tasks || []), result.task];
-      document.querySelector("#visitResult").innerHTML = `<div class="notice ok">${escapeHtml(translateDoctorText("Осмотр сохранён и отправлен администратору."))}</div>`;
       form.reset();
-      updateLifestyleRecommendationPanels();
+      state.lastSavedDoctorVisitId = result.visit.id;
+      state.doctorVisitNotice = "Осмотр сохранён. Лекарства и анализы показаны ниже в разделе «Предыдущие осмотры».";
+      renderDoctor();
+      setTimeout(() => document.querySelector("#doctorVisitSavedNotice")?.scrollIntoView({ block: "center", behavior: "smooth" }), 0);
       updateOfflineDoctorStatus();
     } catch (error) {
       if (!shouldQueueOffline(error)) {
         document.querySelector("#visitResult").innerHTML = `<div class="notice danger">${escapeHtml(error.message)}</div>`;
+        if (submitButton) submitButton.disabled = false;
         return;
       }
       saveOfflineDoctorAction({ type: "visit", data });

@@ -22,6 +22,8 @@ try {
   assert.match(appSource, /<select name="clinic" required><option value="" selected disabled>/, "nurse clinic must be selected explicitly");
   assert.match(appSource, /id="surveySearchForm"/, "admin patients must provide a search form");
   assert.match(appSource, /Фамилия, имя, телефон или дата рождения/, "admin patient search must explain supported fields");
+  assert.match(appSource, /lastSavedDoctorVisitId/, "saved doctor visit must be highlighted immediately");
+  assert.match(appSource, /Лекарства и анализы показаны ниже/, "doctor must see where the saved prescription is displayed");
   assert.match(stylesSource, /\.doctor-layout \.nav[\s\S]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/, "mobile doctor navigation must use a wrapped grid");
   assert.match(stylesSource, /\.easy-reading \.doctor-layout \.nav button[\s\S]*font-size: 13px/, "large text mode must keep mobile navigation readable");
   assert.match(stylesSource, /\.doctor-layout \.topbar \{[\s\S]*backdrop-filter: none/, "mobile doctor header must not trap fixed navigation");
