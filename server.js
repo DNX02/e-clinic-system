@@ -1452,6 +1452,22 @@ function appendActivity(db, event) {
   if (db.activityEvents.length > 5000) db.activityEvents = db.activityEvents.slice(-5000);
 }
 
+const surveyCorrectionLabels = {
+  activity: "Физическая активность",
+  vegetables: "Овощи и фрукты",
+  bpMeds: "Препараты от давления",
+  highGlucose: "Ранее повышенный сахар",
+  familyDiabetes: "Диабет у родственников",
+  smoker: "Курение",
+  systolic: "Систолическое давление",
+  diastolic: "Диастолическое давление"
+};
+
+function correctionActivityDetails(changes = []) {
+  const fields = changes.map((change) => surveyCorrectionLabels[change.field] || change.field).filter(Boolean);
+  return fields.length ? `Исправлены поля анкеты: ${fields.join(", ")}` : "Исправлены ответы анкеты";
+}
+
 function patientNameFromSurvey(survey) {
   return [survey?.patient?.lastName, survey?.patient?.firstName, survey?.patient?.middleName].filter(Boolean).join(" ");
 }
@@ -1727,6 +1743,15 @@ async function handleApi(req, res, url) {
       return send(res, 401, { error: "Неверный логин или пароль" });
     }
     clearRateLimit(rateLimitKey);
+    appendActivity(db, {
+      type: "admin_login",
+      actorRole: admin.role || (db.admins.length === 1 ? "owner" : "admin"),
+      actorId: admin.id,
+      actorName: admin.name || admin.username,
+      clinic: admin.clinic || "",
+      details: "Вход в аккаунт"
+    });
+    await writeDb(db);
     const sid = await createSession("admin", admin.id);
     securityEvent("login_succeeded", req, { accountType: "admin", actorId: admin.id });
     return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(req, sid) });
@@ -1766,6 +1791,7 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/admin/dashboard") {
     if (!requireAdmin(session)) return send(res, 403, { error: "Нет доступа" });
     const tab = url.searchParams.get("tab") || "stats";
+    if (tab === "headNurses" && !canManageAdmins(session, db)) return send(res, 403, { error: "Раздел доступен только главному администратору" });
     const viewDb = scopedDbForAdmin(db, session);
     const diabetesDrugCounts = countSelected(viewDb.doctorVisits.flatMap((visit) => visit.diabetesDrugs || []));
     const hypertensionDrugCounts = countSelected(viewDb.doctorVisits.flatMap((visit) => visit.hypertensionDrugs || []));
@@ -1808,6 +1834,25 @@ async function handleApi(req, res, url) {
       dashboard.clinicTargets = db.settings?.clinicTargets || {};
     }
     if (tab === "audit") dashboard.activityEvents = [...(viewDb.activityEvents || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 1000);
+    if (tab === "headNurses") {
+      const accounts = db.admins.filter((admin) => admin.role === "head_nurse");
+      const accountIds = new Set(accounts.map((admin) => admin.id));
+      const events = (db.activityEvents || [])
+        .filter((event) => accountIds.has(event.actorId))
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      dashboard.headNurseActivity = {
+        accounts: accounts.map((admin) => {
+          const accountEvents = events.filter((event) => event.actorId === admin.id);
+          return {
+            ...publicAdmin(admin),
+            lastLoginAt: accountEvents.find((event) => event.type === "admin_login")?.createdAt || null,
+            lastActivityAt: accountEvents[0]?.createdAt || null,
+            changesCount: accountEvents.filter((event) => event.type !== "admin_login").length
+          };
+        }),
+        events: events.slice(0, 2000)
+      };
+    }
     if (tab === "access") dashboard.admins = (canManageAdmins(session, db) ? db.admins : viewDb.admins).map(publicAdmin);
     return send(res, 200, dashboard);
   }
@@ -2003,7 +2048,7 @@ async function handleApi(req, res, url) {
       survey.updatedAt = new Date().toISOString();
       survey.changeHistory ||= [];
       survey.changeHistory.push({ id: crypto.randomUUID(), createdAt: survey.updatedAt, actorId: session.userId, actorName: adminAccount(session, db)?.name || '', changes });
-      appendActivity(db, { type: 'survey_answers_corrected', actorRole: 'admin', actorId: session.userId, actorName: adminAccount(session, db)?.name || '', surveyId: id, clinic: survey.patient.clinic, patientName: patientNameFromSurvey(survey), details: 'Исправлены ответы анкеты, риск пересчитан' });
+      appendActivity(db, { type: 'survey_answers_corrected', actorRole: adminRole(session, db), actorId: session.userId, actorName: adminAccount(session, db)?.name || '', surveyId: id, clinic: survey.patient.clinic, patientName: patientNameFromSurvey(survey), details: correctionActivityDetails(changes) });
       await writeDb(db);
     }
     return send(res, 200, { survey });

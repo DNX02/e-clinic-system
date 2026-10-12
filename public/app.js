@@ -7,6 +7,7 @@ const initialState = () => ({
   adminLoadError: "",
   auditSurvey: null,
   auditSearch: "",
+  headNurseAuditSearch: "",
   careSearch: "",
   doctor: null,
   tab: "stats",
@@ -1111,6 +1112,10 @@ document.addEventListener("click", async (event) => {
     state.auditSearch = "";
     renderAdmin();
   }
+  if (action === "clear-head-nurse-audit-search") {
+    state.headNurseAuditSearch = "";
+    renderAdmin();
+  }
   if (action === "clear-survey-search") {
     state.surveySearch = "";
     renderAdmin();
@@ -2055,8 +2060,9 @@ function renderAdmin() {
   const visibleTabs = state.me?.role === "head_nurse"
     ? ["stats", "center", "surveys", "operations", "audit"]
     : ["stats", "center", "control", "doctors", "training", "nurseTraining", "surveys", "visits", "operations", "audit", "access", "qr"];
+  if (state.me?.role === "owner") visibleTabs.splice(visibleTabs.indexOf("access"), 0, "headNurses");
   const nav = visibleTabs.map((tab) => {
-    const names = { stats: "Статистика", center: "Диабет-контроль 2.0", control: "Контроль диабета", doctors: "Врачи", training: "Обучение №4", nurseTraining: "Медсестры №5", surveys: "Пациенты", visits: "Назначения", operations: "План и сообщения", audit: "Журнал", access: "Доступы", qr: "QR" };
+    const names = { stats: "Статистика", center: "Диабет-контроль 2.0", control: "Контроль диабета", doctors: "Врачи", training: "Обучение №4", nurseTraining: "Медсестры №5", surveys: "Пациенты", visits: "Назначения", operations: "План и сообщения", audit: "Журнал", headNurses: "Контроль старших", access: "Доступы", qr: "QR" };
     return `<button data-action="admin-tab" data-tab="${tab}" class="${state.tab === tab ? "active" : ""}">${names[tab]}</button>`;
   }).join("");
   setPage(html`
@@ -2081,6 +2087,7 @@ function adminTab() {
   if (state.tab === "visits") return renderVisitsAdmin();
   if (state.tab === "operations") return renderOperationsAdmin();
   if (state.tab === "audit") return renderAuditAdmin();
+  if (state.tab === "headNurses") return renderHeadNurseActivityAdmin();
   if (state.tab === "access") return renderAccessAdmin();
   if (state.tab === "qr") return renderQrAdmin();
   return renderStatsAdmin();
@@ -2740,6 +2747,8 @@ function renderAuditAdmin() {
     admin_created: "Создан администратор",
     admin_updated: "Изменён администратор",
     admin_deleted: "Удалён администратор"
+    , admin_login: "Вход в аккаунт"
+    , survey_answers_corrected: "Исправлена анкета"
   };
   const query = String(state.auditSearch || "").trim().toLocaleLowerCase("ru-RU");
   const events = (state.admin.activityEvents || []).filter((event) => {
@@ -2768,6 +2777,42 @@ function renderAuditAdmin() {
       <div class="muted">Показано записей: ${events.length} из ${state.admin.activityEvents?.length || 0}</div>
     </form>
     <div class="table-wrap"><table><thead><tr><th>Дата</th><th>Пользователь</th><th>Действие</th><th>Пациент</th><th>Поликлиника</th><th>Описание</th></tr></thead><tbody>${rows || `<tr><td colspan="6">По вашему запросу записи не найдены</td></tr>`}</tbody></table></div>${renderAuditSurveyModal()}</section>`;
+}
+
+function renderHeadNurseActivityAdmin() {
+  const activity = state.admin.headNurseActivity || { accounts: [], events: [] };
+  const query = String(state.headNurseAuditSearch || "").trim().toLocaleLowerCase("ru-RU");
+  const labels = { admin_login: "Вход в аккаунт", survey_answers_corrected: "Исправлена анкета" };
+  const events = activity.events.filter((event) => !query || [event.actorName, event.clinic, event.patientName, event.details, labels[event.type] || event.type]
+    .some((value) => String(value || "").toLocaleLowerCase("ru-RU").includes(query)));
+  const cards = activity.accounts.map((account) => html`<article class="stat-card">
+    <strong>${escapeHtml(account.name)}</strong>
+    <span>${escapeHtml(account.clinic || "Поликлиника не указана")}</span>
+    <span class="muted">Логин: ${escapeHtml(account.username)}</span>
+    <span class="muted">Последний вход: ${account.lastLoginAt ? new Date(account.lastLoginAt).toLocaleString("ru-RU") : "пока не зафиксирован"}</span>
+    <span class="muted">Действий: ${Number(account.changesCount || 0)}</span>
+  </article>`).join("");
+  const rows = events.map((event) => html`<tr>
+    <td>${new Date(event.createdAt).toLocaleString("ru-RU")}</td>
+    <td>${escapeHtml(event.actorName || "-")}</td>
+    <td>${escapeHtml(event.clinic || "-")}</td>
+    <td>${escapeHtml(labels[event.type] || event.type)}</td>
+    <td>${event.patientName && event.surveyId
+      ? `<button type="button" class="audit-patient-link" data-action="open-audit-survey" data-id="${escapeHtml(event.surveyId)}">${escapeHtml(event.patientName)}</button>`
+      : escapeHtml(event.patientName || "-")}</td>
+    <td>${escapeHtml(event.details || "-")}</td>
+  </tr>`).join("");
+  return html`<section class="panel">
+    <div class="section-title"><div><h2>Контроль старших медсестёр</h2><p class="muted">Входы в аккаунты и изменения, выполненные старшими медсёстрами. Пароли и медицинские значения здесь не сохраняются.</p></div></div>
+    <div class="stats-grid">${cards || `<div class="notice">Аккаунты старших медсестёр пока не созданы.</div>`}</div>
+    <form id="headNurseAuditSearchForm" class="audit-search-form">
+      <label for="headNurseAuditSearch">Поиск по сотруднику, поликлинике или пациенту</label>
+      <div class="actions"><input id="headNurseAuditSearch" name="query" type="search" value="${escapeHtml(state.headNurseAuditSearch)}" placeholder="ФИО, поликлиника, пациент или действие" autocomplete="off" /><button>Найти</button>${state.headNurseAuditSearch ? `<button type="button" class="secondary" data-action="clear-head-nurse-audit-search">Сбросить</button>` : ""}</div>
+      <div class="muted">Показано событий: ${events.length} из ${activity.events.length}</div>
+    </form>
+    <div class="table-wrap"><table><thead><tr><th>Дата</th><th>Старшая медсестра</th><th>Поликлиника</th><th>Действие</th><th>Пациент</th><th>Описание</th></tr></thead><tbody>${rows || `<tr><td colspan="6">Событий пока нет</td></tr>`}</tbody></table></div>
+    ${renderAuditSurveyModal()}
+  </section>`;
 }
 
 function parseImportCsv(text) {
@@ -3065,6 +3110,11 @@ function bindAdminForms() {
   document.querySelector("#auditSearchForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
     state.auditSearch = String(new FormData(event.currentTarget).get("query") || "").trim();
+    renderAdmin();
+  });
+  document.querySelector("#headNurseAuditSearchForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    state.headNurseAuditSearch = String(new FormData(event.currentTarget).get("query") || "").trim();
     renderAdmin();
   });
   document.querySelectorAll(".patient-edit-form").forEach((patientForm) => patientForm.addEventListener("submit", async (event) => {

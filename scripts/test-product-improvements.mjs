@@ -259,6 +259,13 @@ try {
   const headNurseAudit = await request(headNurse, '/api/admin/dashboard?tab=audit');
   assert.equal(headNurseAudit.canCorrectSurveys, true);
   assert.ok(!headNurseAudit.activityEvents.some((event) => event.surveyId === otherClinic.survey.id), 'Head nurse journal must exclude patients from other clinics');
+  await request(headNurse, '/api/admin/dashboard?tab=headNurses', { expected: 403 });
+  const headNurseControlAudit = await request(admin, '/api/admin/dashboard?tab=headNurses');
+  assert.equal(headNurseControlAudit.headNurseActivity.accounts.length, 1);
+  assert.ok(headNurseControlAudit.headNurseActivity.events.some((event) => event.type === 'admin_login' && event.actorName === 'Старшая медсестра №1'));
+  const correctionEvent = headNurseControlAudit.headNurseActivity.events.find((event) => event.type === 'survey_answers_corrected');
+  assert.equal(correctionEvent.actorRole, 'head_nurse');
+  assert.match(correctionEvent.details, /Физическая активность|Овощи и фрукты|Препараты от давления/);
   const waiting = await request(doctor, '/api/doctor/waiting-patients');
   assert.ok(waiting.patients.some(row => row.id === referral.survey.id));
   assert.ok(!waiting.patients.some(row => row.id === otherClinic.survey.id));
