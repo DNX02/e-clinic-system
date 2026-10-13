@@ -1007,7 +1007,9 @@ function scopedDbForAdmin(db, session) {
     patientTasks: (db.patientTasks || []).filter((item) => surveyIds.has(item.surveyId)),
     appointments: (db.appointments || []).filter((item) => surveyIds.has(item.surveyId)),
     reminderQueue: (db.reminderQueue || []).filter((item) => !item.surveyId || surveyIds.has(item.surveyId)),
-    activityEvents: (db.activityEvents || []).filter((event) => clinicKey(event.clinic) === scope || (event.surveyId && surveyIds.has(event.surveyId))),
+    activityEvents: (db.activityEvents || []).filter((event) =>
+      event.actorId === session.userId && event.type !== "admin_login" && Boolean(event.surveyId) &&
+      (clinicKey(event.clinic) === scope || surveyIds.has(event.surveyId))),
     trainingParticipants,
     trainingAttempts: (db.trainingAttempts || []).filter((item) => trainingIds.has(item.participantId)),
     nurseTrainingParticipants,

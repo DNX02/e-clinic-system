@@ -265,6 +265,10 @@ try {
   });
   const headNurseAudit = await request(headNurse, '/api/admin/dashboard?tab=audit');
   assert.equal(headNurseAudit.canCorrectSurveys, true);
+  const ownCorrection = headNurseAudit.activityEvents.find(event => event.type === 'survey_answers_corrected');
+  assert.ok(ownCorrection, 'Head nurse must see her own corrections');
+  assert.ok(headNurseAudit.activityEvents.every(event => event.actorId === ownCorrection.actorId && event.surveyId), 'Head nurse journal must contain only her own patient actions');
+  assert.ok(!headNurseAudit.activityEvents.some(event => event.type === 'admin_login'), 'Administrative logins must remain private');
   assert.ok(!headNurseAudit.activityEvents.some((event) => event.surveyId === otherClinic.survey.id), 'Head nurse journal must exclude patients from other clinics');
   await request(headNurse, '/api/admin/dashboard?tab=headNurses', { expected: 403 });
   const headNurseControlAudit = await request(admin, '/api/admin/dashboard?tab=headNurses');
