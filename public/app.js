@@ -3177,7 +3177,7 @@ function bindAdminForms() {
       try {
         const result = await api(`/api/admin/doctors/${doctor.id}`, {
           method: "PUT",
-          body: JSON.stringify({ ...doctor, accessKey })
+          body: JSON.stringify({ accessKey })
         });
         state.admin.doctors = state.admin.doctors.map((item) => item.id === doctor.id ? result.doctor : item);
         state.lastDoctorKey = { doctorId: result.doctor.id, fullName: result.doctor.fullName, accessKey };

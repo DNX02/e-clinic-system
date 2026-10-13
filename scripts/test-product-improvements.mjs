@@ -57,6 +57,12 @@ try {
     body: { fullName: "Тестовый Врач", login: "test-doctor", accessKey: doctorPassword, passport: "TEST", clinic: "Поликлиника №1", specialty: "Терапевт", experienceYears: 5 }
   });
   assert.equal(createdDoctor.doctor.login, "test-doctor");
+  const keyOnlyUpdate = await request(admin, `/api/admin/doctors/${createdDoctor.doctor.id}`, {
+    method: "PUT", body: { accessKey: doctorPassword }
+  });
+  assert.equal(keyOnlyUpdate.doctor.login, "test-doctor");
+  assert.equal(keyOnlyUpdate.doctor.fullName, "Тестовый Врач");
+  assert.equal(keyOnlyUpdate.doctor.clinic, "Поликлиника №1");
   await request(admin, "/api/admin/doctors", {
     method: "POST", expected: 400,
     body: { fullName: "Исключенный Врач", login: "excluded-doctor", accessKey: doctorPassword, passport: "TEST", clinic: "Поликлиника №6", specialty: "Терапевт", experienceYears: 5 }

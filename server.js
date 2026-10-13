@@ -2334,14 +2334,15 @@ async function handleApi(req, res, url) {
     const doctor = db.doctors.find((item) => item.id === id);
     if (!doctor) return send(res, 404, { error: "Врач не найден" });
     const body = await parseBody(req);
-    if (db.doctors.some((item) => item.id !== doctor.id && item.login === String(body.login || "").trim())) return send(res, 409, { error: "Такой логин уже используется" });
+    const login = body.login === undefined ? doctor.login : String(body.login || "").trim();
+    if (login !== doctor.login && db.doctors.some((item) => item.id !== doctor.id && item.login === login)) return send(res, 409, { error: "Такой логин уже используется" });
     Object.assign(doctor, {
-      fullName: body.fullName,
-      login: body.login,
-      passport: body.passport,
-      clinic: allowedClinic(body.clinic),
-      specialty: body.specialty,
-      experienceYears: Number(body.experienceYears || 0)
+      fullName: body.fullName ?? doctor.fullName,
+      login,
+      passport: body.passport ?? doctor.passport,
+      clinic: body.clinic === undefined ? doctor.clinic : allowedClinic(body.clinic),
+      specialty: body.specialty ?? doctor.specialty,
+      experienceYears: body.experienceYears === undefined ? doctor.experienceYears : Number(body.experienceYears || 0)
     });
     if (body.accessKey) {
       doctor.accessKeyHash = hashPassword(validateNewPassword(body.accessKey, "Новый пароль врача"));
