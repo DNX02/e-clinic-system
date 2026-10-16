@@ -1791,9 +1791,11 @@ async function handleApi(req, res, url) {
     return send(res, 200, { user: { type: "doctor", id: doctor.id, name: doctor.fullName, specialty: doctor.specialty, clinic: doctor.clinic } });
   }
 
-  if (req.method === "GET" && url.pathname === "/api/admin/dashboard") {
+  if (["GET", "POST"].includes(req.method) && url.pathname === "/api/admin/dashboard") {
     if (!requireAdmin(session)) return send(res, 403, { error: "Нет доступа" });
-    const tab = url.searchParams.get("tab") || "stats";
+    const requestBody = req.method === "POST" ? await parseBody(req) : {};
+    const tab = url.searchParams.get("tab") || requestBody.tab || "stats";
+    if (req.method === "POST" && tab !== "audit") return send(res, 405, { error: "POST доступен только для поиска в журнале" });
     if (tab === "headNurses" && !canManageAdmins(session, db)) return send(res, 403, { error: "Раздел доступен только главному администратору" });
     const viewDb = scopedDbForAdmin(db, session);
     const diabetesDrugCounts = countSelected(viewDb.doctorVisits.flatMap((visit) => visit.diabetesDrugs || []));
@@ -1836,7 +1838,30 @@ async function handleApi(req, res, url) {
       dashboard.reminderQueue = viewDb.reminderQueue || [];
       dashboard.clinicTargets = db.settings?.clinicTargets || {};
     }
-    if (tab === "audit") dashboard.activityEvents = [...(viewDb.activityEvents || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 1000);
+    if (tab === "audit") {
+      const pageSize = 50;
+      const requestedPage = Math.max(1, Number.parseInt(url.searchParams.get("page") || "1", 10) || 1);
+      const selectedClinic = String(url.searchParams.get("clinic") || "all").trim();
+      const searchQuery = String(requestBody.search || "").trim().toLocaleLowerCase("ru-RU");
+      const sourceEvents = viewDb.activityEvents || [];
+      const clinics = [...new Set(sourceEvents.map((event) => String(event.clinic || "").trim()).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, "ru-RU", { numeric: true }));
+      const filteredEvents = sourceEvents.filter((event) => {
+        if (selectedClinic !== "all" && String(event.clinic || "").trim() !== selectedClinic) return false;
+        if (!searchQuery) return true;
+        return [event.patientName, event.actorName, event.clinic, event.details, event.type]
+          .some((value) => String(value || "").toLocaleLowerCase("ru-RU").includes(searchQuery));
+      }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      const pageCount = Math.max(1, Math.ceil(filteredEvents.length / pageSize));
+      const page = Math.min(requestedPage, pageCount);
+      const start = (page - 1) * pageSize;
+      dashboard.activityEvents = filteredEvents.slice(start, start + pageSize);
+      dashboard.auditClinics = clinics;
+      dashboard.auditTotal = filteredEvents.length;
+      dashboard.auditPage = page;
+      dashboard.auditPageCount = pageCount;
+      dashboard.auditPageSize = pageSize;
+    }
     if (tab === "headNurses") {
       const accounts = db.admins.filter((admin) => admin.role === "head_nurse");
       const accountIds = new Set(accounts.map((admin) => admin.id));

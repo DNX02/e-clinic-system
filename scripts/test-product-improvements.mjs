@@ -113,9 +113,21 @@ try {
   assert.equal(dashboard.surveys, undefined, "Initial admin dashboard must not include the large patient collection");
   assert.equal(dashboard.trainingAttempts, undefined, "Initial admin dashboard must load training details lazily");
   const auditDashboard = await request(admin, "/api/admin/dashboard?tab=audit");
+  assert.equal(auditDashboard.auditPageSize, 50, "Admin activity journal must use 50-event pages");
+  assert.ok(auditDashboard.activityEvents.length <= 50, "Audit API must return no more than one page");
+  assert.ok(auditDashboard.auditTotal >= auditDashboard.activityEvents.length);
   assert.ok(auditDashboard.activityEvents.some((event) => event.type === "patient_task_updated"));
   const nurseSurveyEvent = auditDashboard.activityEvents.find((event) => event.type === "doctor_patient_created");
   assert.equal(nurseSurveyEvent.surveyId, createdSurvey.survey.id);
+  const clinicAudit = await request(admin, `/api/admin/dashboard?tab=audit&clinic=${encodeURIComponent("Поликлиника №1")}`, {
+    method: "POST", body: { search: "" }
+  });
+  assert.ok(clinicAudit.activityEvents.length > 0);
+  assert.ok(clinicAudit.activityEvents.every((event) => event.clinic === "Поликлиника №1"), "Clinic filter must be applied server-side");
+  const searchedAudit = await request(admin, "/api/admin/dashboard?tab=audit", {
+    method: "POST", body: { search: patient.lastName.toLocaleLowerCase("ru-RU") }
+  });
+  assert.ok(searchedAudit.activityEvents.some((event) => event.patientName?.includes(patient.lastName)), "Audit search must match patient names");
   const adminPatient = await request(admin, `/api/admin/patients/${createdSurvey.survey.id}`);
   assert.equal(adminPatient.survey.id, createdSurvey.survey.id);
   assert.equal(adminPatient.survey.patient.lastName, patient.lastName);

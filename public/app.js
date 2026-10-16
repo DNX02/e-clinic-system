@@ -7,6 +7,8 @@ const initialState = () => ({
   adminLoadError: "",
   auditSurvey: null,
   auditSearch: "",
+  auditClinic: "all",
+  auditPage: 1,
   headNurseAuditSearch: "",
   careSearch: "",
   doctor: null,
@@ -1090,6 +1092,7 @@ document.addEventListener("click", async (event) => {
   if (action === "admin-tab") {
     state.auditSurvey = null;
     state.tab = event.target.closest("[data-action]").dataset.tab;
+    if (state.tab === "audit") state.auditPage = 1;
     state.trainingAdminPage = 1;
     state.nurseTrainingAdminPage = 1;
     await loadAdmin();
@@ -1110,7 +1113,15 @@ document.addEventListener("click", async (event) => {
   if (action === "print-patient-card") window.print();
   if (action === "clear-audit-search") {
     state.auditSearch = "";
-    renderAdmin();
+    state.auditClinic = "all";
+    state.auditPage = 1;
+    await loadAdmin();
+  }
+  if (action === "audit-page") {
+    const direction = Number(event.target.closest("[data-action]").dataset.direction || 0);
+    const maxPage = Number(state.admin?.auditPageCount || 1);
+    state.auditPage = Math.min(maxPage, Math.max(1, Number(state.admin?.auditPage || state.auditPage || 1) + direction));
+    await loadAdmin();
   }
   if (action === "clear-head-nurse-audit-search") {
     state.headNurseAuditSearch = "";
@@ -2046,7 +2057,14 @@ async function loadAdmin() {
   state.adminLoadError = "";
   renderAdmin();
   try {
-    const dashboard = await api(`/api/admin/dashboard?tab=${encodeURIComponent(state.tab || "stats")}`);
+    const params = new URLSearchParams({ tab: state.tab || "stats" });
+    if (state.tab === "audit") {
+      params.set("page", String(state.auditPage || 1));
+      params.set("clinic", state.auditClinic || "all");
+    }
+    const dashboard = state.tab === "audit"
+      ? await api(`/api/admin/dashboard?${params}`, { method: "POST", body: JSON.stringify({ search: state.auditSearch || "" }) })
+      : await api(`/api/admin/dashboard?${params}`);
     state.admin = { ...(state.admin || {}), ...dashboard };
   } catch (error) {
     state.adminLoadError = error.message || "Не удалось загрузить данные";
@@ -2750,12 +2768,10 @@ function renderAuditAdmin() {
     , admin_login: "Вход в аккаунт"
     , survey_answers_corrected: "Исправлена анкета"
   };
-  const query = String(state.auditSearch || "").trim().toLocaleLowerCase("ru-RU");
-  const events = (state.admin.activityEvents || []).filter((event) => {
-    if (!query) return true;
-    return [event.patientName, event.actorName, event.clinic, event.details, labels[event.type] || event.type]
-      .some((value) => String(value || "").toLocaleLowerCase("ru-RU").includes(query));
-  });
+  const events = state.admin.activityEvents || [];
+  const clinics = state.admin.auditClinics || [];
+  const page = Number(state.admin.auditPage || 1);
+  const pageCount = Number(state.admin.auditPageCount || 1);
   const rows = events.map((event) => html`<tr>
     <td>${new Date(event.createdAt).toLocaleString("ru-RU")}</td>
     <td>${escapeHtml(event.actorName || event.actorRole || "Система")}</td>
@@ -2768,14 +2784,23 @@ function renderAuditAdmin() {
   </tr>`).join("");
   return html`<section class="panel"><div class="section-title"><div><h2>Журнал действий</h2><p class="muted">Найдите пациента по фамилии, медсестре или поликлинике и нажмите на имя, чтобы открыть анкету.</p></div></div>
     <form id="auditSearchForm" class="audit-search-form">
-      <label for="auditSearch">Поиск в журнале</label>
+      <label for="auditSearch">Поиск и фильтры журнала</label>
       <div class="actions">
         <input id="auditSearch" name="query" type="search" value="${escapeHtml(state.auditSearch)}" placeholder="Фамилия пациента, медсестра или поликлиника" autocomplete="off" />
+        <select id="auditClinic" name="clinic" aria-label="Фильтр по поликлинике">
+          <option value="all" ${state.auditClinic === "all" ? "selected" : ""}>Все поликлиники</option>
+          ${clinics.map((clinic) => `<option value="${escapeHtml(clinic)}" ${state.auditClinic === clinic ? "selected" : ""}>${escapeHtml(clinic)}</option>`).join("")}
+        </select>
         <button type="submit">Найти</button>
-        ${state.auditSearch ? `<button type="button" class="secondary" data-action="clear-audit-search">Сбросить</button>` : ""}
+        ${state.auditSearch || state.auditClinic !== "all" ? `<button type="button" class="secondary" data-action="clear-audit-search">Сбросить</button>` : ""}
       </div>
-      <div class="muted">Показано записей: ${events.length} из ${state.admin.activityEvents?.length || 0}</div>
+      <div class="muted">Записи ${events.length ? (page - 1) * 50 + 1 : 0}–${(page - 1) * 50 + events.length} из ${state.admin.auditTotal || 0}; по 50 на странице</div>
     </form>
+    <div class="audit-pagination" aria-label="Страницы журнала">
+      <button type="button" class="secondary" data-action="audit-page" data-direction="-1" ${page <= 1 ? "disabled" : ""}>← Назад</button>
+      <span>Страница ${page} из ${pageCount}</span>
+      <button type="button" class="secondary" data-action="audit-page" data-direction="1" ${page >= pageCount ? "disabled" : ""}>Вперёд →</button>
+    </div>
     <div class="table-wrap"><table><thead><tr><th>Дата</th><th>Пользователь</th><th>Действие</th><th>Пациент</th><th>Поликлиника</th><th>Описание</th></tr></thead><tbody>${rows || `<tr><td colspan="6">По вашему запросу записи не найдены</td></tr>`}</tbody></table></div>${renderAuditSurveyModal()}</section>`;
 }
 
@@ -3110,7 +3135,14 @@ function bindAdminForms() {
   document.querySelector("#auditSearchForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
     state.auditSearch = String(new FormData(event.currentTarget).get("query") || "").trim();
-    renderAdmin();
+    state.auditClinic = String(new FormData(event.currentTarget).get("clinic") || state.auditClinic || "all");
+    state.auditPage = 1;
+    loadAdmin();
+  });
+  document.querySelector("#auditClinic")?.addEventListener("change", (event) => {
+    state.auditClinic = event.currentTarget.value || "all";
+    state.auditPage = 1;
+    loadAdmin();
   });
   document.querySelector("#headNurseAuditSearchForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
