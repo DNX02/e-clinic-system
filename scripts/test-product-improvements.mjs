@@ -147,6 +147,15 @@ try {
   assert.equal(visitsDashboard.visits.length, 1);
   assert.equal(visitsDashboard.surveys.length, 1);
   assert.equal(visitsDashboard.surveys[0].measurements, undefined, "Visits tab must receive only compact patient labels");
+  const clinicCorrected = await request(admin, `/api/admin/patients/${createdSurvey.survey.id}/answers`, {
+    method: "PUT", body: { clinic: "Поликлиника №2" }
+  });
+  assert.equal(clinicCorrected.survey.patient.clinic, "Поликлиника №2");
+  assert.equal(clinicCorrected.survey.clinic, "Поликлиника №2");
+  assert.ok(clinicCorrected.survey.changeHistory.some((event) => event.changes?.some((change) => change.field === "clinic" && change.before === "Поликлиника №1" && change.after === "Поликлиника №2")), "Clinic correction must be preserved in history");
+  await request(admin, `/api/admin/patients/${createdSurvey.survey.id}/answers`, {
+    method: "PUT", body: { clinic: "Поликлиника №1" }
+  });
   const publicMonitor = await request(session(), "/api/monitor/dashboard");
   assert.equal(publicMonitor.summary.surveys, 1);
   assert.ok(publicMonitor.surveys.every((survey) => survey.patientName === "Пациент"));

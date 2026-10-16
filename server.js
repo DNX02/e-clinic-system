@@ -1464,6 +1464,7 @@ const surveyCorrectionLabels = {
   smoker: "Курение",
   systolic: "Систолическое давление",
   diastolic: "Диастолическое давление"
+  , clinic: "Поликлиника"
 };
 
 function correctionActivityDetails(changes = []) {
@@ -2063,16 +2064,30 @@ async function handleApi(req, res, url) {
       if (input[field] !== value) changes.push({ field, before: input[field] ?? '', after: value });
       input[field] = value;
     }
+    if (body.clinic !== undefined) {
+      const clinic = allowedClinic(body.clinic);
+      if (adminRole(session, db) === "head_nurse" && !adminCanAccessClinic(session, db, clinic)) {
+        return send(res, 403, { error: "Старшая медсестра может оставить только свою поликлинику" });
+      }
+      const previousClinic = survey.patient?.clinic || survey.clinic || "";
+      if (previousClinic !== clinic) changes.push({ field: "clinic", before: previousClinic, after: clinic });
+      survey.patient ||= {};
+      survey.patient.clinic = clinic;
+      survey.clinic = clinic;
+    }
     validateBloodPressure(input.systolic, input.diastolic);
     if (changes.length) {
-      survey.answers = { ...survey.answers, ...Object.fromEntries(changes.map(item => [item.field, item.after])) };
-      survey.measurements.systolic = input.systolic;
-      survey.measurements.diastolic = input.diastolic;
-      survey.findrisc = calculateFindrisc(input);
-      survey.score2 = calculateScore2Lite(input);
-      survey.referralReasons = referralReasons(input, survey.findrisc, survey.score2);
-      survey.needsDoctor = survey.referralReasons.length > 0;
-      survey.qualityWarnings = qualityFlagsForSurvey(survey);
+      const answerChanges = changes.filter((item) => item.field !== "clinic");
+      if (answerChanges.length) {
+        survey.answers = { ...survey.answers, ...Object.fromEntries(answerChanges.map(item => [item.field, item.after])) };
+        survey.measurements.systolic = input.systolic;
+        survey.measurements.diastolic = input.diastolic;
+        survey.findrisc = calculateFindrisc(input);
+        survey.score2 = calculateScore2Lite(input);
+        survey.referralReasons = referralReasons(input, survey.findrisc, survey.score2);
+        survey.needsDoctor = survey.referralReasons.length > 0;
+        survey.qualityWarnings = qualityFlagsForSurvey(survey);
+      }
       survey.updatedAt = new Date().toISOString();
       survey.changeHistory ||= [];
       survey.changeHistory.push({ id: crypto.randomUUID(), createdAt: survey.updatedAt, actorId: session.userId, actorName: adminAccount(session, db)?.name || '', changes });
