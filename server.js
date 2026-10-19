@@ -3695,7 +3695,10 @@ createServer(async (req, res) => {
   res.setHeader("X-Request-Id", req.requestId);
   const startedAt = Date.now();
   res.once("finish", () => {
-    if (res.statusCode >= 400) {
+    // Routine 404s are common from crawlers and status-endpoint probes. Do not
+    // emit each one as a security warning (including its IP and requested path).
+    // Authentication/security events and actionable 4xx/5xx responses remain logged.
+    if (res.statusCode >= 400 && res.statusCode !== 404) {
       securityEvent("http_error_response", req, { statusCode: res.statusCode, durationMs: Date.now() - startedAt });
     }
   });
