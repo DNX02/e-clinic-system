@@ -2851,8 +2851,8 @@ function renderAuditSurveyModal() {
         ${state.admin.canCorrectSurveys ? `<details open><summary><strong>Исправить анкету</strong></summary><form id="correctSurveyAnswers" class="form">
           ${state.admin.canEdit ? `<label>Поликлиника пациента<select name="clinic" required>${survey.patient?.clinic && !clinicOptions.some(([value]) => value === survey.patient.clinic) ? `<option value="${escapeHtml(survey.patient.clinic)}" selected>${escapeHtml(survey.patient.clinic)}</option>` : ''}${clinicOptions.map(([value, text]) => `<option value="${escapeHtml(value)}" ${survey.patient?.clinic === value ? 'selected' : ''}>${escapeHtml(text)}</option>`).join('')}</select></label>` : ''}
           ${[['activity','Физическая активность'],['vegetables','Овощи и фрукты ежедневно'],['bpMeds','Препараты от давления'],['highGlucose','Ранее повышенный сахар'],['smoker','Курение'],['familyDiabetes','Диабет у родственников']].map(([key,label]) => `<label>${label}<select name="${key}" required>${(key === 'familyDiabetes' ? [['none','Нет'],['second','Да, вторая линия'],['first','Да, первая линия']] : [['yes','Да'],['no','Нет']]).map(([value,text]) => `<option value="${value}" ${answers[key] === value ? 'selected' : ''}>${text}</option>`).join('')}</select></label>`).join('')}
-          <label>Систолическое давление<input name="systolic" type="number" min="1" max="300" required value="${escapeHtml(measurements.systolic || '')}"/></label>
-          <label>Диастолическое давление<input name="diastolic" type="number" min="1" max="200" required value="${escapeHtml(measurements.diastolic || '')}"/></label>
+          <label>Систолическое давление<input name="systolic" type="number" inputmode="numeric" min="1" max="300" required value="${escapeHtml(measurements.systolic || '')}"/></label>
+          <label>Диастолическое давление<input name="diastolic" type="number" inputmode="numeric" min="1" max="200" required value="${escapeHtml(measurements.diastolic || '')}"/></label>
           <p>Баллы и направление будут пересчитаны. Изменения сохранятся в истории.</p><button type="submit">Сохранить исправления</button><div role="status"></div>
         </form></details>` : ''}
         <section class="patient-next-step"><h3>Следующий шаг</h3><p>${escapeHtml(record.nextAction || "Наблюдение по плану")}</p></section>
@@ -3446,7 +3446,12 @@ function updateOfflineSurveyStatus() {
   const button = document.querySelector("#syncSurveysButton");
   if (!status || !button) return;
   const count = offlineSurveyQueue().length;
-  status.textContent = count ? `${translateSurveyText("Ожидают синхронизации")}: ${count}` : translateSurveyText("Все анкеты отправлены.");
+  const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+  if (count > 0) {
+    status.innerHTML = `<span class="pill warning">⏳ ${escapeHtml(translateSurveyText("Ожидают синхронизации"))}: <strong>${count}</strong></span>${isOffline ? ` <span class="muted">(${escapeHtml(translateSurveyText("Офлайн-режим: данные сохранены на устройстве"))})</span>` : ""}`;
+  } else {
+    status.innerHTML = `<span class="pill ok">✓ ${escapeHtml(translateSurveyText("Все анкеты отправлены."))}</span>`;
+  }
   const failed = offlineSurveyQueue().filter((item) => item.lastError);
   status.title = failed.length ? failed.map((item) => `${new Date(item.savedAt).toLocaleString("ru-RU")}: ${item.lastError}`).join("\n") : "";
   button.disabled = count === 0;
@@ -4340,8 +4345,12 @@ async function renderNurseTest(participantId, type) {
 }
 
 function input(label, name, required = false, type = "text") {
+  const isPhone = type === "tel" || name === "phone";
   const numeric = type === "number";
-  return `<div class="form-row"><label>${label}</label><input name="${name}" type="${numeric ? "text" : type}" ${numeric ? 'inputmode="decimal"' : ""} ${required ? "required" : ""} /></div>`;
+  const isInteger = ["height", "systolic", "diastolic", "age", "followUpDays"].includes(name);
+  const inputMode = isPhone ? 'inputmode="tel"' : numeric ? (isInteger ? 'inputmode="numeric"' : 'inputmode="decimal"') : "";
+  const actualType = isPhone ? "tel" : numeric ? "text" : type;
+  return `<div class="form-row"><label>${label}</label><input name="${name}" type="${actualType}" ${inputMode} ${required ? "required" : ""} /></div>`;
 }
 
 function select(label, name, options) {

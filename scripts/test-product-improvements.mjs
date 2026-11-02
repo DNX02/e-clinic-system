@@ -353,6 +353,8 @@ try {
   assert.equal(imported.imported.length, 1);
   console.log("Product workflow integration test passed.");
 } finally {
+  const exitPromise = new Promise((resolve) => server.once("exit", resolve));
   server.kill("SIGTERM");
+  await Promise.race([exitPromise, new Promise((resolve) => setTimeout(resolve, 3000))]);
   await rm(dataDir, { recursive: true, force: true });
 }

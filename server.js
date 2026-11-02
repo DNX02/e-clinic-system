@@ -3563,9 +3563,10 @@ async function runScheduledMaintenance() {
   }
 }
 
-createServer(async (req, res) => {
+const server = createServer(async (req, res) => {
   req.requestId = crypto.randomUUID();
   res.setHeader("X-Request-Id", req.requestId);
+  if (isShuttingDown) return send(res, 503, { error: "Сервер перезагружается, повторите запрос" });
   const startedAt = Date.now();
   res.once("finish", () => {
     // Routine 404s are common from crawlers and status-endpoint probes. Do not
@@ -3594,7 +3595,11 @@ createServer(async (req, res) => {
     }
     return send(res, 500, { error: "Ошибка сервера" });
   }
-}).listen(PORT, HOST, () => {
+});
+
+let isShuttingDown = false;
+
+server.listen(PORT, HOST, () => {
   console.log("Medical QR system:");
   for (const baseUrl of getLanUrls()) {
     console.log(`  Admin:        ${baseUrl}${ADMIN_APP_PATH}`);
@@ -3608,3 +3613,31 @@ createServer(async (req, res) => {
   setTimeout(() => runScheduledMaintenance(), 5000);
   setInterval(() => runScheduledMaintenance(), 60 * 1000).unref();
 });
+
+async function gracefulShutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`Received ${signal}. Starting graceful shutdown...`);
+
+  server.close(async () => {
+    console.log("HTTP server closed.");
+    try {
+      if (pgPoolPromise) {
+        const pool = await pgPoolPromise;
+        await pool.end();
+        console.log("Database pool closed.");
+      }
+    } catch (err) {
+      console.error("Error closing database pool:", err);
+    }
+    process.exit(0);
+  });
+
+  setTimeout(() => {
+    console.error("Shutdown timed out. Forcing exit.");
+    process.exit(1);
+  }, 10000).unref();
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
