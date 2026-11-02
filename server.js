@@ -2117,6 +2117,17 @@ async function handleApi(req, res, url) {
     });
   }
 
+  if (req.method === "GET" && url.pathname === "/api/minzdrav/geo-dashboard") {
+    return send(res, 200, buildMinzdravGeoDashboard(db));
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/minzdrav/report.csv") {
+    return send(res, 200, buildMinzdravReportCsv(db), {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="e-clinic-minzdrav-ncd-${new Date().toISOString().slice(0, 10)}.csv"`
+    });
+  }
+
   if (req.method === "GET" && url.pathname === "/api/monitor/dashboard") {
     return send(res, 200, buildOperationsMonitor(db, Object.fromEntries(url.searchParams)));
   }
@@ -2949,6 +2960,191 @@ function buildInvestorReportCsv(db) {
   lines.push([], ["Поликлиника", "Врачи", "Анкеты", "Осмотры", "Высокий риск"]);
   for (const clinic of data.clinical.clinicPerformance) lines.push([clinic.label, clinic.doctors, clinic.surveys, clinic.visits, clinic.highRisk]);
   return `\uFEFF${lines.map((row) => row.map(csvCell).join(";")).join("\n")}`;
+}
+
+function buildMinzdravGeoDashboard(db) {
+  const visibleSurveys = (db.nurseSurveys || []).filter((survey) => !isExcludedClinic(survey.patient?.clinic || survey.clinic));
+  const totalSurveys = visibleSurveys.length;
+  const visitsBySurvey = {};
+  for (const visit of db.doctorVisits || []) {
+    (visitsBySurvey[visit.surveyId] ||= []).push(visit);
+  }
+
+  let lowRisk = 0;
+  let moderateRisk = 0;
+  let highRisk = 0;
+  let veryHighRisk = 0;
+  let hypertensionRisk = 0;
+  let diabetesRisk = 0;
+  let referredToDoctor = 0;
+  let visitedDoctor = 0;
+  let therapyPrescribed = 0;
+
+  for (const survey of visibleSurveys) {
+    const fScore = Number(survey.findrisc?.score || 0);
+    const glucose = Number(survey.measurements?.glucoseLevel || 0);
+    const sys = Number(survey.measurements?.systolic || 0);
+    const dia = Number(survey.measurements?.diastolic || 0);
+    const isNeedsDoc = Boolean(survey.needsDoctor);
+
+    if (fScore >= 15) veryHighRisk++;
+    else if (fScore >= 12) highRisk++;
+    else if (fScore >= 7) moderateRisk++;
+    else lowRisk++;
+
+    if (glucose >= 6.1 || fScore >= 12) diabetesRisk++;
+    if (sys >= 140 || dia >= 90) hypertensionRisk++;
+    if (isNeedsDoc) referredToDoctor++;
+
+    const visits = visitsBySurvey[survey.id] || [];
+    if (visits.length > 0) {
+      visitedDoctor++;
+      const hasMeds = visits.some((v) => (v.diabetesDrugs?.length || 0) > 0 || (v.hypertensionDrugs?.length || 0) > 0);
+      if (hasMeds) therapyPrescribed++;
+    }
+  }
+
+  const clinicNames = [...new Set(visibleSurveys.map((s) => s.patient?.clinic || s.clinic || "Не указано"))]
+    .filter((c) => !isExcludedClinic(c))
+    .sort((a, b) => a.localeCompare(b, "ru"));
+
+  const clinicTable = clinicNames.map((clinic) => {
+    const cSurveys = visibleSurveys.filter((s) => (s.patient?.clinic || s.clinic || "Не указано") === clinic);
+    const count = cSurveys.length;
+    const cHighRisk = cSurveys.filter((s) => s.needsDoctor).length;
+    const cHypertension = cSurveys.filter((s) => {
+      const sys = Number(s.measurements?.systolic || 0);
+      const dia = Number(s.measurements?.diastolic || 0);
+      return sys >= 140 || dia >= 90;
+    }).length;
+    const cDiabetes = cSurveys.filter((s) => {
+      const fScore = Number(s.findrisc?.score || 0);
+      const glucose = Number(s.measurements?.glucoseLevel || 0);
+      return glucose >= 6.1 || fScore >= 12;
+    }).length;
+
+    let cVisits = 0;
+    let cTherapy = 0;
+    for (const s of cSurveys) {
+      const vList = visitsBySurvey[s.id] || [];
+      if (vList.length > 0) {
+        cVisits++;
+        if (vList.some((v) => (v.diabetesDrugs?.length || 0) > 0 || (v.hypertensionDrugs?.length || 0) > 0)) {
+          cTherapy++;
+        }
+      }
+    }
+
+    const conversionToDoctor = cHighRisk ? Math.round((cVisits / cHighRisk) * 100) : 0;
+    const target = db.settings?.clinicTargets?.[clinic]?.monthlyPatients || 2000;
+    const coveragePercent = Math.min(100, Math.round((count / target) * 100));
+    const grade = coveragePercent >= 70 ? "high" : coveragePercent >= 30 ? "medium" : "low";
+
+    return {
+      clinic,
+      surveysCount: count,
+      targetPatients: target,
+      coveragePercent,
+      highRiskCount: cHighRisk,
+      highRiskPercent: count ? Math.round((cHighRisk / count) * 100) : 0,
+      hypertensionCount: cHypertension,
+      hypertensionPercent: count ? Math.round((cHypertension / count) * 100) : 0,
+      diabetesCount: cDiabetes,
+      diabetesPercent: count ? Math.round((cDiabetes / count) * 100) : 0,
+      visitedDoctorCount: cVisits,
+      conversionToDoctor,
+      therapyCount: cTherapy,
+      grade
+    };
+  });
+
+  return {
+    generatedAt: new Date().toISOString(),
+    totals: {
+      screenedPatients: totalSurveys,
+      lowRisk,
+      moderateRisk,
+      highRisk,
+      veryHighRisk,
+      hypertensionSuspected: hypertensionRisk,
+      hypertensionPercent: totalSurveys ? Math.round((hypertensionRisk / totalSurveys) * 100) : 0,
+      diabetesSuspected: diabetesRisk,
+      diabetesPercent: totalSurveys ? Math.round((diabetesRisk / totalSurveys) * 100) : 0,
+      referredToDoctor,
+      visitedDoctor,
+      doctorConversionPercent: referredToDoctor ? Math.round((visitedDoctor / referredToDoctor) * 100) : 0,
+      therapyPrescribed,
+      therapyPercent: visitedDoctor ? Math.round((therapyPrescribed / visitedDoctor) * 100) : 0
+    },
+    funnel: [
+      { step: "Скрининг медсестрой", count: totalSurveys, percent: 100 },
+      { step: "Выявлен повышенный риск", count: referredToDoctor, percent: totalSurveys ? Math.round((referredToDoctor / totalSurveys) * 100) : 0 },
+      { step: "Принято врачом", count: visitedDoctor, percent: totalSurveys ? Math.round((visitedDoctor / totalSurveys) * 100) : 0 },
+      { step: "Назначена медикаментозная терапия", count: therapyPrescribed, percent: totalSurveys ? Math.round((therapyPrescribed / totalSurveys) * 100) : 0 }
+    ],
+    clinics: clinicTable
+  };
+}
+
+function buildMinzdravReportCsv(db) {
+  const dash = buildMinzdravGeoDashboard(db);
+  const rows = [
+    ["Отчет Министерства Здравоохранения: Скрининг неинфекционных заболеваний (НИЗ)"],
+    [`Дата формирования: ${new Date().toLocaleDateString("ru-RU")} ${new Date().toLocaleTimeString("ru-RU")}`],
+    [],
+    [
+      "Поликлиника / Медучреждение",
+      "Охвачено скринингом",
+      "План скрининга",
+      "% Охвата плана",
+      "Выявлен риск (Всего)",
+      "% Группы риска",
+      "Подозрение на Артериальную гипертензию",
+      "% Гипертензии",
+      "Подозрение на Сахарный диабет",
+      "% Диабета",
+      "Принято врачом",
+      "% Доходимости до врача",
+      "Назначена фармакотерапия"
+    ]
+  ];
+
+  for (const c of dash.clinics) {
+    rows.push([
+      c.clinic,
+      c.surveysCount,
+      c.targetPatients,
+      `${c.coveragePercent}%`,
+      c.highRiskCount,
+      `${c.highRiskPercent}%`,
+      c.hypertensionCount,
+      `${c.hypertensionPercent}%`,
+      c.diabetesCount,
+      `${c.diabetesPercent}%`,
+      c.visitedDoctorCount,
+      `${c.conversionToDoctor}%`,
+      c.therapyCount
+    ]);
+  }
+
+  rows.push([]);
+  rows.push([
+    "ИТОГО ПО РЕСПУБЛИКЕ / ГОРОДУ",
+    dash.totals.screenedPatients,
+    "-",
+    "-",
+    dash.totals.referredToDoctor,
+    `${dash.totals.screenedPatients ? Math.round((dash.totals.referredToDoctor / dash.totals.screenedPatients) * 100) : 0}%`,
+    dash.totals.hypertensionSuspected,
+    `${dash.totals.hypertensionPercent}%`,
+    dash.totals.diabetesSuspected,
+    `${dash.totals.diabetesPercent}%`,
+    dash.totals.visitedDoctor,
+    `${dash.totals.doctorConversionPercent}%`,
+    dash.totals.therapyPrescribed
+  ]);
+
+  return `\uFEFF${rows.map((row) => row.map(csvCell).join(";")).join("\n")}`;
 }
 
 function hasDoctorAction(visit) {

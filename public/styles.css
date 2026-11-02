@@ -2184,3 +2184,174 @@ th {
   }
 
 }
+
+/* === Deep Offline-First Drawer & Queue Styles === */
+.offline-drawer {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--surface-2, #f8fafc);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+}
+.offline-drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+}
+.offline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 380px;
+  overflow-y: auto;
+}
+.offline-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 6px;
+}
+.offline-card.has-error {
+  border-color: #ef4444;
+  background: #fef2f2;
+}
+.offline-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.offline-card-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.offline-card-meta {
+  font-size: 0.8rem;
+  color: var(--muted, #64748b);
+}
+.offline-card-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+.mini-btn {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.danger-ghost {
+  background: transparent;
+  border: 1px solid #ef4444;
+  color: #ef4444;
+}
+.danger-text {
+  color: #ef4444;
+  font-size: 0.8rem;
+}
+
+/* === Ministry of Health Geo-Analytics Dashboard === */
+.minzdrav-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.minzdrav-header-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1.25rem;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+}
+.minzdrav-header-card h2 {
+  margin: 0 0 0.4rem 0;
+}
+.minzdrav-funnel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.funnel-step-box {
+  padding: 1rem;
+  background: var(--surface-2, #f8fafc);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.funnel-step-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--primary, #0f4c45);
+}
+.funnel-step-box strong {
+  font-size: 1.6rem;
+  line-height: 1.1;
+  color: var(--text, #1f2937);
+}
+.funnel-bar {
+  height: 6px;
+  background: var(--border, #e2e8f0);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 0.3rem 0;
+}
+.funnel-bar i {
+  display: block;
+  height: 100%;
+  background: var(--primary, #0f4c45);
+  border-radius: 3px;
+}
+.mini-progress-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 120px;
+}
+.mini-progress-bar {
+  height: 6px;
+  background: var(--border, #e2e8f0);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.mini-progress-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+.minzdrav-table th, .minzdrav-table td {
+  padding: 0.75rem 0.6rem;
+  text-align: left;
+}
+.hero-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.text-danger {
+  color: #ef4444;
+  font-weight: 600;
+}
+.text-orange {
+  color: #f59e0b;
+  font-weight: 600;
+}
+.kpi-blue { border-left: 4px solid #3b82f6; }
+.kpi-red { border-left: 4px solid #ef4444; }
+.kpi-orange { border-left: 4px solid #f59e0b; }
+.kpi-green { border-left: 4px solid #10b981; }
+.kpi-teal { border-left: 4px solid #0f4c45; }
+

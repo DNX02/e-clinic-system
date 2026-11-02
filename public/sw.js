@@ -1,4 +1,4 @@
-const CACHE_NAME = "medical-mobile-v87";
+const CACHE_NAME = "medical-mobile-v88";
 const SHELL = [
   "/app-1-admin-panel",
   "/app-2-doctor",
@@ -46,6 +46,16 @@ self.addEventListener("fetch", (event) => {
         return response;
       }).catch(() => caches.match(event.request))
   );
+});
+
+self.addEventListener("sync", (event) => {
+  if (event.tag === "sync-nurse-surveys") {
+    event.waitUntil(
+      self.clients.matchAll().then((clients) => {
+        clients.forEach((client) => client.postMessage({ type: "TRIGGER_SYNC" }));
+      })
+    );
+  }
 });
 
 

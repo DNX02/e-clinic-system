@@ -1522,22 +1522,143 @@ function investorClinics() {
   `;
 }
 
+async function loadMinzdravGeoDashboard() {
+  state.minzdravGeoLoading = true;
+  try {
+    state.minzdravGeo = await api("/api/minzdrav/geo-dashboard");
+  } catch (err) {
+    state.minzdravGeoError = err.message;
+  } finally {
+    state.minzdravGeoLoading = false;
+    renderInvestorDashboard();
+  }
+}
+
+function renderMinzdravGeoPanel() {
+  if (state.minzdravGeoLoading) {
+    return `<div class="card p-4"><p class="muted">Загрузка гео-аналитики Минздрава...</p></div>`;
+  }
+  if (!state.minzdravGeo) {
+    loadMinzdravGeoDashboard();
+    return `<div class="card p-4"><p class="muted">Загрузка гео-аналитики Минздрава...</p></div>`;
+  }
+
+  const { totals, funnel, clinics } = state.minzdravGeo;
+
+  return html`
+    <div class="minzdrav-dashboard">
+      <div class="minzdrav-header-card">
+        <div>
+          <h2>Сводный гео-мониторинг скрининга НИЗ</h2>
+          <p class="muted">Официальные индикаторы охвата населения скринингом неинфекционных заболеваний (артериальная гипертензия и сахарный диабет 2 типа) по поликлиникам г. Душанбе и регионам РТ.</p>
+        </div>
+        <div class="minzdrav-export-btn">
+          <a class="button primary" href="/api/minzdrav/report.csv" download>📥 Скачать отчёт Минздрава (Excel / CSV)</a>
+        </div>
+      </div>
+
+      <!-- KPI Summary Cards -->
+      <div class="investor-kpis">
+        ${investorKpi("Охвачено скринингом", totals.screenedPatients.toLocaleString("ru-RU"), "Всего осмотрено пациентов", "kpi-blue")}
+        ${investorKpi("Подозрение на АГ", `${totals.hypertensionPercent}%`, `${totals.hypertensionSuspected.toLocaleString("ru-RU")} пациентов (АД ≥ 140/90)`, "kpi-red")}
+        ${investorKpi("Риск диабета", `${totals.diabetesPercent}%`, `${totals.diabetesSuspected.toLocaleString("ru-RU")} пациентов (сахар ≥ 6.1 / FINDRISC ≥ 12)`, "kpi-orange")}
+        ${investorKpi("Дошли до врача", `${totals.doctorConversionPercent}%`, `${totals.visitedDoctor.toLocaleString("ru-RU")} принято врачами`, "kpi-green")}
+        ${investorKpi("Получили лечение", `${totals.therapyPercent}%`, `${totals.therapyPrescribed.toLocaleString("ru-RU")} назначена терапия`, "kpi-teal")}
+      </div>
+
+      <!-- Clinical Funnel -->
+      <section class="investor-card minzdrav-funnel-card">
+        <div class="section-title">
+          <h2>Клиническая воронка скрининга</h2>
+          <span>маршрут пациента от медсестры до назначения терапии</span>
+        </div>
+        <div class="minzdrav-funnel-grid">
+          ${funnel.map((step, idx) => html`
+            <div class="funnel-step-box step-${idx + 1}">
+              <div class="funnel-step-badge">Этап ${idx + 1}</div>
+              <strong>${step.count.toLocaleString("ru-RU")}</strong>
+              <span>${escapeHtml(step.step)}</span>
+              <div class="funnel-bar"><i style="width: ${step.percent}%"></i></div>
+              <small>${step.percent}% от скрининга</small>
+            </div>
+          `).join("")}
+        </div>
+      </section>
+
+      <!-- Comparative Heat Table of Polyclinics -->
+      <section class="investor-card">
+        <div class="section-title">
+          <h2>Сравнительный мониторинг поликлиник</h2>
+          <span>показатели скрининга, выявляемости и врачебного охвата</span>
+        </div>
+        <div class="table-wrap">
+          <table class="minzdrav-table">
+            <thead>
+              <tr>
+                <th>Поликлиника / Медучреждение</th>
+                <th>Охвачено</th>
+                <th>План / Охват</th>
+                <th>Выявлен риск</th>
+                <th>Подозрение на АГ</th>
+                <th>Риск Диабета</th>
+                <th>Принято врачом</th>
+                <th>Терапия</th>
+                <th>Статус</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${clinics.map((c) => {
+                const statusPill = c.grade === "high"
+                  ? `<span class="pill ok">Лидер</span>`
+                  : c.grade === "medium"
+                    ? `<span class="pill warning">В графике</span>`
+                    : `<span class="pill danger">Требует внимания</span>`;
+                return html`
+                  <tr>
+                    <td><strong>${escapeHtml(c.clinic)}</strong></td>
+                    <td><strong>${c.surveysCount.toLocaleString("ru-RU")}</strong></td>
+                    <td>
+                      <div class="mini-progress-cell">
+                        <span>${c.coveragePercent}% (${c.targetPatients})</span>
+                        <div class="mini-progress-bar"><i style="width: ${c.coveragePercent}%; background: ${c.grade === 'high' ? 'var(--primary)' : c.grade === 'medium' ? '#f59e0b' : '#ef4444'}"></i></div>
+                      </div>
+                    </td>
+                    <td>${c.highRiskCount} <small class="muted">(${c.highRiskPercent}%)</small></td>
+                    <td><span class="text-danger">${c.hypertensionCount}</span> <small class="muted">(${c.hypertensionPercent}%)</small></td>
+                    <td><span class="text-orange">${c.diabetesCount}</span> <small class="muted">(${c.diabetesPercent}%)</small></td>
+                    <td>${c.visitedDoctorCount} <small class="muted">(${c.conversionToDoctor}%)</small></td>
+                    <td>${c.therapyCount}</td>
+                    <td>${statusPill}</td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
 function renderInvestorDashboard() {
   const data = state.investor;
   if (!data) return;
   const tabs = [
     ["overview", "Обзор"],
+    ["minzdrav", "🏛️ Дашборд Минздрава РТ"],
     ["doctors", "Обучение врачей"],
     ["nurses", "Обучение медсестер"],
     ["clinics", "Поликлиники"]
   ];
-  const content = state.investorTab === "doctors"
-    ? investorEducationPanel("doctors", "врачи")
-    : state.investorTab === "nurses"
-      ? investorEducationPanel("nurses", "медсестры")
-      : state.investorTab === "clinics"
-        ? investorClinics()
-        : investorOverview();
+  const content = state.investorTab === "minzdrav"
+    ? renderMinzdravGeoPanel()
+    : state.investorTab === "doctors"
+      ? investorEducationPanel("doctors", "врачи")
+      : state.investorTab === "nurses"
+        ? investorEducationPanel("nurses", "медсестры")
+        : state.investorTab === "clinics"
+          ? investorClinics()
+          : investorOverview();
   setPage(html`
     <main class="investor-shell">
       <section class="investor-hero">
@@ -1550,7 +1671,10 @@ function renderInvestorDashboard() {
           <span>Обновлено</span>
           <strong>${new Date(data.generatedAt).toLocaleString("ru-RU")}</strong>
           <small>Данные берутся напрямую из работающей системы</small>
-          <a class="button-link" href="/api/investor/report.csv">Скачать отчёт CSV</a>
+          <div class="hero-card-actions">
+            <a class="button-link" href="/api/investor/report.csv">Скачать отчёт CSV</a>
+            <a class="button-link secondary" href="/api/minzdrav/report.csv" download>📥 Отчёт Минздрава (Excel)</a>
+          </div>
         </div>
       </section>
       <nav class="investor-tabs">
@@ -3322,8 +3446,10 @@ function renderNurseSurvey() {
         <div class="actions">
           <button type="submit">${escapeHtml(t("Отправить анкету"))}</button>
           <button type="button" class="secondary" id="syncSurveysButton">${escapeHtml(t("Синхронизировать"))}</button>
+          <button type="button" class="secondary ghost" id="toggleOfflineSurveysDrawer" style="display:none"></button>
         </div>
         <div class="muted" id="syncSurveysStatus"></div>
+        <div id="offlineSurveysDrawer" class="offline-drawer" style="display:none"></div>
         <div id="surveyResult"></div>
       </form>
     </main>
@@ -3361,7 +3487,115 @@ function renderNurseSurvey() {
   });
 }
 
+// === Offline-First IndexedDB Engine ===
+const OFFLINE_IDB_NAME = "eclinic_offline_v2";
+const OFFLINE_IDB_VERSION = 1;
+let offlineIdbPromise = null;
+let offlineSurveyCache = null;
+let offlineDoctorCache = null;
+
+function getOfflineIdb() {
+  if (offlineIdbPromise) return offlineIdbPromise;
+  if (typeof indexedDB === "undefined") return Promise.resolve(null);
+  offlineIdbPromise = new Promise((resolve) => {
+    try {
+      const req = indexedDB.open(OFFLINE_IDB_NAME, OFFLINE_IDB_VERSION);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains("nurse_surveys")) {
+          db.createObjectStore("nurse_surveys", { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains("doctor_actions")) {
+          db.createObjectStore("doctor_actions", { keyPath: "id" });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+  return offlineIdbPromise;
+}
+
+async function persistToIdb(storeName, item, action = "put") {
+  try {
+    const db = await getOfflineIdb();
+    if (!db) return;
+    const tx = db.transaction(storeName, "readwrite");
+    const store = tx.objectStore(storeName);
+    if (action === "put") store.put(item);
+    else if (action === "delete") store.delete(item);
+  } catch {}
+}
+
+async function initOfflineStores() {
+  let legacySurveys = [];
+  let legacyDoctor = [];
+  try {
+    legacySurveys = JSON.parse(localStorage.getItem(OFFLINE_SURVEY_QUEUE_KEY) || "[]");
+    if (!Array.isArray(legacySurveys)) legacySurveys = [];
+  } catch {}
+  try {
+    legacyDoctor = JSON.parse(localStorage.getItem(OFFLINE_DOCTOR_QUEUE_KEY) || "[]");
+    if (!Array.isArray(legacyDoctor)) legacyDoctor = [];
+  } catch {}
+
+  const db = await getOfflineIdb();
+  if (!db) {
+    offlineSurveyCache = legacySurveys;
+    offlineDoctorCache = legacyDoctor;
+    updateOfflineSurveyStatus();
+    updateOfflineDoctorStatus();
+    return;
+  }
+
+  const readAll = (storeName) => new Promise((res) => {
+    try {
+      const tx = db.transaction(storeName, "readonly");
+      const req = tx.objectStore(storeName).getAll();
+      req.onsuccess = () => res(req.result || []);
+      req.onerror = () => res([]);
+    } catch {
+      res([]);
+    }
+  });
+
+  const [idbSurveys, idbDoctor] = await Promise.all([readAll("nurse_surveys"), readAll("doctor_actions")]);
+  const surveyMap = new Map();
+  idbSurveys.forEach((item) => surveyMap.set(item.id, item));
+  legacySurveys.forEach((item) => {
+    if (!surveyMap.has(item.id)) {
+      surveyMap.set(item.id, item);
+      persistToIdb("nurse_surveys", item, "put");
+    }
+  });
+  if (legacySurveys.length) {
+    try { localStorage.removeItem(OFFLINE_SURVEY_QUEUE_KEY); } catch {}
+  }
+
+  const doctorMap = new Map();
+  idbDoctor.forEach((item) => doctorMap.set(item.id, item));
+  legacyDoctor.forEach((item) => {
+    if (!doctorMap.has(item.id)) {
+      doctorMap.set(item.id, item);
+      persistToIdb("doctor_actions", item, "put");
+    }
+  });
+  if (legacyDoctor.length) {
+    try { localStorage.removeItem(OFFLINE_DOCTOR_QUEUE_KEY); } catch {}
+  }
+
+  offlineSurveyCache = Array.from(surveyMap.values());
+  offlineDoctorCache = Array.from(doctorMap.values());
+  updateOfflineSurveyStatus();
+  updateOfflineDoctorStatus();
+}
+
+initOfflineStores();
+
 function offlineSurveyQueue() {
+  if (offlineSurveyCache !== null) return offlineSurveyCache;
   try {
     const queue = JSON.parse(localStorage.getItem(OFFLINE_SURVEY_QUEUE_KEY) || "[]");
     return Array.isArray(queue) ? queue : [];
@@ -3371,13 +3605,30 @@ function offlineSurveyQueue() {
 }
 
 function writeOfflineSurveyQueue(queue) {
-  localStorage.setItem(OFFLINE_SURVEY_QUEUE_KEY, JSON.stringify(queue));
+  offlineSurveyCache = queue;
+  try {
+    localStorage.setItem(OFFLINE_SURVEY_QUEUE_KEY, JSON.stringify(queue));
+  } catch {}
+  getOfflineIdb().then((db) => {
+    if (!db) return;
+    try {
+      const tx = db.transaction("nurse_surveys", "readwrite");
+      const store = tx.objectStore("nurse_surveys");
+      store.clear();
+      queue.forEach((item) => store.put(item));
+    } catch {}
+  });
 }
 
 function saveOfflineSurvey(data) {
   const queue = offlineSurveyQueue();
-  queue.push({ id: crypto.randomUUID(), savedAt: new Date().toISOString(), attempts: 0, lastError: "", data });
+  const item = { id: crypto.randomUUID(), savedAt: new Date().toISOString(), attempts: 0, lastError: "", data };
+  queue.push(item);
   writeOfflineSurveyQueue(queue);
+  persistToIdb("nurse_surveys", item, "put");
+  if (typeof navigator !== "undefined" && "serviceWorker" in navigator && "SyncManager" in window) {
+    navigator.serviceWorker.ready.then((reg) => reg.sync.register("sync-nurse-surveys")).catch(() => {});
+  }
 }
 
 async function sendNurseSurvey(data) {
@@ -3444,24 +3695,146 @@ function showSurveySubmitted(survey) {
 function updateOfflineSurveyStatus() {
   const status = document.querySelector("#syncSurveysStatus");
   const button = document.querySelector("#syncSurveysButton");
+  const toggleBtn = document.querySelector("#toggleOfflineSurveysDrawer");
+  const drawer = document.querySelector("#offlineSurveysDrawer");
   if (!status || !button) return;
   const count = offlineSurveyQueue().length;
   const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
   if (count > 0) {
     status.innerHTML = `<span class="pill warning">⏳ ${escapeHtml(translateSurveyText("Ожидают синхронизации"))}: <strong>${count}</strong></span>${isOffline ? ` <span class="muted">(${escapeHtml(translateSurveyText("Офлайн-режим: данные сохранены на устройстве"))})</span>` : ""}`;
+    if (toggleBtn) {
+      toggleBtn.style.display = "inline-block";
+      toggleBtn.innerHTML = `📋 ${escapeHtml(translateSurveyText("Сохранённые анкеты"))} (<strong>${count}</strong>)`;
+    }
   } else {
     status.innerHTML = `<span class="pill ok">✓ ${escapeHtml(translateSurveyText("Все анкеты отправлены."))}</span>`;
+    if (toggleBtn) toggleBtn.style.display = "none";
+    if (drawer) drawer.style.display = "none";
   }
   const failed = offlineSurveyQueue().filter((item) => item.lastError);
   status.title = failed.length ? failed.map((item) => `${new Date(item.savedAt).toLocaleString("ru-RU")}: ${item.lastError}`).join("\n") : "";
   button.disabled = count === 0;
+
+  if (drawer && drawer.style.display !== "none") {
+    renderOfflineSurveysDrawer();
+  }
+}
+
+function renderOfflineSurveysDrawer() {
+  const drawer = document.querySelector("#offlineSurveysDrawer");
+  if (!drawer) return;
+  const queue = offlineSurveyQueue();
+  if (!queue.length) {
+    drawer.innerHTML = `<p class="muted">${escapeHtml(translateSurveyText("Нет сохранённых офлайн-анкет."))}</p>`;
+    return;
+  }
+  drawer.innerHTML = `
+    <div class="offline-drawer-header">
+      <strong>📋 ${escapeHtml(translateSurveyText("Сохранённые на устройстве анкеты"))} (${queue.length})</strong>
+      <button type="button" class="mini-btn" id="closeOfflineDrawerBtn">✕</button>
+    </div>
+    <div class="offline-list">
+      ${queue.map((item, idx) => {
+        const p = item.data || {};
+        const name = [p.lastName, p.firstName].filter(Boolean).join(" ") || `Пациент #${idx + 1}`;
+        const time = new Date(item.savedAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+        const hasErr = Boolean(item.lastError);
+        return `
+          <div class="offline-card ${hasErr ? "has-error" : ""}">
+            <div class="offline-card-info">
+              <span class="offline-card-name">👤 ${escapeHtml(name)} (${escapeHtml(p.age || "-")} ${escapeHtml(translateSurveyText("лет"))})</span>
+              <span class="offline-card-meta">🏥 ${escapeHtml(p.clinic || "")} • 🕒 ${time}</span>
+              ${hasErr ? `<small class="danger-text">⚠️ ${escapeHtml(item.lastError)}</small>` : `<small class="muted">⏳ ${escapeHtml(translateSurveyText("Ожидает сети"))}</small>`}
+            </div>
+            <div class="offline-card-actions">
+              <button type="button" class="mini-btn sync-single-btn" data-offline-id="${item.id}" title="${escapeHtml(translateSurveyText("Отправить сейчас"))}">📤 ${escapeHtml(translateSurveyText("Отправить"))}</button>
+              <button type="button" class="mini-btn danger-ghost delete-single-btn" data-delete-id="${item.id}" title="${escapeHtml(translateSurveyText("Удалить"))}">🗑️</button>
+            </div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+
+  document.querySelector("#closeOfflineDrawerBtn")?.addEventListener("click", () => {
+    drawer.style.display = "none";
+  });
+
+  drawer.querySelectorAll(".sync-single-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.getAttribute("data-offline-id");
+      await syncSingleOfflineSurvey(id);
+    });
+  });
+
+  drawer.querySelectorAll(".delete-single-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-delete-id");
+      deleteSingleOfflineSurvey(id);
+    });
+  });
+}
+
+function deleteSingleOfflineSurvey(id) {
+  let queue = offlineSurveyQueue().filter((item) => item.id !== id);
+  writeOfflineSurveyQueue(queue);
+  persistToIdb("nurse_surveys", id, "delete");
+  updateOfflineSurveyStatus();
+}
+
+async function syncSingleOfflineSurvey(id) {
+  let queue = offlineSurveyQueue();
+  const item = queue.find((q) => q.id === id);
+  if (!item) return;
+  const result = document.querySelector("#surveyResult");
+  try {
+    const { survey } = await sendNurseSurvey(item.data);
+    queue = queue.filter((q) => q.id !== id);
+    writeOfflineSurveyQueue(queue);
+    persistToIdb("nurse_surveys", id, "delete");
+    updateOfflineSurveyStatus();
+    if (result) showSurveySubmitted(survey);
+  } catch (err) {
+    item.attempts = Number(item.attempts || 0) + 1;
+    item.lastTriedAt = new Date().toISOString();
+    item.lastError = String(err.message || "Ошибка сети").slice(0, 200);
+    writeOfflineSurveyQueue(queue);
+    persistToIdb("nurse_surveys", item, "put");
+    updateOfflineSurveyStatus();
+    if (result) result.innerHTML = `<div class="notice danger">${escapeHtml(err.message)}</div>`;
+  }
 }
 
 function bindOfflineSurveySync() {
   const button = document.querySelector("#syncSurveysButton");
-  button.addEventListener("click", syncOfflineSurveys);
+  button?.addEventListener("click", syncOfflineSurveys);
+  const toggleBtn = document.querySelector("#toggleOfflineSurveysDrawer");
+  const drawer = document.querySelector("#offlineSurveysDrawer");
+  if (toggleBtn && drawer) {
+    toggleBtn.addEventListener("click", () => {
+      const isVisible = drawer.style.display !== "none";
+      drawer.style.display = isVisible ? "none" : "block";
+      if (!isVisible) renderOfflineSurveysDrawer();
+    });
+  }
   if (!offlineSurveyOnlineListenerBound) {
-    window.addEventListener("online", syncOfflineSurveys);
+    window.addEventListener("online", () => {
+      syncOfflineSurveys();
+      syncOfflineDoctorActions();
+    });
+    if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", (event) => {
+        if (event.data?.type === "TRIGGER_SYNC") {
+          syncOfflineSurveys();
+          syncOfflineDoctorActions();
+        }
+      });
+    }
+    setInterval(() => {
+      if (typeof navigator !== "undefined" && navigator.onLine && offlineSurveyQueue().length > 0) {
+        syncOfflineSurveys();
+      }
+    }, 60000);
     offlineSurveyOnlineListenerBound = true;
   }
   updateOfflineSurveyStatus();
@@ -3481,9 +3854,12 @@ async function syncOfflineSurveys() {
   for (const item of queue) {
     try {
       await sendNurseSurvey(item.data);
+      persistToIdb("nurse_surveys", item.id, "delete");
       sent += 1;
     } catch (error) {
-      remaining.push({ ...item, attempts: Number(item.attempts || 0) + 1, lastTriedAt: new Date().toISOString(), lastError: String(error.message || "Ошибка сети").slice(0, 200) });
+      const updated = { ...item, attempts: Number(item.attempts || 0) + 1, lastTriedAt: new Date().toISOString(), lastError: String(error.message || "Ошибка сети").slice(0, 200) };
+      remaining.push(updated);
+      persistToIdb("nurse_surveys", updated, "put");
     }
   }
   writeOfflineSurveyQueue(remaining);
@@ -3495,6 +3871,7 @@ async function syncOfflineSurveys() {
 }
 
 function offlineDoctorQueue() {
+  if (offlineDoctorCache !== null) return offlineDoctorCache;
   try {
     const queue = JSON.parse(localStorage.getItem(OFFLINE_DOCTOR_QUEUE_KEY) || "[]");
     return Array.isArray(queue) ? queue : [];
@@ -3504,13 +3881,27 @@ function offlineDoctorQueue() {
 }
 
 function writeOfflineDoctorQueue(queue) {
-  localStorage.setItem(OFFLINE_DOCTOR_QUEUE_KEY, JSON.stringify(queue));
+  offlineDoctorCache = queue;
+  try {
+    localStorage.setItem(OFFLINE_DOCTOR_QUEUE_KEY, JSON.stringify(queue));
+  } catch {}
+  getOfflineIdb().then((db) => {
+    if (!db) return;
+    try {
+      const tx = db.transaction("doctor_actions", "readwrite");
+      const store = tx.objectStore("doctor_actions");
+      store.clear();
+      queue.forEach((item) => store.put(item));
+    } catch {}
+  });
 }
 
 function saveOfflineDoctorAction(action) {
   const queue = offlineDoctorQueue();
-  queue.push({ id: crypto.randomUUID(), savedAt: new Date().toISOString(), attempts: 0, lastError: "", ...action });
+  const item = { id: crypto.randomUUID(), savedAt: new Date().toISOString(), attempts: 0, lastError: "", ...action };
+  queue.push(item);
   writeOfflineDoctorQueue(queue);
+  persistToIdb("doctor_actions", item, "put");
 }
 
 function updateOfflineDoctorStatus() {
