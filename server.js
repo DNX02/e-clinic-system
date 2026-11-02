@@ -19,9 +19,6 @@ const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "0.0.0.0";
 const DATABASE_URL = process.env.DATABASE_URL || "";
 const PG_TIMEOUT_MS = Number(process.env.PG_TIMEOUT_MS || 8000);
-const GOOGLE_CLOUD_PROJECT = process.env.GOOGLE_CLOUD_PROJECT || "";
-const GOOGLE_CLOUD_LOCATION = process.env.GOOGLE_CLOUD_LOCATION || "global";
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_REPORT_CHAT_ID = process.env.TELEGRAM_REPORT_CHAT_ID || "";
 const INITIAL_ADMIN_PASSWORD = process.env.INITIAL_ADMIN_PASSWORD || "";
@@ -43,8 +40,6 @@ let dbWritePromise = Promise.resolve();
 let dbReadyPromise = null;
 let pgPoolPromise = null;
 const rateLimits = new Map();
-let googleAccessToken = "";
-let googleAccessTokenExpiresAt = 0;
 const normalizedCollectionTables = {
   admins: "app_admins",
   doctors: "app_doctors",
@@ -930,49 +925,6 @@ function compactCount(value) {
   return Array.isArray(value) ? value.length : 0;
 }
 
-function assistantAppName(app = "") {
-  return {
-    admin: "приложение администратора",
-    doctor: "приложение врача",
-    survey: "опросник пациента",
-    training: "проверка знаний врачей",
-    "nurse-training": "проверка знаний медсестер",
-    investor: "панель инвесторов",
-    monitor: "экран наблюдения"
-  }[app] || "медицинская платформа";
-}
-
-function buildAssistantSystemPrompt(db, session, appName) {
-  const stats = [
-    `врачей зарегистрировано: ${compactCount(db.doctors)}`,
-    `анкет пациентов: ${compactCount(db.nurseSurveys)}`,
-    `осмотров врачей: ${compactCount(db.doctorVisits)}`,
-    `участников обучения врачей: ${compactCount(db.trainingParticipants)}`,
-    `участников обучения медсестер: ${compactCount(db.nurseTrainingParticipants)}`
-  ].join("; ");
-  const userType = session?.userType === "admin" ? "администратор" : session?.userType === "doctor" ? "врач" : "пользователь без входа";
-  return [
-    "Ты AI-консультант платформы E-Clinic Control.",
-    `Текущий раздел: ${appName}. Тип пользователя: ${userType}.`,
-    `Общая статистика без персональных данных: ${stats}.`,
-    "Помогай пользователю пользоваться платформой: где найти пациентов, обучение, статистику, мониторинг, отчеты, фильтры и синхронизацию.",
-    "Можешь кратко объяснять FINDRISC, сердечно-сосудистый риск, индекс массы тела, формулу Rabito, пре-тесты и пост-тесты.",
-    "Не раскрывай персональные данные пациентов, врачей, медсестер, пароли, ключи доступа и скрытые настройки.",
-    "Не ставь окончательный диагноз, не назначай лечение и не заменяй врача. Для медицинских решений говори, что решение принимает врач по клиническим данным и локальным протоколам.",
-    "Отвечай на русском языке, простыми короткими абзацами. Если пользователь просит на таджикском, отвечай на таджикском."
-  ].join("\n");
-}
-
-function extractGeminiText(payload) {
-  const parts = [];
-  for (const candidate of payload?.candidates || []) {
-    for (const part of candidate?.content?.parts || []) {
-      if (typeof part?.text === "string") parts.push(part.text);
-    }
-  }
-  return parts.join("\n").trim() || "Не удалось получить ответ консультанта.";
-}
-
 function adminAccount(session, db) {
   if (!session || session.userType !== "admin") return null;
   return db.admins.find((admin) => admin.id === session.userId) || null;
@@ -1017,58 +969,6 @@ function scopedDbForAdmin(db, session) {
     nurseTrainingAttempts: (db.nurseTrainingAttempts || []).filter((item) => nurseTrainingIds.has(item.participantId)),
     admins: (db.admins || []).filter((admin) => admin.id === session.userId)
   };
-}
-
-async function getGoogleAccessToken() {
-  if (googleAccessToken && Date.now() < googleAccessTokenExpiresAt - 60_000) return googleAccessToken;
-  const response = await fetch(
-    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
-    { headers: { "Metadata-Flavor": "Google" } }
-  );
-  if (!response.ok) throw new Error(`Не удалось получить токен Google Cloud: HTTP ${response.status}`);
-  const payload = await response.json();
-  if (!payload?.access_token) throw new Error("Google Cloud не вернул токен доступа");
-  googleAccessToken = payload.access_token;
-  googleAccessTokenExpiresAt = Date.now() + Number(payload.expires_in || 300) * 1000;
-  return googleAccessToken;
-}
-
-async function askGeminiAssistant({ messages, prompt }) {
-  const accessToken = await getGoogleAccessToken();
-  const endpoint = [
-    "https://aiplatform.googleapis.com/v1/projects",
-    encodeURIComponent(GOOGLE_CLOUD_PROJECT),
-    "locations",
-    encodeURIComponent(GOOGLE_CLOUD_LOCATION),
-    "publishers/google/models",
-    `${encodeURIComponent(GEMINI_MODEL)}:generateContent`
-  ].join("/");
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${accessToken}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      systemInstruction: {
-        parts: [{ text: prompt }]
-      },
-      contents: messages.map((message) => ({
-        role: message.role === "assistant" ? "model" : "user",
-        parts: [{ text: String(message.content || "").slice(0, 2000) }]
-      })),
-      generationConfig: {
-        maxOutputTokens: 700,
-        temperature: 0.3
-      }
-    })
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const message = payload?.error?.message || "Vertex AI временно недоступен";
-    throw new Error(message);
-  }
-  return extractGeminiText(payload);
 }
 
 function requestBaseUrl(req) {
@@ -1688,33 +1588,6 @@ async function handleApi(req, res, url) {
 
   const session = await getSession(req);
   const db = await readDb();
-
-  if (req.method === "POST" && url.pathname === "/api/assistant") {
-    if (!session || !["admin", "doctor"].includes(session.userType)) return send(res, 403, { error: "Требуется вход в систему" });
-    if (!enforceUserRateLimit(req, res, session, "assistant", 20, 60 * 1000)) return;
-    if (!GOOGLE_CLOUD_PROJECT) return send(res, 503, { error: "AI-консультант еще не подключен: на сервере не задан GOOGLE_CLOUD_PROJECT." });
-    const body = await parseBody(req);
-    const rawMessages = Array.isArray(body.messages) ? body.messages : [];
-    const messages = rawMessages
-      .slice(-8)
-      .map((message) => ({
-        role: message.role === "assistant" ? "assistant" : "user",
-        content: String(message.content || "").trim()
-      }))
-      .filter((message) => message.content);
-    if (!messages.length) return send(res, 400, { error: "Напишите вопрос консультанту." });
-    try {
-      const appName = assistantAppName(body.app || "");
-      const answer = await askGeminiAssistant({
-        messages,
-        prompt: buildAssistantSystemPrompt(db, session, appName)
-      });
-      return send(res, 200, { answer, model: GEMINI_MODEL });
-    } catch (error) {
-      console.error("Assistant failed:", error);
-      return send(res, 502, { error: "AI-консультант временно недоступен. Попробуйте позже." });
-    }
-  }
 
   if (req.method === "GET" && url.pathname === "/api/server-info") {
     const urls = getLanUrls();
