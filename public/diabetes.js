@@ -70,7 +70,7 @@ const copy = {
   }
 };
 
-const clinics=[1,2,3,4,5,7,8,9,10,11,12,14,15];
+const clinics=[1,2,4,7,9,10,11,12,14,15];
 const state={language:localStorage.getItem("diabetes-language")||"ru",step:-1,answers:{},selectedClinic:""};
 const card=document.querySelector("#screenCard");
 const t=(key)=>copy[state.language][key]||copy.ru[key]||key;

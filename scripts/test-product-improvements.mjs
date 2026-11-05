@@ -63,10 +63,12 @@ try {
   assert.equal(keyOnlyUpdate.doctor.login, "test-doctor");
   assert.equal(keyOnlyUpdate.doctor.fullName, "Тестовый Врач");
   assert.equal(keyOnlyUpdate.doctor.clinic, "Поликлиника №1");
-  await request(admin, "/api/admin/doctors", {
-    method: "POST", expected: 400,
-    body: { fullName: "Исключенный Врач", login: "excluded-doctor", accessKey: doctorPassword, passport: "TEST", clinic: "Поликлиника №6", specialty: "Терапевт", experienceYears: 5 }
-  });
+  for (const excludedNum of ["3", "5", "6", "8", "13"]) {
+    await request(admin, "/api/admin/doctors", {
+      method: "POST", expected: 400,
+      body: { fullName: `Исключенный Врач ${excludedNum}`, login: `excluded-doctor-${excludedNum}`, accessKey: doctorPassword, passport: "TEST", clinic: `Поликлиника №${excludedNum}`, specialty: "Терапевт", experienceYears: 5 }
+    });
+  }
 
   const doctor = session();
   await request(doctor, "/api/login/doctor", { method: "POST", body: { login: "test-doctor", accessKey: doctorPassword } });
@@ -80,7 +82,9 @@ try {
   await request(doctor, "/api/doctor/surveys", { method: "POST", expected: 400, body: { ...patient, birthDate: "1981-01-01", systolic: 80, diastolic: 100 } });
   await request(admin, `/api/admin/patients/${createdSurvey.survey.id}`, { method: "PUT", body: { ...patient, clinic: "Поликлиника №1", reminderConsent: true, reminderChannel: "sms" } });
   await request(admin, "/api/admin/clinic-targets", { method: "PUT", body: { clinic: "Поликлиника №1", monthlyPatients: 10, monthlyVisits: 20, followUpCompletionPercent: 80 } });
-  await request(admin, "/api/admin/clinic-targets", { method: "PUT", expected: 400, body: { clinic: "Поликлиника №13", monthlyPatients: 10 } });
+  for (const excludedNum of ["3", "5", "6", "8", "13"]) {
+    await request(admin, "/api/admin/clinic-targets", { method: "PUT", expected: 400, body: { clinic: `Поликлиника №${excludedNum}`, monthlyPatients: 10 } });
+  }
 
   const appointment = await request(doctor, "/api/doctor/appointments", { method: "POST", expected: 201, body: { surveyId: createdSurvey.survey.id, startsAt: "2030-05-20T09:00:00.000Z", note: "Плановый прием" } });
   assert.equal(appointment.reminder.status, "queued");

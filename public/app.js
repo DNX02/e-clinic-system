@@ -101,9 +101,9 @@ const clinicSortKey = (value = "") => {
   const number = text.match(/\d+/)?.[0];
   return number ? String(number).padStart(4, "0") : text.toLowerCase();
 };
-const clinicNumbers = Array.from({ length: 15 }, (_, index) => index + 1).filter((number) => ![6, 13].includes(number));
+const clinicNumbers = Array.from({ length: 15 }, (_, index) => index + 1).filter((number) => ![3, 5, 6, 8, 13].includes(number));
 const clinicOptions = clinicNumbers.map((number) => [`Поликлиника №${number}`, `Поликлиника №${number}`]);
-const isExcludedClinicName = (value = "") => ["6", "13"].includes(String(value).match(/\d+/)?.[0] || "");
+const isExcludedClinicName = (value = "") => ["3", "5", "6", "8", "13"].includes(String(value).match(/\d+/)?.[0] || "");
 const lifestyleRecommendations = {
   diabetesDiet: [
     "Основа питания: овощи, фрукты, бобовые, цельные злаки и нежирные источники белка.",

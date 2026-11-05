@@ -878,7 +878,7 @@ function clinicKey(value = "") {
 }
 
 function isExcludedClinic(value = "") {
-  return ["6", "13"].includes(clinicKey(value));
+  return ["3", "5", "6", "8", "13"].includes(clinicKey(value));
 }
 
 function allowedClinic(value, label = "Поликлиника") {
@@ -2737,14 +2737,18 @@ function countSelected(values) {
 }
 
 function buildStats(db) {
-  const total = db.nurseSurveys.length || 1;
-  const highFindrisc = db.nurseSurveys.filter((item) => item.findrisc.highRisk).length;
-  const highScore2 = db.nurseSurveys.filter((item) => item.score2.highRisk).length;
-  const needsDoctor = db.nurseSurveys.filter((item) => item.needsDoctor).length;
+  const visibleSurveys = (db.nurseSurveys || []).filter((item) => !isExcludedClinic(item.patient?.clinic || item.clinic));
+  const total = visibleSurveys.length || 1;
+  const highFindrisc = visibleSurveys.filter((item) => item.findrisc?.highRisk).length;
+  const highScore2 = visibleSurveys.filter((item) => item.score2?.highRisk).length;
+  const needsDoctor = visibleSurveys.filter((item) => item.needsDoctor).length;
+  const visibleDoctors = (db.doctors || []).filter((doctor) => !isExcludedClinic(doctor.clinic));
+  const excludedSurveyIds = new Set((db.nurseSurveys || []).filter((s) => isExcludedClinic(s.patient?.clinic || s.clinic)).map((s) => s.id));
+  const visibleVisits = (db.doctorVisits || []).filter((v) => !excludedSurveyIds.has(v.surveyId));
   return {
-    doctorsTotal: db.doctors.length,
-    surveysTotal: db.nurseSurveys.length,
-    visitsTotal: db.doctorVisits.length,
+    doctorsTotal: visibleDoctors.length,
+    surveysTotal: visibleSurveys.length,
+    visitsTotal: visibleVisits.length,
     needsDoctor,
     highFindrisc,
     highScore2,
@@ -2872,17 +2876,17 @@ function buildInvestorDashboard(db) {
   const visibleDoctors = db.doctors.filter((doctor) => !isExcludedClinic(doctor.clinic));
   const surveysByClinic = countSelected(visibleSurveys.map((survey) => survey.patient?.clinic || survey.clinic || "Не указано"));
   const visitsByDate = countSelected(db.doctorVisits.map((visit) => dateKey(visit.createdAt)));
-  const surveyByDate = countSelected(db.nurseSurveys.map((survey) => dateKey(survey.createdAt)));
+  const surveyByDate = countSelected(visibleSurveys.map((survey) => dateKey(survey.createdAt)));
   const diagnoses = countSelected(db.doctorVisits.map((visit) => visit.diagnosis || "Без диагноза"));
   const cutoff30 = Date.now() - 30 * 86400000;
-  const highGlucose = db.nurseSurveys.filter((survey) => Number(survey.measurements?.glucoseLevel || 0) >= 6.1).length;
-  const highPressure = db.nurseSurveys.filter((survey) => Number(survey.measurements?.systolic || 0) >= 140 || Number(survey.measurements?.diastolic || 0) >= 90).length;
+  const highGlucose = visibleSurveys.filter((survey) => Number(survey.measurements?.glucoseLevel || 0) >= 6.1).length;
+  const highPressure = visibleSurveys.filter((survey) => Number(survey.measurements?.systolic || 0) >= 140 || Number(survey.measurements?.diastolic || 0) >= 90).length;
   const clinicNames = [...new Set([
     ...visibleDoctors.map((doctor) => doctor.clinic || "Не указано"),
     ...visibleSurveys.map((survey) => survey.patient?.clinic || survey.clinic || "Не указано")
   ])].filter((clinic) => !isExcludedClinic(clinic)).sort((a, b) => a.localeCompare(b, "ru"));
   const clinicPerformance = clinicNames.map((clinic) => {
-    const surveys = db.nurseSurveys.filter((survey) => (survey.patient?.clinic || survey.clinic || "Не указано") === clinic);
+    const surveys = visibleSurveys.filter((survey) => (survey.patient?.clinic || survey.clinic || "Не указано") === clinic);
     const surveyIds = new Set(surveys.map((survey) => survey.id));
     const visits = db.doctorVisits.filter((visit) => surveyIds.has(visit.surveyId));
     const tasks = (db.patientTasks || []).filter((task) => surveyIds.has(task.surveyId));
@@ -2890,7 +2894,7 @@ function buildInvestorDashboard(db) {
     const completedTasks = tasks.filter((task) => task.status === "completed").length;
     return {
       label: clinic,
-      doctors: db.doctors.filter((doctor) => (doctor.clinic || "Не указано") === clinic).length,
+      doctors: visibleDoctors.filter((doctor) => (doctor.clinic || "Не указано") === clinic).length,
       surveys: surveys.length,
       visits: visits.length,
       highRisk: surveys.filter((survey) => survey.needsDoctor).length,
@@ -2911,9 +2915,9 @@ function buildInvestorDashboard(db) {
       highScore2Percent: stats.highScore2Percent,
       doctorTrainingPostAverage: doctorEducation.postAverage,
       nurseTrainingPostAverage: nurseEducation.postAverage,
-      newPatients30Days: db.nurseSurveys.filter((survey) => Date.parse(survey.createdAt || "") >= cutoff30).length,
-      highGlucosePercent: Math.round((highGlucose / Math.max(1, db.nurseSurveys.length)) * 100),
-      highPressurePercent: Math.round((highPressure / Math.max(1, db.nurseSurveys.length)) * 100),
+      newPatients30Days: visibleSurveys.filter((survey) => Date.parse(survey.createdAt || "") >= cutoff30).length,
+      highGlucosePercent: Math.round((highGlucose / Math.max(1, visibleSurveys.length)) * 100),
+      highPressurePercent: Math.round((highPressure / Math.max(1, visibleSurveys.length)) * 100),
       openFollowUps: (db.patientTasks || []).filter((task) => task.status !== "completed").length
     },
     doctors: {
@@ -3364,7 +3368,7 @@ function qualityFlagsForVisit(visit) {
 
 function duplicatePatientSuggestions(db) {
   const groups = new Map();
-  for (const survey of (db.nurseSurveys || []).filter((item) => !item.archivedAt)) {
+  for (const survey of (db.nurseSurveys || []).filter((item) => !item.archivedAt && !isExcludedClinic(item.patient?.clinic || item.clinic))) {
     const patient = survey.patient || {};
     const identity = normalizePatientIdentity(patient);
     const phone = String(patient.phone || "").replace(/\D/g, "");
@@ -3411,7 +3415,7 @@ function buildCareControl(db) {
   for (const visit of db.doctorVisits || []) (visitsBySurvey[visit.surveyId] ||= []).push(visit);
   const tasksBySurvey = {};
   for (const task of db.patientTasks || []) (tasksBySurvey[task.surveyId] ||= []).push(task);
-  const registry = (db.nurseSurveys || []).filter((survey) => !survey.archivedAt).map((survey) => {
+  const registry = (db.nurseSurveys || []).filter((survey) => !survey.archivedAt && !isExcludedClinic(survey.patient?.clinic || survey.clinic)).map((survey) => {
     const visits = (visitsBySurvey[survey.id] || []).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     const lastVisit = visits.at(-1) || null;
     const checklist = careChecklist(visits);
@@ -3446,7 +3450,7 @@ function buildCareControl(db) {
     };
   }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const nurseDailyMap = {};
-  for (const row of buildOperationsMonitorRows(db).surveyRows) {
+  for (const row of buildPublicOperationsMonitorRows(db).surveyRows) {
     const day = dateKey(row.createdAt);
     const key = `${row.clinic}|${row.nurseName}|${day}`;
     nurseDailyMap[key] ||= { clinic: row.clinic, nurseName: row.nurseName, date: day, screened: 0, needsDoctor: 0 };
@@ -3467,7 +3471,7 @@ function buildCareControl(db) {
   return {
     summary,
     registry,
-    waitingPatients: waitingPatients(db),
+    waitingPatients: waitingPatients(db).filter((patient) => !isExcludedClinic(patient.clinic)),
     nurseDaily: Object.values(nurseDailyMap).sort((a, b) => b.date.localeCompare(a.date) || a.clinic.localeCompare(b.clinic, "ru")),
     quality,
     duplicates,
