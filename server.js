@@ -489,31 +489,79 @@ async function ensureCloudDb() {
   }
 }
 
+const syncedItemHashes = new Map();
+const syncedTableCounts = new Map();
+
+function hashRecord(data) {
+  return crypto.createHash("md5").update(JSON.stringify(data)).digest("hex");
+}
+
 async function syncCloudCollection(client, table, values, dataSelector = (item) => item) {
-  const rows = (Array.isArray(values) ? values : []).filter((item) => item?.id).map((item) => ({ id: String(item.id), data: dataSelector(item) }));
-  if (rows.length) {
-    await client.query(`
-      insert into ${table} (id, data, updated_at)
-      select item.id, item.data, now()
-      from jsonb_to_recordset($1::jsonb) as item(id text, data jsonb)
-      on conflict (id) do update set data = excluded.data, updated_at = now()
-      where ${table}.data is distinct from excluded.data
-    `, [JSON.stringify(rows)]);
-    await client.query(`delete from ${table} where not (id = any($1::text[]))`, [rows.map((row) => row.id)]);
-  } else {
-    await client.query(`delete from ${table}`);
+  const rawRows = (Array.isArray(values) ? values : []).filter((item) => item?.id);
+  const currentIds = new Set();
+  const dirtyRows = [];
+
+  for (const item of rawRows) {
+    const id = String(item.id);
+    currentIds.add(id);
+    const data = dataSelector(item);
+    const hash = hashRecord(data);
+    const key = `${table}:${id}`;
+    if (syncedItemHashes.get(key) !== hash) {
+      dirtyRows.push({ id, data, hash, key });
+    }
   }
+
+  if (dirtyRows.length) {
+    const batchSize = 500;
+    for (let i = 0; i < dirtyRows.length; i += batchSize) {
+      const batch = dirtyRows.slice(i, i + batchSize);
+      await client.query(`
+        insert into ${table} (id, data, updated_at)
+        select item.id, item.data, now()
+        from jsonb_to_recordset($1::jsonb) as item(id text, data jsonb)
+        on conflict (id) do update set data = excluded.data, updated_at = now()
+        where ${table}.data is distinct from excluded.data
+      `, [JSON.stringify(batch.map((r) => ({ id: r.id, data: r.data })))]);
+    }
+    for (const r of dirtyRows) {
+      syncedItemHashes.set(r.key, r.hash);
+    }
+  }
+
+  const lastCount = syncedTableCounts.get(table);
+  if (rawRows.length === 0) {
+    if (lastCount && lastCount > 0) {
+      await client.query(`delete from ${table}`);
+      for (const key of Array.from(syncedItemHashes.keys())) {
+        if (key.startsWith(`${table}:`)) syncedItemHashes.delete(key);
+      }
+    }
+  } else if (lastCount !== undefined && rawRows.length < lastCount) {
+    await client.query(`delete from ${table} where not (id = any($1::text[]))`, [Array.from(currentIds)]);
+    for (const key of Array.from(syncedItemHashes.keys())) {
+      if (key.startsWith(`${table}:`)) {
+        const id = key.slice(table.length + 1);
+        if (!currentIds.has(id)) syncedItemHashes.delete(key);
+      }
+    }
+  }
+  syncedTableCounts.set(table, rawRows.length);
 }
 
 async function syncNormalizedCloudDb(client, db) {
   for (const [key, table] of Object.entries(normalizedCollectionTables)) await syncCloudCollection(client, table, db[key]);
   const sessions = Object.entries(db.sessions || {}).map(([id, data]) => ({ id, data }));
   await syncCloudCollection(client, "app_sessions", sessions, (item) => item.data);
-  await client.query(`
-    insert into app_settings (id, data, updated_at) values ('main', $1::jsonb, now())
-    on conflict (id) do update set data = excluded.data, updated_at = now()
-    where app_settings.data is distinct from excluded.data
-  `, [JSON.stringify(db.settings || {})]);
+  const currentSettingsHash = hashRecord(db.settings || {});
+  if (syncedItemHashes.get("app_settings:main") !== currentSettingsHash) {
+    await client.query(`
+      insert into app_settings (id, data, updated_at) values ('main', $1::jsonb, now())
+      on conflict (id) do update set data = excluded.data, updated_at = now()
+      where app_settings.data is distinct from excluded.data
+    `, [JSON.stringify(db.settings || {})]);
+    syncedItemHashes.set("app_settings:main", currentSettingsHash);
+  }
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
@@ -522,8 +570,18 @@ function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
 }
 
 function verifyPassword(password, stored) {
-  const [salt, hash] = stored.split(":");
-  return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(hashPassword(password, salt).split(":")[1], "hex"));
+  if (typeof stored !== "string" || !stored.includes(":")) return false;
+  try {
+    const [salt, hash] = stored.split(":");
+    if (!salt || !hash) return false;
+    const expected = hashPassword(password, salt).split(":")[1];
+    const bufA = Buffer.from(hash, "hex");
+    const bufB = Buffer.from(expected, "hex");
+    if (bufA.length !== bufB.length || bufA.length === 0) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
 }
 
 async function readDb() {
@@ -579,7 +637,7 @@ async function readDb() {
 
 async function writeDb(db) {
   dbCache = db;
-  const body = JSON.stringify(db, null, 2);
+  const body = JSON.stringify(db);
   if (DATABASE_URL) {
     const writeTask = dbWritePromise.catch(() => {}).then(async () => {
       const pool = await pgPool();
@@ -618,11 +676,20 @@ async function readCloudDb() {
   for (const [key, table] of Object.entries(normalizedCollectionTables)) {
     const result = await pool.query(`select data from ${table} order by id`);
     db[key] = result.rows.map((row) => row.data);
+    for (const item of db[key]) {
+      if (item?.id) syncedItemHashes.set(`${table}:${item.id}`, hashRecord(item));
+    }
+    syncedTableCounts.set(table, db[key].length);
   }
   const sessions = await pool.query("select id, data from app_sessions");
   db.sessions = Object.fromEntries(sessions.rows.map((row) => [row.id, row.data]));
+  for (const [id, data] of Object.entries(db.sessions)) {
+    syncedItemHashes.set(`app_sessions:${id}`, hashRecord(data));
+  }
+  syncedTableCounts.set("app_sessions", sessions.rowCount);
   const settings = await pool.query("select data from app_settings where id = 'main'");
   db.settings = settings.rowCount ? settings.rows[0].data : {};
+  syncedItemHashes.set("app_settings:main", hashRecord(db.settings));
   return db;
 }
 
@@ -2140,13 +2207,32 @@ async function handleApi(req, res, url) {
     });
   }
 
+const weeklyDocxCache = new Map();
+function getWeeklyDocxCache(key) {
+  const item = weeklyDocxCache.get(key);
+  if (item && item.expiresAt > Date.now()) return item.buffer;
+  return null;
+}
+function setWeeklyDocxCache(key, buffer) {
+  weeklyDocxCache.set(key, { buffer, expiresAt: Date.now() + 60000 });
+}
+
   if (req.method === "GET" && url.pathname === "/api/monitor/weekly-report.docx") {
+    const rateCheck = consumeRateLimit(`weekly_docx:${clientIp(req)}`, 10, 60000);
+    if (!rateCheck.allowed) {
+      return send(res, 429, { error: "Слишком много запросов на формирование отчёта. Подождите минуту." }, { "Retry-After": String(rateCheck.retryAfter) });
+    }
     const period = monitorReportPeriod(Object.fromEntries(url.searchParams));
-    const report = await buildWeeklyMonitorReportDocx(db, period, {
-      buildRows: buildPublicOperationsMonitorRows,
-      dateKey,
-      clinicKey
-    });
+    const cacheKey = `${period.from}_${period.to}`;
+    let report = getWeeklyDocxCache(cacheKey);
+    if (!report) {
+      report = await buildWeeklyMonitorReportDocx(db, period, {
+        buildRows: buildPublicOperationsMonitorRows,
+        dateKey,
+        clinicKey
+      });
+      setWeeklyDocxCache(cacheKey, report);
+    }
     return send(res, 200, report, {
       "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "Content-Disposition": `attachment; filename="e-clinic-weekly-${period.from}-${period.to}.docx"`,
@@ -2294,6 +2380,7 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/nurse-surveys") {
+    if (!enforceUserRateLimit(req, res, session, "create_nurse_survey", 30, 60000)) return;
     const body = validateNurseSurveyInput(await parseBody(req));
     const duplicate = findDuplicateSurvey(db, body);
     if (duplicate) return send(res, 409, { error: "Пациент с такими ФИО, датой рождения и телефоном уже существует в этой поликлинике", duplicateId: duplicate.id });
@@ -2317,14 +2404,34 @@ async function handleApi(req, res, url) {
     const doctor = db.doctors.find((item) => item.id === session.userId);
     if (!doctor) return send(res, 404, { error: "Врач не найден" });
     const doctorClinicKey = clinicKey(doctor?.clinic);
+    const clinicSurveys = db.nurseSurveys
+      .filter((survey) => !survey.archivedAt && clinicKey(survey.patient?.clinic || survey.clinic) === doctorClinicKey)
+      .map((survey) => {
+        const { answers, ...safe } = survey;
+        return safe;
+      });
+    const pageParam = url.searchParams.get("page");
+    const limitParam = url.searchParams.get("limit");
+    let resultSurveys = clinicSurveys;
+    let pagination = null;
+    if (pageParam || limitParam) {
+      const page = Math.max(1, parseInt(pageParam || "1", 10) || 1);
+      const limit = Math.max(1, Math.min(100, parseInt(limitParam || "50", 10) || 50));
+      const total = clinicSurveys.length;
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      const start = (page - 1) * limit;
+      resultSurveys = clinicSurveys.slice(start, start + limit);
+      pagination = { page, limit, total, totalPages };
+    }
     return send(res, 200, {
       doctor: doctor ? publicDoctor(doctor) : null,
-      surveys: db.nurseSurveys.filter((survey) => !survey.archivedAt && clinicKey(survey.patient?.clinic || survey.clinic) === doctorClinicKey),
+      surveys: resultSurveys,
+      ...(pagination ? { pagination } : {}),
       visits: db.doctorVisits.filter((visit) => visit.doctorId === session.userId),
       tasks: (db.patientTasks || []).filter((task) => task.doctorId === session.userId),
       appointments: (db.appointments || []).filter((item) => item.doctorId === session.userId),
       dictionaries: { diabetesDrugs, hypertensionDrugs }
-  });
+    });
   }
 
   if (req.method === "POST" && url.pathname === "/api/doctor/appointments") {
@@ -2562,7 +2669,6 @@ async function handleApi(req, res, url) {
     const participant = db.trainingParticipants.find((item) => item.id === participantId);
     if (!participant) return send(res, 404, { error: "Участник не найден" });
     const questions = preQuestionsForParticipant(participant);
-    await writeDb(db);
     return send(res, 200, {
       participant: publicParticipant(participant),
       questions,
