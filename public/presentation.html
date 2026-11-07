@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Презентация E-Clinic: Руководство для врачей и медсестёр</title>
+  <link rel="icon" href="/icons/survey-icon.svg">
+  <style>
+    :root {
+      --primary: #0e6556;
+      --primary-dark: #094339;
+      --primary-light: #e8f5f1;
+      --accent: #2563eb;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --bg: #0b1320;
+      --slide-bg: #ffffff;
+      --border: #e2e8f0;
+      --card-bg: #f8fafc;
+      --danger: #dc2626;
+      --warning: #d97706;
+      --success: #16a34a;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font);
+      background-color: var(--bg);
+      color: var(--text-main);
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }
+
+    /* Top progress bar */
+    .progress-bar-container {
+      height: 5px;
+      background: rgba(255, 255, 255, 0.1);
+      width: 100%;
+      position: relative;
+      z-index: 50;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981, #3b82f6);
+      width: 0%;
+      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Main presentation stage */
+    .deck-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      position: relative;
+    }
+
+    .slide {
+      background: var(--slide-bg);
+      width: 100%;
+      max-width: 1200px;
+      aspect-ratio: 16 / 9;
+      max-height: 85vh;
+      border-radius: 20px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      padding: 48px 56px;
+      display: none;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      animation: slideIn 0.35s ease-out;
+    }
+
+    .slide.active {
+      display: flex;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(12px) scale(0.99); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* Slide Header */
+    .slide-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 24px;
+      border-bottom: 2px solid #f1f5f9;
+      padding-bottom: 16px;
+    }
+    .slide-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+    .slide-tag.nurse { background: #fef3c7; color: #b45309; }
+    .slide-tag.doctor { background: #dbeafe; color: #1d4ed8; }
+    .slide-tag.general { background: #e0e7ff; color: #4338ca; }
+    .slide-tag.training { background: #f3e8ff; color: #7e22ce; }
+
+    .slide-title {
+      font-size: 32px;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.25;
+      margin-top: 6px;
+    }
+    .slide-subtitle {
+      font-size: 16px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* Slide Content Layouts */
+    .slide-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 20px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      height: 100%;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      position: relative;
+    }
+    .card.highlight {
+      border-color: #0e6556;
+      background: #f0fdf9;
+    }
+    .card.warning {
+      border-color: #fde68a;
+      background: #fffbeb;
+    }
+    .card.accent {
+      border-color: #bfdbfe;
+      background: #eff6ff;
+    }
+
+    .card-title {
+      font-size: 19px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #1e293b;
+    }
+    .card-title .icon {
+      font-size: 24px;
+    }
+    .card p, .card li {
+      font-size: 15px;
+      line-height: 1.5;
+      color: #334155;
+    }
+    .card ul {
+      padding-left: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* Steps Flow */
+    .steps-row {
+      display: flex;
+      gap: 16px;
+      align-items: stretch;
+      margin-top: 8px;
+    }
+    .step-box {
+      flex: 1;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 20px 18px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    .step-number {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 15px;
+      margin-bottom: 12px;
+    }
+    .step-box h4 {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #0f172a;
+    }
+    .step-box p {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+
+    /* Pills & Badges */
+    .pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .pill.red { background: #fee2e2; color: #b91c1c; }
+    .pill.green { background: #dcfce7; color: #15803d; }
+    .pill.amber { background: #fef3c7; color: #b45309; }
+    .pill.blue { background: #dbeafe; color: #1e40af; }
+
+    /* Key Numbers / Stats */
+    .stat-badge {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      background: #ffffff;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      margin-top: 4px;
+    }
+    .stat-number {
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--primary);
+    }
+    .stat-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    /* Title Slide Specifics */
+    .title-slide {
+      background: radial-gradient(circle at top right, #e8f5f1, #ffffff);
+      justify-content: center;
+      text-align: center;
+      padding: 60px 80px;
+    }
+    .title-slide h1 {
+      font-size: 44px;
+      font-weight: 900;
+      color: #0d5c50;
+      line-height: 1.2;
+      margin-bottom: 16px;
+    }
+    .title-slide .lead {
+      font-size: 20px;
+      color: #334155;
+      max-width: 800px;
+      margin: 0 auto 32px;
+      line-height: 1.5;
+    }
+    .title-meta {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 24px;
+      margin-top: 16px;
+    }
+    .title-meta-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .title-meta-item strong {
+      font-size: 16px;
+      color: #0f172a;
+    }
+    .title-meta-item span {
+      font-size: 14px;
+      color: #64748b;
+    }
+
+    /* Bottom Control Bar */
+    .deck-controls {
+      height: 64px;
+      background: #0f172a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 32px;
+      color: #ffffff;
+      z-index: 40;
+    }
+    .deck-counter {
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: 0.05em;
+      color: #94a3b8;
+    }
+    .deck-counter span {
+      color: #ffffff;
+    }
+    .control-buttons {
+      display: flex;
+      gap: 12px;
+    }
+    .btn {
+      background: #1e293b;
+      color: #ffffff;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .btn:hover {
+      background: #334155;
+      border-color: #475569;
+    }
+    .btn.primary {
+      background: var(--primary);
+      border-color: var(--primary);
+    }
+    .btn.primary:hover {
+      background: var(--primary-dark);
+    }
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Speaker Notes Drawer (Toggled with N or Button) */
+    .speaker-notes-modal {
+      display: none;
+      position: fixed;
+      bottom: 74px;
+      right: 24px;
+      width: 480px;
+      max-height: 420px;
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(8px);
+      border: 1px solid #334155;
+      border-radius: 14px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+      color: #f8fafc;
+      padding: 20px;
+      z-index: 100;
+      overflow-y: auto;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    .speaker-notes-modal.open {
+      display: block;
+    }
+    .speaker-notes-modal h4 {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #38bdf8;
+      font-size: 16px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 8px;
+    }
+    .speaker-notes-modal p {
+      margin-bottom: 10px;
+      color: #cbd5e1;
+    }
+    .speaker-notes-modal strong {
+      color: #fef08a;
+    }
+
+    /* Keyboard shortcuts hint */
+    .shortcuts-hint {
+      font-size: 13px;
+      color: #64748b;
+    }
+    .shortcuts-hint kbd {
+      background: #1e293b;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid #334155;
+      color: #cbd5e1;
+      font-family: monospace;
+    }
+
+    @media print {
+      body { overflow: visible; height: auto; background: #fff; }
+      .deck-controls, .progress-bar-container, .speaker-notes-modal { display: none; }
+      .deck-container { padding: 0; display: block; }
+      .slide { display: flex !important; page-break-after: always; max-height: none; aspect-ratio: 16/9; box-shadow: none; border-radius: 0; border: 1px solid #ccc; margin-bottom: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Progress Bar -->
+  <div class="progress-bar-container">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+
+  <!-- Deck Slides -->
+  <main class="deck-container">
+
+    <!-- SLIDE 1: Title -->
+    <section class="slide active title-slide" data-slide="1" data-notes="Здравствуйте, уважаемые коллеги — доктора, медицинские сёстры и руководители поликлиник! Сегодня мы собрались, чтобы разобрать новую цифровую систему E-Clinic. Её главная цель — сделать скрининг и диспансерное наблюдение пациентов с сахарным диабетом и гипертонией простым, точным и избавить вас от рутинных бумаг. За следующие 20 минут мы пошагово пройдем путь медсестры и врача в программе.">
+      <div style="margin-bottom: 12px;">
+        <span class="slide-tag general">🏥 Платформа E-Clinic</span>
+      </div>
+      <h1>Цифровой скрининг и диспансерное наблюдение</h1>
+      <p class="lead">Практическое руководство для медицинских сестёр и врачей первичного звена по выявлению сахарного диабета 2 типа и артериальной гипертонии</p>
+      
+      <div class="title-meta">
+        <div class="title-meta-item">
+          <strong>Опросник медсестры</strong>
+          <span>Быстрый мобильный ввод (2 мин)</span>
+        </div>
+        <div class="title-meta-item">
+          <strong>Шкалы FINDRISC & SCORE2</strong>
+          <span>Мгновенный автоматический расчет</span>
+        </div>
+        <div class="title-meta-item">
+          <strong>Рабочее место врача</strong>
+          <span>Анализы, терапия, напоминания</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 2: Why E-Clinic? -->
+    <section class="slide" data-slide="2" data-notes="Коллеги, почему внедряется E-Clinic? Сегодня сахарный диабет 2 типа часто выявляется поздно — когда у пациента уже есть поражение сосудов, глаз или почек. Раньше медсестра заполняла бумажные анкеты, вручную считала баллы, а бумаги часто не доходили до кабинета врача. В E-Clinic расчет происходит мгновенно прямо в телефоне, а пациенты из группы риска сразу появляются в реестре терапевта. Ни один пациент не теряется!">
+      <div class="slide-header">
+        <div>
+          <span class="slide-tag general">Цели и задачи</span>
+          <h2 class="slide-title">Зачем поликлиникам система E-Clinic?</h2>
+          <p class="slide-subtitle">Решение ключевых проблем ранней диагностики хронических неинфекционных заболеваний</p>
+        </div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-3">
+          <div class="card warning">
+            <div class="card-title"><span class="icon">⚠️</span> Проблема сейчас</div>
+            <ul>
+              <li>Бумажные опросники требуют много времени на подсчет баллов.</li>
+              <li>Скрининг не всегда связан с записью к врачу.</li>
+              <li>Пациенты с высоким сахаром и давлением теряются после первичного визита.</li>
+            </ul>
+          </div>
+          <div class="card highlight">
+            <div class="card-title"><span class="icon">⚡</span> Что делает E-Clinic</div>
+            <ul>
+              <li><strong>2 минуты</strong> на опрос пациента прямо со смартфона медсестры.</li>
+              <li><strong>Авторасчет ИМТ, FINDRISC и SCORE2</strong> без калькуляторов и ошибок.</li>
+              <li>Маршрутизация: пациент с риском <strong>автоматически попадает к врачу</strong>.</li>
+            </ul>
+          </div>
+          <div class="card accent">
+            <div class="card-title"><span class="icon">📈</span> Польза для персонала</div>
+            <ul>
+              <li><strong>Медсестрам:</strong> освобождение от рутины, работает даже без интернета.</li>
+              <li><strong>Врачам:</strong> готовая картина рисков, печать PDF-протокола в 1 клик.</li>
+              <li><strong>Пациентам:</strong> сохранение здоровья и напоминания о визитах.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 3: End-to-End Workflow -->
+    <section class="slide" data-slide="3" data-notes="Посмотрите на эту схему — это весь жизненный цикл пациента в системе. Сначала медсестра на участке или в смотровом кабинете открывает опросник на телефоне. Она измеряет рост, вес, талию, давление и сахар. Программа сразу рассчитывает риск. Если риск высокий, система ставит статус 'Нужен врач'. Врач в своем кабинете видит этого пациента, проводит осмотр, назначает препараты и ставит контрольную дату. Пациент получает напоминание и возвращается на осмотр. Цепочка замкнута!">
+      <div class="slide-header">
+        <div>
+          <span class="slide-tag general">Маршрут пациента</span>
+          <h2 class="slide-title">Единый цикл работы: Медсестра ➔ Система ➔ Врач</h2>
+          <p class="slide-subtitle">Слаженное взаимодействие между этапами профилактического скрининга</p>
+        </div>
+      </div>
+      <div class="slide-body">
+        <div class="steps-row">
+          <div class="step-box">
+            <div class="step-number">1</div>
+            <h4>Скрининг медсестры</h4>
+            <p>Опрос по 8 вопросам FINDRISC, замер АД, сахара экспресс-методом, окружности талии.</p>
+            <div class="stat-badge"><span class="stat-number">2 мин</span> <span class="stat-label">на пациента</span></div>
+          </div>
+          <div class="step-box" style="border-color: #0e6556; background: #f0fdf9;">
+            <div class="step-number" style="background: #0e6556;">2</div>
+            <h4>Автоматический анализ</h4>
+            <p>Система рассчитывает ИМТ, FINDRISC и SCORE2. При угрозе ставит флаг <span class="pill red">Нужен врач</span>.</p>
+            <div class="stat-badge"><span class="stat-number">0 сек</span> <span class="stat-label">мгновенно</span></div>
+          </div>
+          <div class="step-box">
+            <div class="step-number">3</div>
+            <h4>Прием врача</h4>
+            <p>Врач открывает карту пациента, делает повторные замеры, назначает анализы и терапию.</p>
+            <div class="stat-badge"><span class="stat-number">PDF</span> <span class="stat-label">печать в карту</span></div>
+          </div>
+          <div class="step-box">
+            <div class="step-number">4</div>
+            <h4>Диспансерный контроль</h4>
+            <p>Автоматическое напоминание пациенту по SMS/Telegram и контроль повторной явки.</p>
+            <div class="stat-badge"><span class="stat-number">100%</span> <span class="stat-label">охват контролем</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 4: Nurse - Access & Installation -->
+    <section class="slide" data-slide="4" data-notes="Теперь подробно разберем блок медсестры. Медсестра может работать с любого смартфона (Android или iPhone), планшета или компьютера. Ссылка очень простая: /app-3-patient-survey. Более того, форму можно установить как мобильное приложение прямо на рабочий стол телефона — для этого есть специальная кнопка 'Установить приложение'. Поддерживаются два языка: русский и таджикский. Самое главное: если на участке пропал интернет, программа НЕ закрывается. Вы спокойно заполняете анкету, она сохраняется в памяти телефона, а при подключении к сети сама улетает на сервер.">
+      <div class="slide-header">
+        <div>
+          <span class="slide-tag nurse">Блок медсестры • Шаг 1</span>
+          <h2 class="slide-title">Как открыть опросник на телефоне</h2>
+          <p class="slide-subtitle">Установка мобильного приложения и подготовка к работе</p>
+        </div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title"><span class="icon">📱</span> Доступ и установка PWA</div>
+            <ul>
+              <li><strong>Адрес в браузере:</strong> открываем страницу <code>/app-3-patient-survey</code></li>
+              <li><strong>Установка на экран:</strong> вверху страницы нажмите <em>«Установить приложение на телефон»</em> (или в браузере: «Добавить на главный экран»).</li>
+              <li>Появится удобная иконка <strong>«Опросник»</strong> рядом с WhatsApp и другими приложениями.</li>
+              <li>Логин и пароль медсестре вводить <strong>не требуется</strong> — доступ открыт сразу для быстрого начала работы.</li>
+            </ul>
+          </div>
+          <div class="card highlight">
+            <div class="card-title"><span class="icon">🌐</span> Удобство и офлайн-режим</div>
+            <ul>
+              <li><strong>Переключение языков:</strong> кнопки <span class="pill blue">RU</span> и <span class="pill green">TJ</span> в шапке (переводит все вопросы на таджикский язык).</li>
+              <li><strong>Офлайн-режим (Без интернета):</strong> если в поликлинике или на выезде пропал интернет, анкета сохраняется в памяти телефона!</li>
+              <li>При появлении интернета программа <strong>автоматически синхронизирует</strong> все сохраненные анкеты без потери данных.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 5: Nurse - Patient Info & FINDRISC -->
+    <section class="slide" data-slide="5" data-notes="Переходим к заполнению анкеты. Начинаем с ФИО медсестры — это нужно для учета активности. Затем паспортная часть: Фамилия, Имя, Отчество и дата рождения. Обратите внимание: возраст вручную считать не нужно, программа вычислит его сама из даты рождения! Телефон пациента — это критически важное поле, обязательно проверяйте его, по нему потом связываются с пациентом. Далее выбираем свою поликлинику из списка. После этого идет блок FINDRISC — 8 классических вопросов оценки риска сахарного диабета.">
+      <div class="slide-header">
+        <div>
+          <span class="slide-tag nurse">Блок медсестры • Шаг 2</span>
+          <h2 class="slide-title">Заполнение паспортных данных и шкалы FINDRISC</h2>
+          <p class="slide-subtitle">Точность первичных данных — основа правильной маршрутизации</p>
+        </div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title"><span class="icon">👤</span> Паспортная часть пациента</div>
+            <ul>
+              <li><strong>ФИО медсестры:</strong> укажите фамилию и имя (сохраняется в профиле анкеты).</li>
+              <li><strong>ФИО пациента:</strong> Фамилия и Имя обязательно, отчество при наличии.</li>
+              <li><strong>Дата рождения:</strong> выберите в календаре ➔ <em>возраст посчитается автоматически</em>.</li>
+              <li><strong>Телефон пациента:</strong> <span class="pill red">Обязательно</span> (формат: +992...). Нужен для вызова на прием и SMS-напоминаний!</li>
+              <li><strong>Поликлиника:</strong> выберите поликлинику прикрепления из выпадающего списка.</li>
+            </ul>
+          </div>
+          <div class="card accent">
+            <div class="card-title"><span class="icon">📋</span> 8 Вопросов шкалы FINDRISC</div>
+            <ul>
+              <li>1. <strong>Возраст</strong> (берется из даты рождения)</li>
+              <li>2. <strong>ИМТ</strong> (вычисляется из роста и веса)</li>
+              <li>3. <strong>Окружность талии</strong> (в сантиметрах)</li>
+              <li>4. <strong>Физическая активность</strong> ≥ 30 минут в день</li>
+              <li>5. <strong>Ежедневное употребление овощей и фруктов</strong></li>
+              <li>6. <strong>Прием гипотензивных препаратов</strong></li>
+              <li>7. <strong>Повышение сахара крови в анамнезе</strong></li>
+              <li>8. <strong>Сахарный диабет у родственников</strong> (1 или 2 линия)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 6: Nurse - Measurements & Rabito -->
+    <section class="slide" data-slide="6" data-notes="Особое внимание обратите на замеры. Рост в сантиметрах и вес в килограммах. Программа сама мгновенно рассчитывает индекс массы тела. Но что делать, если в кабинете нет весов или пациент маломобилен? Мы внедрили расчетный вес по валидированной клинической формуле Rabito! Достаточно измерить сантиметровой лентой три показателя: окружность плеча, окружность талии и окружность голени — программа сама рассчитает вес! Также измеряем систолическое и диастолическое давление и экспресс-глюкозу крови.">
+      <div class="slide-header">
+        <div>
+          <span class="slide-tag nurse">Блок медсестры • Шаг 3</span>
+          <h2 class="slide-title">Антропометрия, Формула Rabito и Замеры</h2>
+          <p class="slide-subtitle">Удобный учет даже при отсутствии медицинских весов</p>
+        </div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-2">
+          <div class="card highlight">
+            <div class="card-title"><span class="icon">⚖️</span> Рост, Вес и Авторасчет ИМТ</div>
+            <ul>
+              <li><strong>Вес по весам:</strong> вводите значение в кг (например, 78).</li>
+              <li><strong>Рост:</strong> в сантиметрах (например, 172).</li>
+              <li><strong>Индекс массы тела (ИМТ):</strong> вычисляется автоматически и сразу подставляет баллы в шкалу FINDRISC.</li>
+              <li><strong>Окружность талии:</strong> измеряется лентой на уровне пупка. Обязательна для всех пациентов!</li>
+            </ul>
+          </div>
+          <div class="card">
+            <div class="card-title"><span class="icon">📏</span> Формула Rabito (Если нет весов)</div>
+            <p>Если весы отсутствуют или пациент не может встать, используются 3 замера лентой:</p>
+            <ul>
+              <li>1. <strong>Окружность плеча</strong> (см)</li>
+              <li>2. <strong>Окружность талии</strong> (см)</li>
+              <li>3. <strong>Окружность голени</strong> (см)</li>
+            </ul>
+            <p style="margin-top: 6px;"><em>Программа сама рассчитывает эквивалентный вес и ИМТ по формуле Rabito!</em></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 7: Nurse - Routing & Referral -->
+    <section class="slide" data-slide="7" data-notes="Когда медсестра ввела все данные, программа мгновенно показывает результат скрининга. Есть два исхода. Если баллы низкие и показатели в норме — зеленый статус 'Обычный риск'. Медсестра дает памятку по здоровому образу жизни. Но если выявлен высокий риск: балл FINDRISC высокий, или АД выше 140/90, или сахар натощак выше 6.1 ммоль/л — программа сразу зажигает статус 'Нужен врач'. После нажатия 'Отправить анкету' этот пациент мгновенно уходит в систему вашей поликлиники и становится виден участковому терапевту.">
+      <div class="slide-header">
+        <div>
+          <span class="slide-tag nurse">Блок медсестры • Шаг 4</span>
+          <h2 class="slide-title">Результаты скрининга и кнопка «Нужен врач»</h2>
+          <p class="slide-subtitle">Автоматическое определение маршрута пациента сразу после опроса</p>
+        </div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-2">
+          <div class="card" style="border-color: #10b981; background: #f0fdf4;">
+            <div class="card-title" style="color: #15803d;"><span class="icon">🟢</span> Вариант 1: Обычный риск</div>
+            <ul>
+              <li>Балл FINDRISC &lt; 12 (низкий или умеренный риск).</li>
+              <li>Артериальное давление в норме (&lt; 140/90 мм рт. ст.).</li>
+              <li>Сахар крови в норме (&lt; 6.1 ммоль/л).</li>
+              <li><strong>Действие:</strong> Пациенту выдаются рекомендации по питанию и физической активности. Повторный скрининг через 1 год.</li>
+            </ul>
+          </div>
+          <div class="card" style="border-color: #ef4444; background: #fef2f2;">
+            <div class="card-title" style="color: #b91c1c;"><span class="icon">🔴</span> Вариант 2: Нужен врач!</div>
+            <ul>
+              <li><strong>Балл FINDRISC ≥ 12</strong> (высокий риск развития диабета).</li>
+              <li><strong>Или АД ≥ 140/90 мм рт. ст.</strong> (подозрение на гипертонию).</li>
+              <li><strong>Или Глюкоза крови ≥ 6.1 ммоль/л</strong>.</li>
+              <li><strong>Действие:</strong> Система присваивает статус <span class="pill red">К врачу</span>. Пациент направляется в кабинет терапевта/ВОП!</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 8: Doctor - Workspace & Login -->
+    <section class="slide" data-slide="8" data-notes="Теперь переходим ко второй части нашей презентации — рабочему месту врача. Врач заходит по адресу /app-2-doctor. Для каждого врача поликлиники администратор создал учетную запись: логин и специальный ключ. При входе врач попадает в картотеку своей поликлиники. Здесь уже отображаются все пациенты, которых обследовали ваши участковые медсестры. Сверху есть удобные фильтры: можно одним кликом отфильтровать только пациентов с высоким риском, только с высоким сахаром, только с гипертонией или просроченных.">
+      <div class="slide-header">
+        <div>
+          <span class="slide-tag doctor">Блок врача • Шаг 1</span>
+          <h2 class="slide-title">Вход врача и организация рабочего стола</h2>
+          <p class="slide-subtitle">Быстрый доступ к картотеке пациентов своей поликлиники</p>
+        </div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title"><span class="icon">🔐</span> Авторизация врача</div>
+            <ul>
+              <li><strong>Адрес кабинета:</strong> <code>/app-2-doctor</code></li>
+              <li><strong>Вход:</strong> логин врача + специальный ключ (выдается старшей медсестрой или главным врачом).</li>
+              <li><strong>Выбор языка:</strong> возможность работать на русском или таджикском интерфейсе.</li>
+              <li>Врач видит пациентов <strong>только своей поликлиники</strong> (персональные данные защищены).</li>
+            </ul>
+          </div>
+          <div class="card accent">
+            <div class="card-title"><span class="icon">🔍</span> Фильтры и быстрый поиск</div>
+            <ul>
+              <li><strong>Поиск по ФИО и телефону:</strong> мгновенный поиск любого пациента.</li>
+              <li><strong>Фильтр «К врачу»:</strong> пациенты, требующие срочного клинического осмотра.</li>
+              <li><strong>Фильтр «Сахар ≥ 6.1»:</strong> целевая группа риска сахарного диабета.</li>
+              <li><strong>Фильтр «АД ≥ 140»:</strong> пациенты с повышенным давлением.</li>
+              <li><strong>Фильтр «Просроченные»:</strong> те, кто не пришел на повторный прием.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 9: Doctor - Patient Card Review -->
+    <section class="slide" data-slide="9" data-notes="Когда пациент заходит в кабинет к врачу, доктор нажимает кнопку 'Открыть' в карточке пациента. Врачу больше не нужно тратить 10 минут на переспрашивание анамнеза! На экране сразу видна полная сводка скрининга медсестры: дата обследования, ИМТ, окружность талии, исходное АД, сахар, балл FINDRISC и сердечно-сосудистый риск SCORE2. Также система сразу подсвечивает причину направления: например, 'Высокий риск диабета' или 'Повышенное систолическое давление'. Врач сразу приступает к осмотру!">
+      <div class="slide-header">
+        <div>
+          <span class="slide-tag doctor">Блок врача • Шаг 2</span>
+          <h2 class="slide-title">Карточка пациента: полная картина до осмотра</h2>
+          <p class="slide-subtitle">Экономия времени на приеме за счет готовых данных сестринского скрининга</p>
+        </div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-3">
+          <div class="card highlight">
+            <div class="card-title"><span class="icon">📊</span> Сводка медсестры</div>
+            <ul>
+              <li>ФИО, возраст, пол, телефон и адрес.</li>
+              <li>ФИО медсестры, проводившей опрос.</li>
+              <li>Исходный рост, вес и расчетный ИМТ.</li>
+              <li>Окружность талии (абдоминальное ожирение).</li>
+            </ul>
+          </div>
+          <div class="card warning">
+            <div class="card-title"><span class="icon">🎯</span> Шкалы риска</div>
+            <ul>
+              <li><strong>FINDRISC:</strong> балл и словесная категория риска (высокий / очень высокий).</li>
+              <li><strong>SCORE2:</strong> процент сердечно-сосудистого риска на 10 лет.</li>
+              <li>Факторы риска: курение, отягощенная наследственность, гиподинамия.</li>
+            </ul>
+          </div>
+          <div class="card accent">
+            <div class="card-title"><span class="icon">🚨</span> Причина направления</div>
+            <ul>
+              <li>Система четко указывает, почему пациент у врача:</li>
+              <li><em>«АД 155/95 — подозрение на АГ»</em></li>
+              <li><em>«Глюкоза 7.2 ммоль/л — подозрение на СД»</em></li>
+              <li><em>«FINDRISC 17 баллов — высокий риск»</em></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 10: Doctor - Examination Protocol -->
+    <section class="slide" data-slide="10" data-notes="Теперь сам протокол осмотра. Врач проводит повторные замеры: подтверждает или уточняет вес, измеряет повторное АД на обеих руках, оценивает уровень сахара. В форме осмотра можно выбрать тип сахара: натощак, случайный или через 2 часа после еды, либо указать гликированный гемоглобин HbA1c. Врач выставляет предварительный или подтвержденный диагноз. Если требуется консультация узкого специалиста, врач отмечает галочкой направление: к эндокринологу или кардиологу. Все заполняется в едином окне без перехода по вкладкам.">
+      <div class="slide-header">
+        <div>
+          <span class="slide-tag doctor">Блок врача • Шаг 3</span>
+          <h2 class="slide-title">Протокол клинического осмотра врача</h2>
+          <p class="slide-subtitle">Повторные инструментальные замеры и постановка диагноза</p>
+        </div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title"><span class="icon">🩺</span> Повторные измерения врача</div>
+            <ul>
+              <li><strong>Повторное АД:</strong> Систолическое и Диастолическое АД в кабинете врача.</li>
+              <li><strong>Контрольный вес и рост:</strong> ИМТ пересчитывается автоматически.</li>
+              <li><strong>Глюкоза крови:</strong> уровень сахара и тип замера (натощак / случайный / через 2 часа после еды).</li>
+              <li><strong>Диагноз:</strong> формулировка диагноза (например: <em>«Сахарный диабет 2 типа, впервые выявленный»</em> или <em>«Гипертоническая болезнь II ст.»</em>).</li>
+            </ul>
+          </div>
+          <div class="card highlight">
+            <div class="card-title"><span class="icon">👨‍⚕️</span> Направления к узким специалистам</div>
+            <ul>
+              <li><strong>Эндокринолог:</strong> при выявлении гликемии натощак ≥ 7.0 ммоль/л или случайной ≥ 11.1 ммоль/л.</li>
+              <li><strong>Кардиолог:</strong> при рефрактерной артериальной гипертонии или высоком кардиоваскулярном риске.</li>
+              <li>Фиксация направлений в электронной карте пациента для сквозного контроля.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 11: Doctor - Drugs, Labs, PDF -->
+    <section class="slide" data-slide="11" data-notes="Очень важная функция — назначение лечения и лабораторных анализов. В программе уже заложены клинические протоколы: выпадающие списки сахароснижающих препаратов (Метформин и др.) и гипотензивных средств с дозировками. Врач кликает нужный препарат — он попадает в план лечения. Далее блок анализов: можно назначить гликированный гемоглобин HbA1c, биохимию, липидограмму. А в конце приема врач нажимает одну кнопку 'Печать PDF' — и получает красивый, структурированный медицинский протокол осмотра, который сразу вклеивается в амбулаторную карту пациента (форма 025/у)!">
+      <div class="slide-header">
+        <div>
+          <span class="slide-tag doctor">Блок врача • Шаг 4</span>
+          <h2 class="slide-title">Назначение терапии, лаборатория и PDF-протокол</h2>
+          <p class="slide-subtitle">Стандартизированные клинические протоколы и печать для бумажной карты</p>
+        </div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-3">
+          <div class="card accent">
+            <div class="card-title"><span class="icon">💊</span> Выбор терапии</div>
+            <ul>
+              <li><strong>Сахарный диабет:</strong> Метформин и комбинированные сахароснижающие средства с готовыми дозировками.</li>
+              <li><strong>Гипертония:</strong> ингибиторы АПФ, сартаны, антагонисты кальция.</li>
+              <li><strong>Образ жизни:</strong> диета, отказ от соли и курения.</li>
+            </ul>
+          </div>
+          <div class="card highlight">
+            <div class="card-title"><span class="icon">🧪</span> Лабораторный заказ</div>
+            <ul>
+              <li>Назначение анализов: <strong>HbA1c</strong>, сахар крови, креатинин, липиды.</li>
+              <li>Отслеживание статуса: <em>«Назначен»</em> ➔ <em>«Получен результат»</em>.</li>
+              <li>Результаты сохраняются в динамике в профиле пациента.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <div class="card-title"><span class="icon">🖨️</span> Официальный PDF-отчет</div>
+            <ul>
+              <li>Формирование официального протокола осмотра в <strong>1 клик</strong>.</li>
+              <li>Содержит паспортную часть, замеры, шкалы, диагноз, лекарства и подпись.</li>
+              <li>Распечатывается и вклеивается в амбулаторную карту ф. 025/у.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 12: Care Follow-up & Notifications -->
+    <section class="slide" data-slide="12" data-notes="Коллеги, ключевой момент, из-за которого диспансеризация часто проваливается в поликлиниках — это то, что пациент ушел и не вернулся. В E-Clinic эта проблема решена. Врач при завершении осмотра обязательно ставит число: 'Повторный осмотр через сколько дней' — например, 30 или 90 дней. Система автоматически создает задачу в календаре врача и ставит пациента в очередь напоминаний. Пациент получает автоматическое напоминание по SMS или Telegram. А у врача в разделе 'Задачи' всегда видно, кто должен прийти сегодня, а кто задерживается.">
+      <div class="slide-header">
+        <div>
+          <span class="slide-tag doctor">Диспансерный учет</span>
+          <h2 class="slide-title">Контроль явки и автоматические напоминания</h2>
+          <p class="slide-subtitle">Пациент не потеряется: умное сопровождение после первого визита</p>
+        </div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-2">
+          <div class="card highlight">
+            <div class="card-title"><span class="icon">📅</span> Назначение контрольного визита</div>
+            <ul>
+              <li>Врач указывает срок повторного визита (например: через <strong>30 дней</strong> для подбора дозы или <strong>90 дней</strong> для контроля HbA1c).</li>
+              <li>Система автоматически создает запись в реестре диспансерного наблюдения.</li>
+              <li>Раздел <strong>«Задачи и напоминания»</strong> показывает список пациентов на текущую неделю.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <div class="card-title"><span class="icon">📲</span> Автоматические SMS / Telegram</div>
+            <ul>
+              <li>Пациент получает персональное сообщение с датой и временем контрольного визита в поликлинику.</li>
+              <li>Снижение неявки пациентов на повторный прием более чем на <strong>40%</strong>.</li>
+              <li>Если пациент пропустил визит, он автоматически помечается флагом <span class="pill red">Просрочено</span> для звонка медсестры.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 13: Training & Certification -->
+    <section class="slide" data-slide="13" data-notes="Для того чтобы каждый сотрудник чувствовал себя уверенно, в системе есть обучающий блок. Для врачей это /app-4-doctor-knowledge, для медсестёр — /app-5-nurse-knowledge. Это не просто экзамен, это интерактивный инструмент повышения квалификации. Сначала проходится короткий пре-тест, чтобы оценить исходные знания. Затем разбираются реальные клинические протоколы и алгоритмы действий. После обучения сдается пост-тест. Все результаты фиксируются, что позволяет администрации видеть готовность персонала.">
+      <div class="slide-header">
+        <div>
+          <span class="slide-tag training">Обучение персонала</span>
+          <h2 class="slide-title">Модуль тестирования и клинических протоколов</h2>
+          <p class="slide-subtitle">Повышение квалификации медсестёр и врачей прямо в системе</p>
+        </div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title"><span class="icon">👩‍⚕️</span> Обучение для медсестёр (/app-5)</div>
+            <ul>
+              <li>Правила антропометрии и измерения окружности талии.</li>
+              <li>Методика расчета баллов FINDRISC и оценка факторов риска.</li>
+              <li>Критерии немедленной передачи пациента врачу.</li>
+              <li>Пре-тест и пост-тест для закрепления сестринских навыков.</li>
+            </ul>
+          </div>
+          <div class="card accent">
+            <div class="card-title"><span class="icon">👨‍⚕️</span> Обучение для врачей (/app-4)</div>
+            <ul>
+              <li>Клинические протоколы диагностики предиабета и СД 2 типа.</li>
+              <li>Алгоритмы стратификации кардиоваскулярного риска (SCORE2).</li>
+              <li>Современные схемы стартовой терапии метформином и антигипертензивными средствами.</li>
+              <li>Разбор сложных клинических кейсов и ошибок в тактике.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 14: Golden Rules / Best Practices -->
+    <section class="slide" data-slide="14" data-notes="Уважаемые коллеги, давайте зафиксируем 5 золотых правил успешной работы в программе. Первое: всегда перепроверяйте номер телефона пациента — без него система не сможет отправить напоминание. Второе: измеряйте талию строго горизонтально на уровне пупка. Третье: если нет интернета, не переживайте — форма сохраняет данные в памяти телефона. Четвертое врачам: всегда указывайте срок повторной явки, чтобы диспансерный учет работал. И пятое: не передавайте свой персональный ключ входа коллегам, каждый врач должен подписывать свои осмотры лично.">
+      <div class="slide-header">
+        <div>
+          <span class="slide-tag general">Памятка медработнику</span>
+          <h2 class="slide-title">5 золотых правил работы с программой</h2>
+          <p class="slide-subtitle">Как избежать ошибок и сделать работу быстрой и комфортной</p>
+        </div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-3">
+          <div class="card highlight">
+            <div class="card-title"><span class="icon">1️⃣</span> Точный телефон</div>
+            <p>Номер телефона — единственный канал связи с пациентом. Вводите корректный номер мобильного телефона для SMS-напоминаний.</p>
+          </div>
+          <div class="card highlight">
+            <div class="card-title"><span class="icon">2️⃣</span> Правильная талия</div>
+            <p>Окружность талии измеряется лентой на выдохе на уровне пупка. Это главный показатель абдоминального висцерального жира.</p>
+          </div>
+          <div class="card highlight">
+            <div class="card-title"><span class="icon">3️⃣</span> Спокойствие без сети</div>
+            <p>Пропал Wi-Fi или мобильный интернет? Спокойно продолжайте опрос — анкета сохранится в телефоне и отправится позже сама.</p>
+          </div>
+          <div class="card accent">
+            <div class="card-title"><span class="icon">4️⃣</span> Срок визита врачом</div>
+            <p>Врач обязательно указывает срок повторного визита (30, 60 или 90 дней), иначе пациент выпадает из диспансерного учета.</p>
+          </div>
+          <div class="card accent">
+            <div class="card-title"><span class="icon">5️⃣</span> Личный спец-ключ</div>
+            <p>Ключ врача — это аналог электронной подписи. Не передавайте его посторонним лицам, входите под своим аккаунтом.</p>
+          </div>
+          <div class="card warning">
+            <div class="card-title"><span class="icon">💡</span> Быстрый совет</div>
+            <p>Добавьте иконку программы на рабочий стол смартфона — вход будет занимать 1 секунду без поиска ссылки в чатах.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 15: Q&A and Links -->
+    <section class="slide" data-slide="15" data-notes="Коллеги, спасибо огромное за ваш труд и за внимание! Программа уже работает на сервере во всех наших поликлиниках. Ссылки на слайде. Сегодня после презентации каждый из вас сможет зайти со своего телефона, попробовать заполнить тестовую анкету и войти в кабинет врача. Если возникнут вопросы — наша техническая поддержка и старшие медсестры всегда помогут. Готов ответить на все ваши вопросы!">
+      <div class="slide-header">
+        <div>
+          <span class="slide-tag general">Завершение</span>
+          <h2 class="slide-title">Вопросы и ответы • Ссылки для входа</h2>
+          <p class="slide-subtitle">Система готова к ежедневной клинической работе</p>
+        </div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-2">
+          <div class="card highlight">
+            <div class="card-title"><span class="icon">🔗</span> Полезные ссылки программы</div>
+            <ul>
+              <li><strong>Опросник медсестры:</strong> <br><code>http://13.63.64.38/app-3-patient-survey</code></li>
+              <li><strong>Кабинет врача:</strong> <br><code>http://13.63.64.38/app-2-doctor</code></li>
+              <li><strong>Тестирование медсестёр:</strong> <br><code>http://13.63.64.38/app-5-nurse-knowledge</code></li>
+              <li><strong>Тестирование врачей:</strong> <br><code>http://13.63.64.38/app-4-doctor-knowledge</code></li>
+            </ul>
+          </div>
+          <div class="card" style="text-align: center; justify-content: center; background: #f0fdf9; border-color: #0e6556;">
+            <div style="font-size: 48px; margin-bottom: 12px;">🤝</div>
+            <h3 style="font-size: 22px; color: #0d5c50; margin-bottom: 8px;">Спасибо за ваш труд!</h3>
+            <p style="font-size: 15px; color: #475569; max-width: 400px; margin: 0 auto;">
+              Вместе мы спасаем тысячи пациентов от инвалидизирующих осложнений диабета и гипертонии.
+            </p>
+            <div style="margin-top: 18px;">
+              <span class="pill green" style="font-size: 14px; padding: 6px 14px;">Готовы к вопросам</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Bottom Deck Navigation Bar -->
+  <footer class="deck-controls">
+    <div class="deck-counter">
+      СЛАЙД <span id="currentSlideNum">1</span> / <span id="totalSlidesNum">15</span>
+    </div>
+
+    <div class="shortcuts-hint">
+      Листать: <kbd>←</kbd> <kbd>→</kbd> или <kbd>Пробел</kbd> | На весь экран: <kbd>F11</kbd> | Текст речи: <kbd>N</kbd>
+    </div>
+
+    <div class="control-buttons">
+      <button type="button" class="btn" id="btnToggleNotes" title="Показать текст для спикера (N)">
+        📝 Текст спикера
+      </button>
+      <button type="button" class="btn" id="btnPrev" title="Предыдущий слайд (←)">
+        ◀ Назад
+      </button>
+      <button type="button" class="btn primary" id="btnNext" title="Следующий слайд (→)">
+        Вперед ▶
+      </button>
+      <button type="button" class="btn" id="btnFullscreen" title="На весь экран">
+        ⛶
+      </button>
+    </div>
+  </footer>
+
+  <!-- Speaker Notes Modal Drawer -->
+  <aside class="speaker-notes-modal" id="speakerNotesModal" aria-label="Текст для спикера">
+    <h4>
+      <span>🎙️ Текст спикера (Что говорить):</span>
+      <button type="button" class="btn" id="btnCloseNotes" style="padding: 2px 8px; font-size: 12px;">✕</button>
+    </h4>
+    <div id="speakerNotesContent"></div>
+  </aside>
+
+  <script>
+    (function() {
+      const slides = document.querySelectorAll('.slide');
+      const progressBar = document.getElementById('progressBar');
+      const currentSlideNum = document.getElementById('currentSlideNum');
+      const totalSlidesNum = document.getElementById('totalSlidesNum');
+      const btnPrev = document.getElementById('btnPrev');
+      const btnNext = document.getElementById('btnNext');
+      const btnFullscreen = document.getElementById('btnFullscreen');
+      const btnToggleNotes = document.getElementById('btnToggleNotes');
+      const btnCloseNotes = document.getElementById('btnCloseNotes');
+      const notesModal = document.getElementById('speakerNotesModal');
+      const notesContent = document.getElementById('speakerNotesContent');
+
+      let currentIdx = 0;
+      const total = slides.length;
+      totalSlidesNum.textContent = total;
+
+      function updateSlide(idx) {
+        if (idx < 0) idx = 0;
+        if (idx >= total) idx = total - 1;
+        currentIdx = idx;
+
+        slides.forEach((s, i) => {
+          s.classList.toggle('active', i === currentIdx);
+        });
+
+        currentSlideNum.textContent = currentIdx + 1;
+        progressBar.style.width = (((currentIdx + 1) / total) * 100) + '%';
+        btnPrev.disabled = currentIdx === 0;
+        btnNext.disabled = currentIdx === total - 1;
+
+        // Update speaker notes
+        const currentSlide = slides[currentIdx];
+        const notes = currentSlide.getAttribute('data-notes') || 'Нет заметок для этого слайда.';
+        notesContent.innerHTML = `<p>${notes.replace(/\n/g, '<br>')}</p>`;
+      }
+
+      function nextSlide() {
+        if (currentIdx < total - 1) updateSlide(currentIdx + 1);
+      }
+      function prevSlide() {
+        if (currentIdx > 0) updateSlide(currentIdx - 1);
+      }
+
+      btnNext.addEventListener('click', nextSlide);
+      btnPrev.addEventListener('click', prevSlide);
+
+      btnToggleNotes.addEventListener('click', () => {
+        notesModal.classList.toggle('open');
+      });
+      btnCloseNotes.addEventListener('click', () => {
+        notesModal.classList.remove('open');
+      });
+
+      btnFullscreen.addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
+      });
+
+      // Keyboard navigation
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+          e.preventDefault();
+          nextSlide();
+        } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+          e.preventDefault();
+          prevSlide();
+        } else if (e.key === 'Home') {
+          e.preventDefault();
+          updateSlide(0);
+        } else if (e.key === 'End') {
+          e.preventDefault();
+          updateSlide(total - 1);
+        } else if (e.key.toLowerCase() === 'n' || e.key.toLowerCase() === 'т') {
+          notesModal.classList.toggle('open');
+        } else if (e.key === 'Escape') {
+          notesModal.classList.remove('open');
+        }
+      });
+
+      // Swipe support for tablets / touch screens
+      let touchStartX = 0;
+      let touchEndX = 0;
+      document.addEventListener('touchstart', (e) => {
+        touchStartX = e.changedTouches[0].screenX;
+      }, { passive: true });
+      document.addEventListener('touchend', (e) => {
+        touchEndX = e.changedTouches[0].screenX;
+        if (touchStartX - touchEndX > 50) nextSlide();
+        if (touchEndX - touchStartX > 50) prevSlide();
+      }, { passive: true });
+
+      // Init first slide
+      updateSlide(0);
+    })();
+  </script>
+</body>
+</html>
