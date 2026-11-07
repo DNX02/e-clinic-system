@@ -1759,7 +1759,7 @@ async function handleApi(req, res, url) {
     if (!requireAdmin(session)) return send(res, 403, { error: "Нет доступа" });
     const requestBody = req.method === "POST" ? await parseBody(req) : {};
     const tab = url.searchParams.get("tab") || requestBody.tab || "stats";
-    if (req.method === "POST" && tab !== "audit") return send(res, 405, { error: "POST доступен только для поиска в журнале" });
+    if (req.method === "POST" && !["audit", "surveys"].includes(tab)) return send(res, 405, { error: "POST доступен только для поиска" });
     if (tab === "headNurses" && !canManageAdmins(session, db)) return send(res, 403, { error: "Раздел доступен только главному администратору" });
     const viewDb = scopedDbForAdmin(db, session);
     const diabetesDrugCounts = countSelected(viewDb.doctorVisits.flatMap((visit) => visit.diabetesDrugs || []));
@@ -1788,7 +1788,63 @@ async function handleApi(req, res, url) {
       dashboard.nurseTrainingParticipants = viewDb.nurseTrainingParticipants.map(publicNurseParticipant);
       dashboard.nurseTrainingAttempts = viewDb.nurseTrainingAttempts;
     }
-    if (tab === "surveys") dashboard.surveys = viewDb.nurseSurveys;
+    if (tab === "surveys") {
+      const pageSize = 50;
+      const requestedPage = Math.max(1, Number.parseInt(url.searchParams.get("page") || requestBody.page || "1", 10) || 1);
+      const selectedClinic = String(url.searchParams.get("clinic") || requestBody.clinic || "all").trim();
+      const searchQuery = String(url.searchParams.get("search") || requestBody.search || "").trim().toLocaleLowerCase("ru-RU");
+
+      const allSurveys = viewDb.nurseSurveys || [];
+      const clinics = [...new Set(allSurveys.map((survey) => survey.patient?.clinic || survey.clinic).filter(Boolean))]
+        .filter((clinic) => clinic && !isExcludedClinic(clinic))
+        .sort((a, b) => clinicKey(a).localeCompare(clinicKey(b), "ru", { numeric: true }));
+
+      const filtered = allSurveys
+        .filter((survey) => !isExcludedClinic(survey.patient?.clinic || survey.clinic))
+        .filter((survey) => selectedClinic === "all" || (survey.patient?.clinic || survey.clinic) === selectedClinic)
+        .filter((survey) => {
+          if (!searchQuery) return true;
+          const patient = survey.patient || {};
+          return [
+            patient.lastName,
+            patient.firstName,
+            patient.middleName,
+            patient.birthDate,
+            patient.phone,
+            patient.address,
+            patient.clinic
+          ].some((val) => String(val || "").toLocaleLowerCase("ru-RU").includes(searchQuery));
+        })
+        .sort((a, b) => {
+          const clinicA = a.patient?.clinic || a.clinic || "";
+          const clinicB = b.patient?.clinic || b.clinic || "";
+          const clinicCompare = clinicKey(clinicA).localeCompare(clinicKey(clinicB), "ru", { numeric: true });
+          if (clinicCompare) return clinicCompare;
+          return new Date(b.createdAt) - new Date(a.createdAt);
+        });
+
+      const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+      const page = Math.min(requestedPage, pageCount);
+      const start = (page - 1) * pageSize;
+      const pageItems = filtered.slice(start, start + pageSize);
+
+      dashboard.surveys = pageItems.map((survey) => ({
+        id: survey.id,
+        patient: survey.patient || {},
+        measurements: survey.measurements || {},
+        findrisc: survey.findrisc || {},
+        score2: survey.score2 || {},
+        needsDoctor: Boolean(survey.needsDoctor),
+        referralReasons: survey.referralReasons || [],
+        createdAt: survey.createdAt,
+        archivedAt: survey.archivedAt || null
+      }));
+      dashboard.surveyClinics = clinics;
+      dashboard.surveysTotal = filtered.length;
+      dashboard.surveysPage = page;
+      dashboard.surveysPageCount = pageCount;
+      dashboard.surveysPageSize = pageSize;
+    }
     if (tab === "visits") {
       dashboard.visits = viewDb.doctorVisits;
       dashboard.doctors = viewDb.doctors.map(({ id, fullName, clinic }) => ({ id, fullName, clinic }));

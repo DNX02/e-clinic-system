@@ -26,6 +26,7 @@ const initialState = () => ({
   doctorVisitNotice: "",
   surveyClinicFilter: "all",
   surveySearch: "",
+  surveyPage: 1,
   trainingClinicFilter: ["all"],
   trainingDateFilter: "",
   trainingRegistrationDateFilter: "",
@@ -995,6 +996,7 @@ document.addEventListener("click", async (event) => {
     state.auditSurvey = null;
     state.tab = event.target.closest("[data-action]").dataset.tab;
     if (state.tab === "audit") state.auditPage = 1;
+    if (state.tab === "surveys") state.surveyPage = 1;
     state.trainingAdminPage = 1;
     state.nurseTrainingAdminPage = 1;
     await loadAdmin();
@@ -1031,7 +1033,15 @@ document.addEventListener("click", async (event) => {
   }
   if (action === "clear-survey-search") {
     state.surveySearch = "";
-    renderAdmin();
+    state.surveyClinicFilter = "all";
+    state.surveyPage = 1;
+    await loadAdmin();
+  }
+  if (action === "survey-page") {
+    const direction = Number(event.target.closest("[data-action]").dataset.direction || 0);
+    const maxPage = Number(state.admin?.surveysPageCount || 1);
+    state.surveyPage = Math.min(maxPage, Math.max(1, Number(state.admin?.surveysPage || state.surveyPage || 1) + direction));
+    await loadAdmin();
   }
   if (action === "clear-care-search") {
     state.careSearch = "";
@@ -1248,10 +1258,11 @@ document.addEventListener("click", async (event) => {
   }
 });
 
-document.addEventListener("change", (event) => {
+document.addEventListener("change", async (event) => {
   if (event.target.id === "surveyClinicFilter") {
     state.surveyClinicFilter = event.target.value;
-    renderAdmin();
+    state.surveyPage = 1;
+    await loadAdmin();
   }
 });
 
@@ -2088,6 +2099,11 @@ async function loadAdmin() {
       params.set("page", String(state.auditPage || 1));
       params.set("clinic", state.auditClinic || "all");
     }
+    if (state.tab === "surveys") {
+      params.set("page", String(state.surveyPage || 1));
+      params.set("clinic", state.surveyClinicFilter || "all");
+      if (state.surveySearch) params.set("search", state.surveySearch);
+    }
     const dashboard = state.tab === "audit"
       ? await api(`/api/admin/dashboard?${params}`, { method: "POST", body: JSON.stringify({ search: state.auditSearch || "" }) })
       : await api(`/api/admin/dashboard?${params}`);
@@ -2127,7 +2143,7 @@ function adminTab() {
   if (state.tab === "doctors") return renderDoctorsAdmin();
   if (state.tab === "training") return renderTrainingAdmin();
   if (state.tab === "nurseTraining") return renderNurseTrainingAdmin();
-  if (state.tab === "surveys") return renderSurveyTable(filteredAdminSurveys());
+  if (state.tab === "surveys") return renderSurveyTable(state.admin?.surveys || []);
   if (state.tab === "visits") return renderVisitsAdmin();
   if (state.tab === "operations") return renderOperationsAdmin();
   if (state.tab === "audit") return renderAuditAdmin();
@@ -2145,29 +2161,7 @@ function adminSurveyClinics() {
 }
 
 function filteredAdminSurveys() {
-  const query = String(state.surveySearch || "").trim().toLocaleLowerCase("ru-RU");
-  return state.admin.surveys
-    .filter((survey) => !isExcludedClinicName(surveyClinic(survey)))
-    .filter((survey) => state.surveyClinicFilter === "all" || surveyClinic(survey) === state.surveyClinicFilter)
-    .filter((survey) => {
-      if (!query) return true;
-      const patient = survey.patient || {};
-      return [
-        fullName(patient),
-        patient.lastName,
-        patient.firstName,
-        patient.middleName,
-        patient.birthDate,
-        patient.phone,
-        patient.address,
-        patient.clinic
-      ].some((value) => String(value || "").toLocaleLowerCase("ru-RU").includes(query));
-    })
-    .sort((a, b) => {
-      const clinicCompare = clinicSortKey(surveyClinic(a)).localeCompare(clinicSortKey(surveyClinic(b)), "ru");
-      if (clinicCompare) return clinicCompare;
-      return new Date(b.createdAt) - new Date(a.createdAt);
-    });
+  return state.admin?.surveys || [];
 }
 
 function renderStatsAdmin() {
@@ -2649,16 +2643,16 @@ function renderSurveyTable(surveys) {
     `<option value="all"${state.surveyClinicFilter === "all" ? " selected" : ""}>Все поликлиники</option>`,
     ...clinics.map((clinic) => `<option value="${escapeHtml(clinic)}"${state.surveyClinicFilter === clinic ? " selected" : ""}>${escapeHtml(clinic)}</option>`)
   ].join("");
-  const rows = surveys.map((survey) => html`
+  const rows = (surveys || []).map((survey) => html`
     <tr>
       <td>${escapeHtml(fullName(survey.patient))}<div class="muted">${escapeHtml(survey.patient?.clinic || "")}</div></td>
-      <td>${survey.patient.birthDate || ""}</td>
-      <td>${survey.measurements.systolic}/${survey.measurements.diastolic}</td>
-      <td>${survey.findrisc.score} - ${survey.findrisc.level}</td>
-      <td>${survey.score2.percent}% - ${survey.score2.level}</td>
-      <td>${survey.measurements.weight || survey.measurements.rabitoWeight || "-"} кг<div class="muted">${survey.measurements.weight ? "По весам" : "Расчёт Rabito"}</div></td>
+      <td>${survey.patient?.birthDate || ""}</td>
+      <td>${survey.measurements?.systolic ?? "-"}/${survey.measurements?.diastolic ?? "-"}</td>
+      <td>${survey.findrisc?.score ?? "-"} - ${survey.findrisc?.level || ""}</td>
+      <td>${survey.score2?.percent ?? "-"}% - ${survey.score2?.level || ""}</td>
+      <td>${survey.measurements?.weight || survey.measurements?.rabitoWeight || "-"} кг<div class="muted">${survey.measurements?.weight ? "По весам" : "Расчёт Rabito"}</div></td>
       <td>${survey.needsDoctor ? `<span class="pill danger">К врачу</span><div class="muted">${escapeHtml(referralReasonText(survey))}</div>` : '<span class="pill ok">Обычный риск</span>'}</td>
-      <td>${new Date(survey.createdAt).toLocaleString("ru-RU")}</td>
+      <td>${survey.createdAt ? new Date(survey.createdAt).toLocaleString("ru-RU") : "-"}</td>
       <td><details><summary>Изменить</summary><form class="patient-edit-form form" data-id="${survey.id}">
         <input name="lastName" value="${escapeHtml(survey.patient?.lastName || "")}" placeholder="Фамилия" required />
         <input name="firstName" value="${escapeHtml(survey.patient?.firstName || "")}" placeholder="Имя" required />
@@ -2674,7 +2668,13 @@ function renderSurveyTable(surveys) {
       </form><button class="${survey.archivedAt ? "secondary" : "danger"}" data-action="patient-archive" data-id="${survey.id}" data-archived="${survey.archivedAt ? "false" : "true"}">${survey.archivedAt ? "Восстановить" : "В архив"}</button></details></td>
     </tr>
   `).join("");
-  const patientOptions = surveys.filter((survey) => !survey.archivedAt).map((survey) => `<option value="${survey.id}">${escapeHtml(fullName(survey.patient))} — ${escapeHtml(survey.patient?.clinic || "")}</option>`).join("");
+  const patientOptions = (surveys || []).filter((survey) => !survey.archivedAt).map((survey) => `<option value="${survey.id}">${escapeHtml(fullName(survey.patient))} — ${escapeHtml(survey.patient?.clinic || "")}</option>`).join("");
+  const total = Number(state.admin?.surveysTotal ?? surveys.length ?? 0);
+  const page = Number(state.admin?.surveysPage || state.surveyPage || 1);
+  const pageCount = Number(state.admin?.surveysPageCount || 1);
+  const pageSize = Number(state.admin?.surveysPageSize || 50);
+  const from = total ? (page - 1) * pageSize + 1 : 0;
+  const to = Math.min(page * pageSize, total);
   return html`
     <section class="panel">
       <h2>Анкеты медсестры</h2>
@@ -2689,16 +2689,26 @@ function renderSurveyTable(surveys) {
       </form>
       <div class="filter-bar">
         <div class="form-row">
-          <label>Сортировка пациентов по поликлиникам</label>
+          <label>Фильтр пациентов по поликлиникам</label>
           <select id="surveyClinicFilter">${filterOptions}</select>
         </div>
-        <div class="muted">Показано анкет: ${surveys.length} из ${state.admin.surveys.length}</div>
+        <div class="muted">Показано анкет: ${from}–${to} из ${total}; по ${pageSize} на странице</div>
+      </div>
+      <div class="audit-pagination" aria-label="Страницы анкет">
+        <button type="button" class="secondary" data-action="survey-page" data-direction="-1" ${page <= 1 ? "disabled" : ""}>← Назад</button>
+        <span>Страница ${page} из ${pageCount}</span>
+        <button type="button" class="secondary" data-action="survey-page" data-direction="1" ${page >= pageCount ? "disabled" : ""}>Вперёд →</button>
       </div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Пациент</th><th>Дата рождения</th><th>АД</th><th>FINDRISC</th><th>Сердечно-сосудистый риск</th><th>Вес</th><th>Статус</th><th>Дата</th><th>Карточка</th></tr></thead>
           <tbody>${rows || "<tr><td colspan='9'>Пока нет анкет</td></tr>"}</tbody>
         </table>
+      </div>
+      <div class="audit-pagination" aria-label="Страницы анкет">
+        <button type="button" class="secondary" data-action="survey-page" data-direction="-1" ${page <= 1 ? "disabled" : ""}>← Назад</button>
+        <span>Страница ${page} из ${pageCount}</span>
+        <button type="button" class="secondary" data-action="survey-page" data-direction="1" ${page >= pageCount ? "disabled" : ""}>Вперёд →</button>
       </div>
     </section>
   `;
@@ -3138,10 +3148,11 @@ function renderQrAdmin() {
 
 function bindAdminForms() {
   bindAdminTrainingFilters();
-  document.querySelector("#surveySearchForm")?.addEventListener("submit", (event) => {
+  document.querySelector("#surveySearchForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     state.surveySearch = String(new FormData(event.currentTarget).get("query") || "").trim();
-    renderAdmin();
+    state.surveyPage = 1;
+    await loadAdmin();
   });
   document.querySelector("#careSearchForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
