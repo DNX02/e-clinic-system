@@ -5288,7 +5288,7 @@ function doctorSurveySummary(survey) {
 function doctorVisitForm(survey) {
   const t = (value) => translateDoctorText(value);
   return html`
-    <form class="form" id="visitForm">
+    <section class="doctor-patient-detail">
       <h2>${escapeHtml(fullName(survey.patient))}</h2>
       ${state.doctorVisitNotice ? `<div class="notice ok" id="doctorVisitSavedNotice">${escapeHtml(translateDoctorText(state.doctorVisitNotice))}</div>` : ""}
       ${doctorSurveySummary(survey)}
@@ -5297,18 +5297,20 @@ function doctorVisitForm(survey) {
       ${historyPanel(survey.changeHistory || [])}
       ${doctorPendingLabs(survey.id)}
       ${doctorPatientTasks(survey.id)}
-      <input type="hidden" name="surveyId" value="${survey.id}" />
-      <section class="grid two">
-        ${input(t("Вес по весам, кг"), "weight", true, "number")}
-        ${input(t("Рост, см"), "height", true, "number")}
-        <div class="form-row"><label>${escapeHtml(t("Индекс массы тела"))}</label><input name="bmi" inputmode="decimal" readonly required /></div>
-        ${input(t("Уровень сахара в крови, ммоль/л"), "glucose", false, "number")}
-        ${select(t("Тип сахара"), "glucoseType", [["fasting", t("Натощак")], ["random", t("Случайный замер")], ["postMeal", t("Через 2 часа после еды")], ["hba1c", "HbA1c"]])}
-        <div class="form-row"><label>${escapeHtml(t("Диагноз"))}</label><input name="diagnosis" id="doctorDiagnosis" /></div>
-        ${input(t("Повторное САД"), "systolic", true, "number")}
-        ${input(t("Повторное ДАД"), "diastolic", true, "number")}
-        ${input(t("Повторное обследование через сколько дней"), "followUpDays", false, "number")}
-      </section>
+      <form class="form" id="visitForm">
+        <h3>${escapeHtml(t("Повторный осмотр"))}</h3>
+        <input type="hidden" name="surveyId" value="${survey.id}" />
+        <section class="grid two">
+          ${input(t("Вес по весам, кг"), "weight", true, "number")}
+          ${input(t("Рост, см"), "height", true, "number")}
+          <div class="form-row"><label>${escapeHtml(t("Индекс массы тела"))}</label><input name="bmi" inputmode="decimal" readonly required /></div>
+          ${input(t("Уровень сахара в крови, ммоль/л"), "glucose", false, "number")}
+          ${select(t("Тип сахара"), "glucoseType", [["fasting", t("Натощак")], ["random", t("Случайный замер")], ["postMeal", t("Через 2 часа после еды")], ["hba1c", "HbA1c"]])}
+          <div class="form-row"><label>${escapeHtml(t("Диагноз"))}</label><input name="diagnosis" id="doctorDiagnosis" /></div>
+          ${input(t("Повторное САД"), "systolic", true, "number")}
+          ${input(t("Повторное ДАД"), "diastolic", true, "number")}
+          ${input(t("Повторное обследование через сколько дней"), "followUpDays", false, "number")}
+        </section>
       <div class="muted" id="glucoseDiagnosisHint"></div>
       <h3>${escapeHtml(t("Направление"))}</h3>
       <div class="checkbox-list">
@@ -5341,6 +5343,7 @@ function doctorVisitForm(survey) {
       <button>${escapeHtml(t("Сохранить осмотр"))}</button>
       <div id="visitResult"></div>
     </form>
+  </section>
   `;
 }
 
@@ -5432,13 +5435,19 @@ function bindDoctorVisit() {
   if (!form) return;
   if (!form.elements.weight || !form.elements.height || !form.elements.glucose || !form.elements.glucoseType) return;
   const calculateBmi = () => {
-    const weight = Number(String(form.elements.weight.value).replace(",", "."));
-    const heightCm = Number(String(form.elements.height.value).replace(",", "."));
+    const weight = Number(String(form.elements.weight?.value || "").replace(",", "."));
+    const heightCm = Number(String(form.elements.height?.value || "").replace(",", "."));
     const heightM = heightCm / 100;
-    form.elements.bmi.value = weight > 0 && heightM > 0 ? (weight / (heightM * heightM)).toFixed(1) : "";
+    if (form.elements.bmi) {
+      form.elements.bmi.value = Number.isFinite(weight) && Number.isFinite(heightM) && weight > 0 && heightM > 0
+        ? (weight / (heightM * heightM)).toFixed(1)
+        : "";
+    }
   };
-  form.elements.weight.addEventListener("input", calculateBmi);
-  form.elements.height.addEventListener("input", calculateBmi);
+  ["input", "change", "keyup", "paste"].forEach((evt) => {
+    form.elements.weight.addEventListener(evt, calculateBmi);
+    form.elements.height.addEventListener(evt, calculateBmi);
+  });
   const updateDiagnosis = () => {
     const result = diagnosisByGlucose(form.elements.glucose.value, form.elements.glucoseType.value);
     const diagnosis = form.elements.diagnosis;
@@ -5453,7 +5462,9 @@ function bindDoctorVisit() {
     const hint = document.querySelector("#glucoseDiagnosisHint");
     if (hint) hint.innerHTML = result.diagnosis ? `${escapeHtml(translateDoctorText("Автоматически по сахару"))}: <span class="pill ${result.level}">${escapeHtml(translated)}</span>` : "";
   };
-  form.elements.glucose.addEventListener("input", updateDiagnosis);
+  ["input", "change", "keyup", "paste"].forEach((evt) => {
+    form.elements.glucose.addEventListener(evt, updateDiagnosis);
+  });
   form.elements.glucoseType.addEventListener("change", updateDiagnosis);
   document.querySelector("#addDoctorLab")?.addEventListener("click", () => addDoctorLabRow());
   bindDoctorLabControls();
@@ -5462,6 +5473,8 @@ function bindDoctorVisit() {
   });
   updateLifestyleRecommendationPanels();
   form.addEventListener('draft-restored', () => { calculateBmi(); updateLifestyleRecommendationPanels(); });
+  calculateBmi();
+  updateDiagnosis();
   form.querySelectorAll('[data-save-lab]').forEach(button => button.addEventListener('click', async () => {
     const card = button.closest('.pending-lab');
     button.disabled = true;
