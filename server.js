@@ -2380,7 +2380,6 @@ function setWeeklyDocxCache(key, buffer) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/nurse-surveys") {
-    if (!enforceUserRateLimit(req, res, session, "create_nurse_survey", 30, 60000)) return;
     const body = validateNurseSurveyInput(await parseBody(req));
     const duplicate = findDuplicateSurvey(db, body);
     if (duplicate) return send(res, 409, { error: "Пациент с такими ФИО, датой рождения и телефоном уже существует в этой поликлинике", duplicateId: duplicate.id });
