@@ -16,7 +16,7 @@ try {
   const appJs = readFileSync('public/app.js', 'utf8');
 
   // Check 1: Nested form check in app.js
-  const nestedFormMatch = appJs.match(/<form[^>]*>[\s\S]*?<form[^>]*>/);
+  const nestedFormMatch = appJs.match(/<form[^>]*>(?:(?!<\/form>)[\s\S])*?<form[^>]*>/);
   if (nestedFormMatch) {
     errors.push('CRITICAL: Nested <form> detected in app.js templates: ' + nestedFormMatch[0].slice(0, 100));
   } else {
@@ -138,7 +138,8 @@ async function testHttp() {
     { path: '/doctor.html', expected: 200, name: 'Doctor HTML Direct' },
     { path: '/survey.html', expected: 200, name: 'Survey HTML Direct' },
     { path: '/sw.js', expected: 200, name: 'Service Worker' },
-    { path: '/manifest.webmanifest', expected: 200, name: 'PWA Webmanifest' }
+    { path: '/doctor.webmanifest', expected: 200, name: 'Doctor PWA Webmanifest' },
+    { path: '/survey.webmanifest', expected: 200, name: 'Survey PWA Webmanifest' }
   ];
 
   for (const ep of endpoints) {
