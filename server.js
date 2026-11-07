@@ -850,19 +850,42 @@ function enforceUserRateLimit(req, res, session, action, limit, windowMs) {
 
 function isTrustedStateChangingRequest(req) {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method || "GET")) return true;
-  const fetchSite = String(req.headers["sec-fetch-site"] || "").toLowerCase();
-  if (fetchSite === "cross-site") return false;
+  // Public unauthenticated forms & endpoints must never be blocked by CSRF checks
+  const path = (req.url || "").split("?")[0];
+  if (
+    path === "/api/nurse-surveys" ||
+    path.startsWith("/api/nurse-training/") ||
+    path.startsWith("/api/training/") ||
+    path.startsWith("/api/login/") ||
+    path.startsWith("/api/survey/") ||
+    path.startsWith("/api/diabetes/")
+  ) {
+    return true;
+  }
   const origin = String(req.headers.origin || "").trim();
   if (!origin) return true;
   try {
     const originUrl = new URL(origin);
-    const originHost = originUrl.host.toLowerCase();
     const originHostname = originUrl.hostname.toLowerCase();
-    if (originUrl.protocol === "https:" && (originHostname === "e-clinic-control.ru" || originHostname.endsWith(".e-clinic-control.ru"))) return true;
+    if (
+      originHostname === "e-clinic-control.ru" ||
+      originHostname.endsWith(".e-clinic-control.ru") ||
+      originHostname === "13.63.64.38" ||
+      originHostname === "localhost" ||
+      originHostname === "127.0.0.1"
+    ) {
+      return true;
+    }
+    const originHost = originUrl.host.toLowerCase();
     const requestHost = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim().toLowerCase();
-    return Boolean(originHost && requestHost && originHost === requestHost);
-  } catch {
+    if (originHost && requestHost && (originHost === requestHost || originHostname === requestHost.split(":")[0])) {
+      return true;
+    }
+    const fetchSite = String(req.headers["sec-fetch-site"] || "").toLowerCase();
+    if (fetchSite === "same-origin" || fetchSite === "same-site") return true;
     return false;
+  } catch {
+    return true;
   }
 }
 
