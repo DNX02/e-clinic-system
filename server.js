@@ -1162,16 +1162,31 @@ function normalizePatientPhone(patient = {}) {
   return String(patient.phone || "").replace(/\D/g, "");
 }
 
+function extractBirthYear(dateStr) {
+  if (!dateStr) return "";
+  const match = String(dateStr).match(/^(\d{4})/);
+  return match ? match[1] : "";
+}
+
 function findDuplicateSurvey(db, input) {
+  if (input.allowDuplicate || input.force) return null;
+  const inputBirthYear = extractBirthYear(input.birthDate);
   const identity = normalizePatientIdentity(input);
   const clinic = clinicKey(input.clinic);
   const phone = normalizePatientPhone(input);
   if (!phone) return null;
-  return (db.nurseSurveys || []).find((survey) =>
-    clinicKey(survey.patient?.clinic || survey.clinic) === clinic &&
-    normalizePatientIdentity(survey.patient) === identity &&
-    normalizePatientPhone(survey.patient) === phone
-  );
+  return (db.nurseSurveys || []).find((survey) => {
+    if (survey.archivedAt) return false;
+    if (clinicKey(survey.patient?.clinic || survey.clinic) !== clinic) return false;
+    const existingBirthYear = extractBirthYear(survey.patient?.birthDate);
+    if (inputBirthYear && existingBirthYear && inputBirthYear !== existingBirthYear) {
+      return false;
+    }
+    return (
+      normalizePatientIdentity(survey.patient) === identity &&
+      normalizePatientPhone(survey.patient) === phone
+    );
+  });
 }
 
 function patientReportPdf(survey, visits, tasks) {
@@ -1280,7 +1295,8 @@ function validateSurveyInput(body, clinicOverride = "") {
     bpMeds: cleanEnum(body.bpMeds, "Препараты от давления", ["yes", "no"]),
     highGlucose: cleanEnum(body.highGlucose, "Высокий сахар", ["yes", "no"]),
     familyDiabetes: cleanEnum(body.familyDiabetes, "Диабет у родственников", ["none", "second", "first"]),
-    smoker: cleanEnum(body.smoker, "Курение", ["yes", "no"])
+    smoker: cleanEnum(body.smoker, "Курение", ["yes", "no"]),
+    allowDuplicate: Boolean(body.allowDuplicate || body.force)
   };
   if (hasMeasuredWeight) {
     if (input.height <= 0) invalidInput("Рост: укажите значение больше 0 для расчёта индекса массы тела");
@@ -2461,7 +2477,7 @@ function setWeeklyDocxCache(key, buffer) {
   if (req.method === "POST" && url.pathname === "/api/nurse-surveys") {
     const body = validateNurseSurveyInput(await parseBody(req));
     const duplicate = findDuplicateSurvey(db, body);
-    if (duplicate) return send(res, 409, { error: "Пациент с такими ФИО, датой рождения и телефоном уже существует в этой поликлинике", duplicateId: duplicate.id });
+    if (duplicate) return send(res, 409, { error: "Пациент с такими ФИО, датой рождения и телефоном уже существует в этой поликлинике", duplicateId: duplicate.id, duplicate: true });
     const survey = buildNurseSurvey(body);
     db.nurseSurveys.push(survey);
     appendActivity(db, {
@@ -2586,7 +2602,7 @@ function setWeeklyDocxCache(key, buffer) {
     if (!doctor) return send(res, 404, { error: "Врач не найден" });
     const body = validateSurveyInput(await parseBody(req), doctor.clinic);
     const duplicate = findDuplicateSurvey(db, body);
-    if (duplicate) return send(res, 409, { error: "Пациент с такими ФИО, датой рождения и телефоном уже существует в этой поликлинике", duplicateId: duplicate.id });
+    if (duplicate) return send(res, 409, { error: "Пациент с такими ФИО, датой рождения и телефоном уже существует в этой поликлинике", duplicateId: duplicate.id, duplicate: true });
     const survey = buildNurseSurvey(body);
     survey.createdByDoctorId = doctor.id;
     db.nurseSurveys.push(survey);

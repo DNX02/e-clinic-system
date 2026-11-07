@@ -3482,6 +3482,30 @@ function renderNurseSurvey() {
       form.reset();
       updateOfflineSurveyStatus();
     } catch (error) {
+      if (error?.status === 409 || String(error?.message || "").includes("уже существует")) {
+        const resultEl = document.querySelector("#surveyResult");
+        if (resultEl) {
+          resultEl.innerHTML = `
+            <div class="notice warn">
+              <p>⚠️ <strong>${escapeHtml(error.message)}</strong></p>
+              <p class="muted" style="margin-top:6px;">${escapeHtml(t("Если это другой пациент с такими же ФИО или повторный скрининг:"))}</p>
+              <button type="button" class="btn secondary" id="forceSubmitNurseSurveyBtn" style="margin-top:8px;">➕ ${escapeHtml(t("Сохранить как нового пациента"))}</button>
+            </div>
+          `;
+          document.querySelector("#forceSubmitNurseSurveyBtn")?.addEventListener("click", async () => {
+            try {
+              const forcedData = { ...data, allowDuplicate: true };
+              const { survey: forcedSurvey } = await sendNurseSurvey(forcedData);
+              showSurveySubmitted(forcedSurvey);
+              form.reset();
+              updateOfflineSurveyStatus();
+            } catch (err2) {
+              resultEl.innerHTML = `<div class="notice danger">${escapeHtml(err2.message)}</div>`;
+            }
+          });
+        }
+        return;
+      }
       if (!shouldQueueOffline(error)) {
         document.querySelector("#surveyResult").innerHTML = `<div class="notice danger">${escapeHtml(error.message)}</div>`;
         return;
@@ -3739,9 +3763,11 @@ function renderOfflineSurveysDrawer() {
     drawer.innerHTML = `<p class="muted">${escapeHtml(translateSurveyText("Нет сохранённых офлайн-анкет."))}</p>`;
     return;
   }
+  const dupCount = queue.filter((item) => item.status === 409 || String(item.lastError || "").includes("уже существует")).length;
   drawer.innerHTML = `
     <div class="offline-drawer-header">
       <strong>📋 ${escapeHtml(translateSurveyText("Сохранённые на устройстве анкеты"))} (${queue.length})</strong>
+      ${dupCount > 0 ? `<button type="button" class="mini-btn ok-ghost" id="clearAllDuplicatesBtn" style="margin-left:auto; margin-right:8px;" title="Очистить анкеты, которые уже есть в базе">✓ Очистить дубликаты (${dupCount})</button>` : ""}
       <button type="button" class="mini-btn" id="closeOfflineDrawerBtn">✕</button>
     </div>
     <div class="offline-list">
@@ -3750,6 +3776,7 @@ function renderOfflineSurveysDrawer() {
         const name = [p.lastName, p.firstName].filter(Boolean).join(" ") || `Пациент #${idx + 1}`;
         const time = new Date(item.savedAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
         const hasErr = Boolean(item.lastError);
+        const isDup = item.status === 409 || String(item.lastError || "").includes("уже существует");
         return `
           <div class="offline-card ${hasErr ? "has-error" : ""}">
             <div class="offline-card-info">
@@ -3758,7 +3785,12 @@ function renderOfflineSurveysDrawer() {
               ${hasErr ? `<small class="danger-text">⚠️ ${escapeHtml(item.lastError)}</small>` : `<small class="muted">⏳ ${escapeHtml(translateSurveyText("Ожидает сети"))}</small>`}
             </div>
             <div class="offline-card-actions">
-              <button type="button" class="mini-btn sync-single-btn" data-offline-id="${item.id}" title="${escapeHtml(translateSurveyText("Отправить сейчас"))}">📤 ${escapeHtml(translateSurveyText("Отправить"))}</button>
+              ${isDup ? `
+                <button type="button" class="mini-btn ok-ghost mark-synced-btn" data-offline-id="${item.id}" title="${escapeHtml(translateSurveyText("Удалить из сохранённых — уже есть на сервере"))}">✓ Уже в базе</button>
+                <button type="button" class="mini-btn warning sync-force-btn" data-force-id="${item.id}" title="${escapeHtml(translateSurveyText("Сохранить как нового пациента"))}">➕ Как нового</button>
+              ` : `
+                <button type="button" class="mini-btn sync-single-btn" data-offline-id="${item.id}" title="${escapeHtml(translateSurveyText("Отправить сейчас"))}">📤 ${escapeHtml(translateSurveyText("Отправить"))}</button>
+              `}
               <button type="button" class="mini-btn danger-ghost delete-single-btn" data-delete-id="${item.id}" title="${escapeHtml(translateSurveyText("Удалить"))}">🗑️</button>
             </div>
           </div>
@@ -3771,10 +3803,36 @@ function renderOfflineSurveysDrawer() {
     drawer.style.display = "none";
   });
 
+  document.querySelector("#clearAllDuplicatesBtn")?.addEventListener("click", () => {
+    const currentQueue = offlineSurveyQueue();
+    const dups = currentQueue.filter((item) => item.status === 409 || String(item.lastError || "").includes("уже существует"));
+    for (const d of dups) {
+      persistToIdb("nurse_surveys", d.id, "delete");
+    }
+    const remainingQueue = currentQueue.filter((item) => !(item.status === 409 || String(item.lastError || "").includes("уже существует")));
+    writeOfflineSurveyQueue(remainingQueue);
+    updateOfflineSurveyStatus();
+    renderOfflineSurveysDrawer();
+  });
+
+  drawer.querySelectorAll(".mark-synced-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-offline-id");
+      deleteSingleOfflineSurvey(id);
+    });
+  });
+
+  drawer.querySelectorAll(".sync-force-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.getAttribute("data-force-id");
+      await syncSingleOfflineSurvey(id, true);
+    });
+  });
+
   drawer.querySelectorAll(".sync-single-btn").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const id = btn.getAttribute("data-offline-id");
-      await syncSingleOfflineSurvey(id);
+      await syncSingleOfflineSurvey(id, false);
     });
   });
 
@@ -3793,26 +3851,35 @@ function deleteSingleOfflineSurvey(id) {
   updateOfflineSurveyStatus();
 }
 
-async function syncSingleOfflineSurvey(id) {
+async function syncSingleOfflineSurvey(id, forceAsNew = false) {
   let queue = offlineSurveyQueue();
   const item = queue.find((q) => q.id === id);
   if (!item) return;
   const result = document.querySelector("#surveyResult");
   try {
-    const { survey } = await sendNurseSurvey(item.data);
+    const dataToSend = forceAsNew ? { ...item.data, allowDuplicate: true } : item.data;
+    const { survey } = await sendNurseSurvey(dataToSend);
     queue = queue.filter((q) => q.id !== id);
     writeOfflineSurveyQueue(queue);
     persistToIdb("nurse_surveys", id, "delete");
     updateOfflineSurveyStatus();
     if (result) showSurveySubmitted(survey);
   } catch (err) {
+    const isDup = err?.status === 409 || String(err?.message || "").includes("уже существует");
     item.attempts = Number(item.attempts || 0) + 1;
     item.lastTriedAt = new Date().toISOString();
     item.lastError = String(err.message || "Ошибка сети").slice(0, 200);
+    if (err?.status) item.status = err.status;
     writeOfflineSurveyQueue(queue);
     persistToIdb("nurse_surveys", item, "put");
     updateOfflineSurveyStatus();
-    if (result) result.innerHTML = `<div class="notice danger">${escapeHtml(err.message)}</div>`;
+    if (result) {
+      if (isDup && !forceAsNew) {
+        result.innerHTML = `<div class="notice warn">⚠️ <strong>${escapeHtml(err.message)}</strong><br><small>Анкета уже сохранена на сервере. Нажмите «✓ Уже в базе» или «➕ Как нового» в списке сохранённых анкет.</small></div>`;
+      } else {
+        result.innerHTML = `<div class="notice danger">${escapeHtml(err.message)}</div>`;
+      }
+    }
   }
 }
 
@@ -3868,9 +3935,21 @@ async function syncOfflineSurveys() {
       persistToIdb("nurse_surveys", item.id, "delete");
       sent += 1;
     } catch (error) {
-      const updated = { ...item, attempts: Number(item.attempts || 0) + 1, lastTriedAt: new Date().toISOString(), lastError: String(error.message || "Ошибка сети").slice(0, 200) };
-      remaining.push(updated);
-      persistToIdb("nurse_surveys", updated, "put");
+      const isAlreadySaved = error?.status === 409 || String(error?.message || "").includes("уже существует");
+      if (isAlreadySaved) {
+        persistToIdb("nurse_surveys", item.id, "delete");
+        sent += 1;
+      } else {
+        const updated = {
+          ...item,
+          attempts: Number(item.attempts || 0) + 1,
+          lastTriedAt: new Date().toISOString(),
+          lastError: String(error.message || "Ошибка сети").slice(0, 200),
+          status: error?.status || 0
+        };
+        remaining.push(updated);
+        persistToIdb("nurse_surveys", updated, "put");
+      }
     }
   }
   writeOfflineSurveyQueue(remaining);
@@ -3946,7 +4025,13 @@ async function syncOfflineDoctorActions() {
       surveyIdMap[item.localSurveyId] = survey.id;
       sent += 1;
     } catch (error) {
-      remaining.push({ ...item, attempts: Number(item.attempts || 0) + 1, lastTriedAt: new Date().toISOString(), lastError: String(error.message || "Ошибка сети").slice(0, 200) });
+      const isAlreadySaved = error?.status === 409 || String(error?.message || "").includes("уже существует");
+      if (isAlreadySaved) {
+        if (error.data?.duplicateId) surveyIdMap[item.localSurveyId] = error.data.duplicateId;
+        sent += 1;
+      } else {
+        remaining.push({ ...item, attempts: Number(item.attempts || 0) + 1, lastTriedAt: new Date().toISOString(), lastError: String(error.message || "Ошибка сети").slice(0, 200) });
+      }
     }
   }
 
@@ -5589,6 +5674,32 @@ function bindDoctorPatientSurvey() {
       renderDoctor();
       setTimeout(() => document.querySelector("#doctorPrimaryPanel")?.scrollIntoView({ block: "start" }), 0);
     } catch (error) {
+      if (error?.status === 409 || String(error?.message || "").includes("уже существует")) {
+        const resultEl = document.querySelector("#doctorPatientSurveyResult");
+        if (resultEl) {
+          resultEl.innerHTML = `
+            <div class="notice warn">
+              <p>⚠️ <strong>${escapeHtml(error.message)}</strong></p>
+              <button type="button" class="btn secondary" id="forceSubmitDoctorSurveyBtn" style="margin-top:8px;">➕ Сохранить как нового пациента</button>
+            </div>
+          `;
+          document.querySelector("#forceSubmitDoctorSurveyBtn")?.addEventListener("click", async () => {
+            try {
+              const forcedData = { ...data, allowDuplicate: true };
+              const { survey: forcedSurvey } = await api("/api/doctor/surveys", { method: "POST", body: JSON.stringify(forcedData) });
+              clearDraft(form);
+              state.doctor.surveys = [forcedSurvey, ...state.doctor.surveys.filter((item) => item.id !== forcedSurvey.id)];
+              state.selectedSurvey = forcedSurvey;
+              state.doctorMode = "visit";
+              renderDoctor();
+              setTimeout(() => document.querySelector("#doctorPrimaryPanel")?.scrollIntoView({ block: "start" }), 0);
+            } catch (err2) {
+              resultEl.innerHTML = `<div class="notice danger">${escapeHtml(err2.message)}</div>`;
+            }
+          });
+        }
+        return;
+      }
       if (!shouldQueueOffline(error)) {
         document.querySelector("#doctorPatientSurveyResult").innerHTML = `<div class="notice danger">${escapeHtml(error.message)}</div>`;
         return;
