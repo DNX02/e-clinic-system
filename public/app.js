@@ -3657,7 +3657,9 @@ function writeOfflineSurveyQueue(queue) {
 
 function saveOfflineSurvey(data) {
   const queue = offlineSurveyQueue();
-  const item = { id: crypto.randomUUID(), savedAt: new Date().toISOString(), attempts: 0, lastError: "", data };
+  const id = data.clientSurveyId || data.id || crypto.randomUUID();
+  const surveyData = { ...data, clientSurveyId: id };
+  const item = { id, savedAt: new Date().toISOString(), attempts: 0, lastError: "", data: surveyData };
   queue.push(item);
   writeOfflineSurveyQueue(queue);
   persistToIdb("nurse_surveys", item, "put");
@@ -3896,21 +3898,28 @@ function bindOfflineSurveySync() {
     });
   }
   if (!offlineSurveyOnlineListenerBound) {
-    window.addEventListener("online", () => {
-      syncOfflineSurveys();
-      syncOfflineDoctorActions();
+    const triggerSyncOnEvent = () => {
+      if (typeof navigator !== "undefined" && navigator.onLine) {
+        syncOfflineSurveys();
+        syncOfflineDoctorActions();
+      }
+    };
+    window.addEventListener("online", triggerSyncOnEvent);
+    window.addEventListener("focus", triggerSyncOnEvent);
+    window.addEventListener("pageshow", triggerSyncOnEvent);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") triggerSyncOnEvent();
     });
     if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
       navigator.serviceWorker.addEventListener("message", (event) => {
         if (event.data?.type === "TRIGGER_SYNC") {
-          syncOfflineSurveys();
-          syncOfflineDoctorActions();
+          triggerSyncOnEvent();
         }
       });
     }
     setInterval(() => {
-      if (typeof navigator !== "undefined" && navigator.onLine && offlineSurveyQueue().length > 0) {
-        syncOfflineSurveys();
+      if (typeof navigator !== "undefined" && navigator.onLine && (offlineSurveyQueue().length > 0 || offlineDoctorQueue().length > 0)) {
+        triggerSyncOnEvent();
       }
     }, 60000);
     offlineSurveyOnlineListenerBound = true;
@@ -3935,21 +3944,15 @@ async function syncOfflineSurveys() {
       persistToIdb("nurse_surveys", item.id, "delete");
       sent += 1;
     } catch (error) {
-      const isAlreadySaved = error?.status === 409 || String(error?.message || "").includes("уже существует");
-      if (isAlreadySaved) {
-        persistToIdb("nurse_surveys", item.id, "delete");
-        sent += 1;
-      } else {
-        const updated = {
-          ...item,
-          attempts: Number(item.attempts || 0) + 1,
-          lastTriedAt: new Date().toISOString(),
-          lastError: String(error.message || "Ошибка сети").slice(0, 200),
-          status: error?.status || 0
-        };
-        remaining.push(updated);
-        persistToIdb("nurse_surveys", updated, "put");
-      }
+      const updated = {
+        ...item,
+        attempts: Number(item.attempts || 0) + 1,
+        lastTriedAt: new Date().toISOString(),
+        lastError: String(error.message || "Ошибка сети").slice(0, 200),
+        status: error?.status || 0
+      };
+      remaining.push(updated);
+      persistToIdb("nurse_surveys", updated, "put");
     }
   }
   writeOfflineSurveyQueue(remaining);

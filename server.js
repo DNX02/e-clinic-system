@@ -2475,10 +2475,23 @@ function setWeeklyDocxCache(key, buffer) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/nurse-surveys") {
-    const body = validateNurseSurveyInput(await parseBody(req));
+    const rawBody = await parseBody(req);
+    const clientSurveyId = cleanText(rawBody.clientSurveyId || rawBody.id, "ID анкеты", { max: 100 });
+    if (clientSurveyId) {
+      const existing = (db.nurseSurveys || []).find((s) => (s.clientSurveyId && s.clientSurveyId === clientSurveyId) || s.id === clientSurveyId);
+      if (existing) {
+        return send(res, 200, { survey: existing, alreadySaved: true });
+      }
+    }
+    const body = validateNurseSurveyInput(rawBody);
+    if (clientSurveyId) body.clientSurveyId = clientSurveyId;
     const duplicate = findDuplicateSurvey(db, body);
     if (duplicate) return send(res, 409, { error: "Пациент с такими ФИО, датой рождения и телефоном уже существует в этой поликлинике", duplicateId: duplicate.id, duplicate: true });
     const survey = buildNurseSurvey(body);
+    if (clientSurveyId) {
+      survey.id = clientSurveyId;
+      survey.clientSurveyId = clientSurveyId;
+    }
     db.nurseSurveys.push(survey);
     appendActivity(db, {
       type: "nurse_survey_created",
@@ -2600,10 +2613,23 @@ function setWeeklyDocxCache(key, buffer) {
     if (session?.userType !== "doctor") return send(res, 403, { error: "Нет доступа" });
     const doctor = db.doctors.find((item) => item.id === session.userId);
     if (!doctor) return send(res, 404, { error: "Врач не найден" });
-    const body = validateSurveyInput(await parseBody(req), doctor.clinic);
+    const rawBody = await parseBody(req);
+    const clientSurveyId = cleanText(rawBody.clientSurveyId || rawBody.id, "ID анкеты", { max: 100 });
+    if (clientSurveyId) {
+      const existing = (db.nurseSurveys || []).find((s) => (s.clientSurveyId && s.clientSurveyId === clientSurveyId) || s.id === clientSurveyId);
+      if (existing) {
+        return send(res, 200, { survey: existing, alreadySaved: true });
+      }
+    }
+    const body = validateSurveyInput(rawBody, doctor.clinic);
+    if (clientSurveyId) body.clientSurveyId = clientSurveyId;
     const duplicate = findDuplicateSurvey(db, body);
     if (duplicate) return send(res, 409, { error: "Пациент с такими ФИО, датой рождения и телефоном уже существует в этой поликлинике", duplicateId: duplicate.id, duplicate: true });
     const survey = buildNurseSurvey(body);
+    if (clientSurveyId) {
+      survey.id = clientSurveyId;
+      survey.clientSurveyId = clientSurveyId;
+    }
     survey.createdByDoctorId = doctor.id;
     db.nurseSurveys.push(survey);
     appendActivity(db, {
