@@ -3722,7 +3722,7 @@ function showSurveySubmitted(survey) {
     .join("");
   document.querySelector("#surveyResult").innerHTML = html`
     <div class="notice ${survey.needsDoctor ? "danger" : "ok"}">
-      FINDRISC: ${survey.findrisc.score} (${escapeHtml(translateSurveyDynamicText(survey.findrisc.level))}). ${escapeHtml(translateSurveyText("Сердечно-сосудистый риск"))}: ${survey.score2.percent}% (${escapeHtml(translateSurveyDynamicText(survey.score2.level))}).
+      FINDRISC: ${survey.findrisc.score} (${escapeHtml(translateSurveyDynamicText(survey.findrisc.level))}). ${escapeHtml(translateSurveyText("Сердечно-сосудистый риск"))}: ${escapeHtml(translateSurveyDynamicText(survey.score2.level))} (${survey.score2.score ?? survey.score2.percent} б.).
       ${escapeHtml(translateSurveyText(survey.measurements.weight ? "Вес по весам, кг" : "Расчётный вес Rabito, кг"))}: ${survey.measurements.weight || survey.measurements.rabitoWeight || "-"}.
       ${survey.needsDoctor ? `<strong>${escapeHtml(translateSurveyText("Направить к врачу."))}</strong><div>${escapeHtml(translateSurveyText("Причина"))}:</div><ul>${reasons}</ul>` : escapeHtml(translateSurveyText("Повышенный риск не выявлен."))}
     </div>
@@ -3927,40 +3927,72 @@ function bindOfflineSurveySync() {
   updateOfflineSurveyStatus();
 }
 
+let syncNurseInFlight = false;
+let syncDoctorInFlight = false;
+
 async function syncOfflineSurveys() {
-  const button = document.querySelector("#syncSurveysButton");
-  const result = document.querySelector("#surveyResult");
-  let queue = offlineSurveyQueue();
-  if (!queue.length) {
-    updateOfflineSurveyStatus();
-    return;
-  }
-  if (button) button.disabled = true;
-  const remaining = [];
-  let sent = 0;
-  for (const item of queue) {
+  if (syncNurseInFlight) return;
+  if (typeof navigator !== "undefined" && navigator.locks) {
     try {
-      await sendNurseSurvey(item.data);
-      persistToIdb("nurse_surveys", item.id, "delete");
-      sent += 1;
-    } catch (error) {
-      const updated = {
-        ...item,
-        attempts: Number(item.attempts || 0) + 1,
-        lastTriedAt: new Date().toISOString(),
-        lastError: String(error.message || "Ошибка сети").slice(0, 200),
-        status: error?.status || 0
-      };
-      remaining.push(updated);
-      persistToIdb("nurse_surveys", updated, "put");
+      return await navigator.locks.request("eclinic_sync_nurse", { ifAvailable: true }, async (lock) => {
+        if (!lock) return;
+        await doSyncOfflineSurveys();
+      });
+    } catch {
+      return doSyncOfflineSurveys();
     }
   }
-  writeOfflineSurveyQueue(remaining);
-  updateOfflineSurveyStatus();
-  if (!result) return;
-  result.innerHTML = remaining.length
-    ? `<div class="notice warn">${escapeHtml(translateSurveyText("Отправлено"))}: ${sent}. ${escapeHtml(translateSurveyText("Осталось без синхронизации"))}: ${remaining.length}. ${escapeHtml(translateSurveyText("Попробуйте еще раз, когда интернет будет стабильным."))}</div>`
-    : `<div class="notice ok">${escapeHtml(translateSurveyText("Синхронизация завершена. Отправлено анкет"))}: ${sent}.</div>`;
+  return doSyncOfflineSurveys();
+}
+
+async function doSyncOfflineSurveys() {
+  if (syncNurseInFlight) return;
+  syncNurseInFlight = true;
+  const button = document.querySelector("#syncSurveysButton");
+  const result = document.querySelector("#surveyResult");
+  try {
+    let queue = offlineSurveyQueue();
+    if (!queue.length) {
+      updateOfflineSurveyStatus();
+      return;
+    }
+    if (button) button.disabled = true;
+    const remaining = [];
+    let sent = 0;
+    for (const item of queue) {
+      if (item.requiresEdit) {
+        remaining.push(item);
+        continue;
+      }
+      try {
+        await sendNurseSurvey(item.data);
+        await persistToIdb("nurse_surveys", item.id, "delete");
+        sent += 1;
+      } catch (error) {
+        const isClientError = error?.status >= 400 && error.status < 500 && error.status !== 409;
+        const updated = {
+          ...item,
+          attempts: Number(item.attempts || 0) + 1,
+          lastTriedAt: new Date().toISOString(),
+          lastError: String(error.message || "Ошибка сети").slice(0, 200),
+          status: error?.status || 0,
+          requiresEdit: isClientError
+        };
+        remaining.push(updated);
+        await persistToIdb("nurse_surveys", updated, "put");
+      }
+    }
+    writeOfflineSurveyQueue(remaining);
+    updateOfflineSurveyStatus();
+    if (result) {
+      result.innerHTML = remaining.length
+        ? `<div class="notice warn">${escapeHtml(translateSurveyText("Отправлено"))}: ${sent}. ${escapeHtml(translateSurveyText("Осталось без синхронизации"))}: ${remaining.length}. ${escapeHtml(translateSurveyText("Попробуйте еще раз, когда интернет будет стабильным."))}</div>`
+        : `<div class="notice ok">${escapeHtml(translateSurveyText("Синхронизация завершена. Отправлено анкет"))}: ${sent}.</div>`;
+    }
+  } finally {
+    syncNurseInFlight = false;
+    if (button) button.disabled = offlineSurveyQueue().length === 0;
+  }
 }
 
 function offlineDoctorQueue() {
@@ -4009,74 +4041,95 @@ function updateOfflineDoctorStatus() {
 }
 
 async function syncOfflineDoctorActions() {
+  if (syncDoctorInFlight) return;
+  if (typeof navigator !== "undefined" && navigator.locks) {
+    try {
+      return await navigator.locks.request("eclinic_sync_doctor", { ifAvailable: true }, async (lock) => {
+        if (!lock) return;
+        await doSyncOfflineDoctorActions();
+      });
+    } catch {
+      return doSyncOfflineDoctorActions();
+    }
+  }
+  return doSyncOfflineDoctorActions();
+}
+
+async function doSyncOfflineDoctorActions() {
+  if (syncDoctorInFlight) return;
+  syncDoctorInFlight = true;
   const result = document.querySelector("#doctorSyncResult");
   const button = document.querySelector("#doctorSyncButton");
-  let queue = offlineDoctorQueue();
-  if (!queue.length) {
-    updateOfflineDoctorStatus();
-    return;
-  }
-  if (button) button.disabled = true;
-  const remaining = [];
-  const surveyIdMap = {};
-  let sent = 0;
+  try {
+    let queue = offlineDoctorQueue();
+    if (!queue.length) {
+      updateOfflineDoctorStatus();
+      return;
+    }
+    if (button) button.disabled = true;
+    const remaining = [];
+    const surveyIdMap = {};
+    let sent = 0;
 
-  for (const item of queue) {
-    try {
-      if (item.type !== "survey") continue;
-      const { survey } = await api("/api/doctor/surveys", { method: "POST", body: JSON.stringify(item.data) });
-      surveyIdMap[item.localSurveyId] = survey.id;
-      sent += 1;
-    } catch (error) {
-      const isAlreadySaved = error?.status === 409 || String(error?.message || "").includes("уже существует");
-      if (isAlreadySaved) {
-        if (error.data?.duplicateId) surveyIdMap[item.localSurveyId] = error.data.duplicateId;
+    for (const item of queue) {
+      try {
+        if (item.type !== "survey") continue;
+        const { survey } = await api("/api/doctor/surveys", { method: "POST", body: JSON.stringify(item.data) });
+        surveyIdMap[item.localSurveyId] = survey.id;
         sent += 1;
-      } else {
-        remaining.push({ ...item, attempts: Number(item.attempts || 0) + 1, lastTriedAt: new Date().toISOString(), lastError: String(error.message || "Ошибка сети").slice(0, 200) });
+      } catch (error) {
+        const isAlreadySaved = error?.status === 409 || String(error?.message || "").includes("уже существует");
+        if (isAlreadySaved) {
+          if (error.data?.duplicateId) surveyIdMap[item.localSurveyId] = error.data.duplicateId;
+          sent += 1;
+        } else {
+          remaining.push({ ...item, attempts: Number(item.attempts || 0) + 1, lastTriedAt: new Date().toISOString(), lastError: String(error.message || "Ошибка сети").slice(0, 200) });
+        }
       }
     }
-  }
 
-  const visitItems = queue.filter((item) => item.type === "visit");
-  for (const item of visitItems) {
-    const data = { ...item.data };
-    if (surveyIdMap[data.surveyId]) data.surveyId = surveyIdMap[data.surveyId];
-    if (String(data.surveyId || "").startsWith("local-")) {
-      remaining.push({ ...item, attempts: Number(item.attempts || 0) + 1, lastTriedAt: new Date().toISOString(), lastError: "Сначала нужно синхронизировать анкету пациента" });
-      continue;
+    const visitItems = queue.filter((item) => item.type === "visit");
+    for (const item of visitItems) {
+      const data = { ...item.data };
+      if (surveyIdMap[data.surveyId]) data.surveyId = surveyIdMap[data.surveyId];
+      if (String(data.surveyId || "").startsWith("local-")) {
+        remaining.push({ ...item, attempts: Number(item.attempts || 0) + 1, lastTriedAt: new Date().toISOString(), lastError: "Сначала нужно синхронизировать анкету пациента" });
+        continue;
+      }
+      try {
+        await api("/api/doctor/visits", { method: "POST", body: JSON.stringify(data) });
+        sent += 1;
+      } catch (error) {
+        remaining.push({ ...item, data, attempts: Number(item.attempts || 0) + 1, lastTriedAt: new Date().toISOString(), lastError: String(error.message || "Ошибка сети").slice(0, 200) });
+      }
+    }
+
+    const deduped = [];
+    const seen = new Set();
+    for (const item of remaining) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      deduped.push(item);
+    }
+    writeOfflineDoctorQueue(deduped);
+    updateOfflineDoctorStatus();
+    if (result) {
+      result.innerHTML = deduped.length
+        ? `<div class="notice warn">${escapeHtml(translateDoctorText("Отправлено"))}: ${sent}. ${escapeHtml(translateDoctorText("Осталось без синхронизации"))}: ${deduped.length}. ${escapeHtml(translateDoctorText("Попробуйте еще раз, когда интернет будет стабильным."))}</div>`
+        : `<div class="notice ok">${escapeHtml(translateDoctorText("Синхронизация завершена. Отправлено записей"))}: ${sent}.</div>`;
     }
     try {
-      await api("/api/doctor/visits", { method: "POST", body: JSON.stringify(data) });
-      sent += 1;
-    } catch (error) {
-      remaining.push({ ...item, data, attempts: Number(item.attempts || 0) + 1, lastTriedAt: new Date().toISOString(), lastError: String(error.message || "Ошибка сети").slice(0, 200) });
+      state.doctor = await api("/api/doctor/workspace");
+      state.selectedSurvey = state.selectedSurvey && !String(state.selectedSurvey.id).startsWith("local-")
+        ? state.doctor.surveys.find((survey) => survey.id === state.selectedSurvey.id) || state.selectedSurvey
+        : null;
+      if (!deduped.length) state.doctorMode = "list";
+      renderDoctor();
+    } catch {
+      updateOfflineDoctorStatus();
     }
-  }
-
-  const deduped = [];
-  const seen = new Set();
-  for (const item of remaining) {
-    if (seen.has(item.id)) continue;
-    seen.add(item.id);
-    deduped.push(item);
-  }
-  writeOfflineDoctorQueue(deduped);
-  updateOfflineDoctorStatus();
-  if (result) {
-    result.innerHTML = deduped.length
-      ? `<div class="notice warn">${escapeHtml(translateDoctorText("Отправлено"))}: ${sent}. ${escapeHtml(translateDoctorText("Осталось без синхронизации"))}: ${deduped.length}. ${escapeHtml(translateDoctorText("Попробуйте еще раз, когда интернет будет стабильным."))}</div>`
-      : `<div class="notice ok">${escapeHtml(translateDoctorText("Синхронизация завершена. Отправлено записей"))}: ${sent}.</div>`;
-  }
-  try {
-    state.doctor = await api("/api/doctor/workspace");
-    state.selectedSurvey = state.selectedSurvey && !String(state.selectedSurvey.id).startsWith("local-")
-      ? state.doctor.surveys.find((survey) => survey.id === state.selectedSurvey.id) || state.selectedSurvey
-      : null;
-    if (!deduped.length) state.doctorMode = "list";
-    renderDoctor();
-  } catch {
-    updateOfflineDoctorStatus();
+  } finally {
+    syncDoctorInFlight = false;
   }
 }
 

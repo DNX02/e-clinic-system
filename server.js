@@ -462,6 +462,11 @@ async function ensureCloudDb() {
     for (const table of Object.values(normalizedCollectionTables)) {
       await client.query(`create table if not exists ${table} (id text primary key, data jsonb not null, updated_at timestamptz not null default now())`);
     }
+    await client.query(`create index if not exists idx_nurse_surveys_client_id on app_nurse_surveys ((data->>'clientSurveyId')) where (data->>'clientSurveyId') is not null`);
+    await client.query(`create index if not exists idx_nurse_surveys_clinic on app_nurse_surveys ((data->'patient'->>'clinic'))`);
+    await client.query(`create index if not exists idx_nurse_surveys_birth_date on app_nurse_surveys ((data->'patient'->>'birthDate'))`);
+    await client.query(`create index if not exists idx_nurse_surveys_created_at on app_nurse_surveys ((data->>'createdAt'))`);
+    await client.query(`create index if not exists idx_doctor_visits_survey_id on app_doctor_visits ((data->>'surveyId'))`);
     const schema = await client.query("select data from app_meta where id = $1", ["schema"]);
     if (!schema.rowCount) {
       const legacy = await client.query("select data from app_state where id = $1", ["main"]);
@@ -967,6 +972,10 @@ function clinicKey(value = "") {
   return number || text.replace(/\s+/g, "");
 }
 
+function isValidUuid(value = "") {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""));
+}
+
 function isExcludedClinic(value = "") {
   return ["3", "5", "6", "8", "13"].includes(clinicKey(value));
 }
@@ -1377,9 +1386,16 @@ function calculateScore2Lite(input) {
   if (systolic >= 180) points += 1;
   if (smoker) points += 2;
   if (sex === "male") points += 1;
+  const score = points;
   const percent = Math.min(30, Math.max(1, points * 2));
-  const level = percent < 5 ? "Низкий" : percent < 10 ? "Умеренный" : "Высокий";
-  return { percent, level, highRisk: percent >= 10, note: "Упрощенная оценка без холестерина, не заменяет клиническую шкалу SCORE2." };
+  const level = points <= 2 ? "Низкий" : points <= 4 ? "Умеренный" : "Высокий";
+  return {
+    score,
+    percent,
+    level,
+    highRisk: points >= 5 || systolic >= 140,
+    note: "Упрощённый скрининговый индекс сердечно-сосудистого риска (возраст, пол, САД, курение по нелабораторной шкале ВОЗ). Не заменяет лабораторную шкалу SCORE2 (без липидограммы)."
+  };
 }
 
 function referralReasons(input, findrisc, score2) {
@@ -1391,7 +1407,7 @@ function referralReasons(input, findrisc, score2) {
   if (input.smoker === "yes") score2Factors.push("курение");
   if (systolic >= 140) score2Factors.push("повышенное САД");
   if (findrisc.highRisk) reasons.push(`FINDRISC: ${findrisc.score} баллов (${findrisc.level})`);
-  if (score2.highRisk) reasons.push(`Сердечно-сосудистый риск: ${score2.percent}% (${score2.level})${score2Factors.length ? `; факторы: ${score2Factors.join(", ")}` : ""}`);
+  if (score2.highRisk) reasons.push(`Сердечно-сосудистый риск: ${score2.level} (индекс: ${score2.score ?? score2.percent})${score2Factors.length ? `; факторы: ${score2Factors.join(", ")}` : ""}`);
   if (systolic >= 140) reasons.push(`Систолическое АД: ${systolic} мм рт.ст.`);
   return reasons;
 }
@@ -2476,19 +2492,19 @@ function setWeeklyDocxCache(key, buffer) {
 
   if (req.method === "POST" && url.pathname === "/api/nurse-surveys") {
     const rawBody = await parseBody(req);
-    const clientSurveyId = cleanText(rawBody.clientSurveyId || rawBody.id, "ID анкеты", { max: 100 });
-    if (clientSurveyId) {
-      const existing = (db.nurseSurveys || []).find((s) => (s.clientSurveyId && s.clientSurveyId === clientSurveyId) || s.id === clientSurveyId);
+    const clientSurveyId = cleanText(rawBody.clientSurveyId, "ID анкеты", { max: 100 });
+    if (clientSurveyId && isValidUuid(clientSurveyId)) {
+      const existing = (db.nurseSurveys || []).find((s) => s.clientSurveyId === clientSurveyId || s.id === clientSurveyId);
       if (existing) {
-        return send(res, 200, { survey: existing, alreadySaved: true });
+        return send(res, 200, { ok: true, alreadySaved: true, id: existing.id });
       }
     }
     const body = validateNurseSurveyInput(rawBody);
-    if (clientSurveyId) body.clientSurveyId = clientSurveyId;
+    if (clientSurveyId && isValidUuid(clientSurveyId)) body.clientSurveyId = clientSurveyId;
     const duplicate = findDuplicateSurvey(db, body);
     if (duplicate) return send(res, 409, { error: "Пациент с такими ФИО, датой рождения и телефоном уже существует в этой поликлинике", duplicateId: duplicate.id, duplicate: true });
     const survey = buildNurseSurvey(body);
-    if (clientSurveyId) {
+    if (clientSurveyId && isValidUuid(clientSurveyId)) {
       survey.id = clientSurveyId;
       survey.clientSurveyId = clientSurveyId;
     }
@@ -2614,19 +2630,20 @@ function setWeeklyDocxCache(key, buffer) {
     const doctor = db.doctors.find((item) => item.id === session.userId);
     if (!doctor) return send(res, 404, { error: "Врач не найден" });
     const rawBody = await parseBody(req);
-    const clientSurveyId = cleanText(rawBody.clientSurveyId || rawBody.id, "ID анкеты", { max: 100 });
-    if (clientSurveyId) {
-      const existing = (db.nurseSurveys || []).find((s) => (s.clientSurveyId && s.clientSurveyId === clientSurveyId) || s.id === clientSurveyId);
+    const clientSurveyId = cleanText(rawBody.clientSurveyId, "ID анкеты", { max: 100 });
+    if (clientSurveyId && isValidUuid(clientSurveyId)) {
+      const existing = (db.nurseSurveys || []).find((s) => s.clientSurveyId === clientSurveyId || s.id === clientSurveyId);
       if (existing) {
-        return send(res, 200, { survey: existing, alreadySaved: true });
+        if (!doctorCanAccessSurvey(doctor, existing)) return send(res, 403, { error: "Нет доступа" });
+        return send(res, 200, { ok: true, alreadySaved: true, id: existing.id });
       }
     }
     const body = validateSurveyInput(rawBody, doctor.clinic);
-    if (clientSurveyId) body.clientSurveyId = clientSurveyId;
+    if (clientSurveyId && isValidUuid(clientSurveyId)) body.clientSurveyId = clientSurveyId;
     const duplicate = findDuplicateSurvey(db, body);
     if (duplicate) return send(res, 409, { error: "Пациент с такими ФИО, датой рождения и телефоном уже существует в этой поликлинике", duplicateId: duplicate.id, duplicate: true });
     const survey = buildNurseSurvey(body);
-    if (clientSurveyId) {
+    if (clientSurveyId && isValidUuid(clientSurveyId)) {
       survey.id = clientSurveyId;
       survey.clientSurveyId = clientSurveyId;
     }
