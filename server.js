@@ -630,6 +630,17 @@ async function readDb() {
           changed = true;
         }
       }
+      for (const survey of db.nurseSurveys || []) {
+        const findriscScore = Number(survey.findrisc?.score ?? -1);
+        if (findriscScore >= 0 && findriscScore < 14 && survey.findrisc?.highRisk) {
+          survey.findrisc.highRisk = false;
+          if (Array.isArray(survey.referralReasons)) {
+            survey.referralReasons = survey.referralReasons.filter((r) => !r.startsWith("FINDRISC:"));
+            survey.needsDoctor = survey.referralReasons.length > 0;
+          }
+          changed = true;
+        }
+      }
       dbCache = db;
       if (changed) await writeDb(db);
       return dbCache;
@@ -1096,7 +1107,7 @@ function calculateFindrisc(input) {
   if (input.familyDiabetes === "second") score += 3;
   if (input.familyDiabetes === "first") score += 5;
   const level = score < 7 ? "Низкий" : score < 12 ? "Слегка повышенный" : score < 15 ? "Умеренный" : score < 20 ? "Высокий" : "Очень высокий";
-  return { score, level, highRisk: score >= 12 };
+  return { score, level, highRisk: score >= 14 };
 }
 
 function calculateRabito(input) {
@@ -3235,11 +3246,11 @@ function buildMinzdravGeoDashboard(db) {
     const isNeedsDoc = Boolean(survey.needsDoctor);
 
     if (fScore >= 15) veryHighRisk++;
-    else if (fScore >= 12) highRisk++;
+    else if (fScore >= 14) highRisk++;
     else if (fScore >= 7) moderateRisk++;
     else lowRisk++;
 
-    if (glucose >= 6.1 || fScore >= 12) diabetesRisk++;
+    if (glucose >= 6.1 || fScore >= 14) diabetesRisk++;
     if (sys >= 140 || dia >= 90) hypertensionRisk++;
     if (isNeedsDoc) referredToDoctor++;
 
@@ -3267,7 +3278,7 @@ function buildMinzdravGeoDashboard(db) {
     const cDiabetes = cSurveys.filter((s) => {
       const fScore = Number(s.findrisc?.score || 0);
       const glucose = Number(s.measurements?.glucoseLevel || 0);
-      return glucose >= 6.1 || fScore >= 12;
+      return glucose >= 6.1 || fScore >= 14;
     }).length;
 
     let cVisits = 0;

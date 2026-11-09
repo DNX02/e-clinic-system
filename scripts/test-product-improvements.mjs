@@ -239,6 +239,61 @@ try {
     assert.deepEqual(legacySurvey.survey.findrisc, createdSurvey.survey.findrisc);
   }
 
+  // FINDRISC doctor referral threshold test:
+  // Score 12 and 13 do not refer to doctor on FINDRISC alone. Score 14 does.
+  const findrisc12Patient = {
+    ...measuredPatient,
+    lastName: "РискДвенадцать",
+    phone: "+992901119912",
+    age: 50,
+    weight: 97.2,
+    height: 180,
+    sex: "female",
+    rabitoWaist: 90,
+    activity: "no",
+    vegetables: "no",
+    bpMeds: "no",
+    highGlucose: "no",
+    familyDiabetes: "none",
+    systolic: 120,
+    diastolic: 80,
+    smoker: "no"
+  };
+  const survey12 = await request(nurse, "/api/nurse-surveys", {
+    method: "POST", expected: 201, body: findrisc12Patient
+  });
+  assert.equal(survey12.survey.findrisc.score, 12);
+  assert.equal(survey12.survey.findrisc.highRisk, false, "FINDRISC 12 must not be highRisk");
+  assert.equal(survey12.survey.needsDoctor, false, "FINDRISC 12 without other risks must not need doctor");
+  assert.ok(!survey12.survey.referralReasons.some((r) => r.includes("FINDRISC")), "FINDRISC 12 must not be in referral reasons");
+
+  const findrisc13Patient = {
+    ...findrisc12Patient,
+    lastName: "РискТринадцать",
+    phone: "+992901119913",
+    age: 55
+  };
+  const survey13 = await request(nurse, "/api/nurse-surveys", {
+    method: "POST", expected: 201, body: findrisc13Patient
+  });
+  assert.equal(survey13.survey.findrisc.score, 13);
+  assert.equal(survey13.survey.findrisc.highRisk, false, "FINDRISC 13 must not be highRisk");
+  assert.equal(survey13.survey.needsDoctor, false, "FINDRISC 13 without other risks must not need doctor");
+
+  const findrisc14Patient = {
+    ...findrisc12Patient,
+    lastName: "РискЧетырнадцать",
+    phone: "+992901119914",
+    bpMeds: "yes"
+  };
+  const survey14 = await request(nurse, "/api/nurse-surveys", {
+    method: "POST", expected: 201, body: findrisc14Patient
+  });
+  assert.equal(survey14.survey.findrisc.score, 14);
+  assert.equal(survey14.survey.findrisc.highRisk, true, "FINDRISC 14 must be highRisk");
+  assert.equal(survey14.survey.needsDoctor, true, "FINDRISC 14 must direct to doctor");
+  assert.ok(survey14.survey.referralReasons.some((r) => r.includes("FINDRISC: 14")), "FINDRISC 14 must be in referral reasons");
+
   const doctorMeasured = await request(doctor, "/api/doctor/surveys", {
     method: "POST", expected: 201,
     body: { ...measuredPatient, lastName: "ИзмеренВрачом", glucoseLevel: 5.5 }
