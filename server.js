@@ -66,6 +66,8 @@ const mime = {
   ".png": "image/png",
   ".txt": "text/plain; charset=utf-8",
   ".xml": "application/xml; charset=utf-8",
+  ".pdf": "application/pdf",
+  ".xls": "application/vnd.ms-excel",
   ".mp4": "video/mp4"
 };
 
