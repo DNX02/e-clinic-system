@@ -2,7 +2,7 @@
 // Run: node scripts/e2e-browser.mjs   (needs the `playwright` package, e.g. globally installed)
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";
@@ -145,7 +145,8 @@ try {
   await step("service worker is active with the current cache", async () => {
     await nurse.goto(`${base}/app-3-patient-survey`);
     const caches = await nurse.evaluate(async () => { await navigator.serviceWorker.ready; return await window.caches.keys(); });
-    assert.ok(caches.includes("medical-mobile-v97"), `caches: ${caches}`);
+    const expectedCache = (await readFile("public/sw.js", "utf8")).match(/CACHE_NAME = "([^"]+)"/)[1];
+    assert.ok(caches.includes(expectedCache), `expected ${expectedCache}, caches: ${caches}`);
   });
 
   // ---------- Doctor ----------
