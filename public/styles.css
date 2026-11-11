@@ -130,6 +130,100 @@ button:disabled {
   background: var(--primary-dark);
 }
 
+/* Admin "Ещё" menu: secondary sections */
+.nav-more {
+  position: relative;
+}
+
+.nav-more > summary {
+  align-items: center;
+  background: var(--primary);
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  font-weight: 600;
+  gap: 6px;
+  height: 100%;
+  list-style: none;
+  min-height: 40px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
+.nav-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.nav-more > summary::after {
+  content: "▾";
+  font-size: 12px;
+}
+
+.nav-more.active > summary {
+  background: var(--primary-dark);
+}
+
+.nav-more__menu {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(15, 40, 30, 0.16);
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+  padding: 6px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+}
+
+.nav-more__menu button {
+  background: transparent;
+  color: var(--text, #1d2b25);
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.nav-more__menu button:hover,
+.nav-more__menu button.active {
+  background: var(--soft, #e8f4ef);
+  color: var(--primary-dark);
+}
+
+.admin-tools > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.admin-tools > summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-tools > summary::before {
+  color: var(--primary);
+  content: "▸";
+  font-size: 14px;
+}
+
+.admin-tools[open] > summary::before {
+  content: "▾";
+}
+
+.admin-tools[open] > summary {
+  margin-bottom: 12px;
+}
+
+.admin-tools > .panel,
+.admin-tools > .grid > .panel {
+  box-shadow: none;
+}
+
 .doctor-layout {
   background:
     linear-gradient(135deg, rgba(232, 246, 240, 0.96) 0%, rgba(247, 251, 249, 0.92) 46%, rgba(238, 245, 242, 0.98) 100%),
@@ -1480,6 +1574,57 @@ th {
   .grid.two,
   .grid.three {
     grid-template-columns: 1fr;
+  }
+
+  /* Metric cards are short: two per row instead of one long column */
+  .dashboard-panel .grid.three,
+  .care-metrics.grid.three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nav-more > summary {
+    justify-content: center;
+    min-height: 44px;
+    font-size: 13px;
+  }
+
+  /* Admin: backdrop-filter would make the topbar the containing block of the fixed bottom
+     bar (it then rendered over the title). Lay the tabs out as a 4-column grid, no sideways scroll. */
+  body[data-app="admin"] .topbar {
+    backdrop-filter: none;
+    background: #ffffff;
+  }
+
+  body[data-app="admin"] .nav {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  body[data-app="admin"] .nav > button,
+  body[data-app="admin"] .nav-more > summary {
+    font-size: 12.5px;
+    line-height: 1.15;
+    padding: 0 4px;
+    text-align: center;
+    white-space: normal;
+  }
+
+  body[data-app="admin"] .admin-container {
+    padding-bottom: 150px;
+  }
+
+  /* The menu opens above the bottom bar */
+  .nav-more__menu {
+    bottom: calc(120px + env(safe-area-inset-bottom));
+    left: 10px;
+    position: fixed;
+    right: 10px;
+    top: auto;
+  }
+
+  .nav-more__menu button {
+    min-height: 46px;
   }
 
   .audit-survey-grid {

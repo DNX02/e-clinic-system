@@ -145,7 +145,7 @@ try {
   await step("service worker is active with the current cache", async () => {
     await nurse.goto(`${base}/app-3-patient-survey`);
     const caches = await nurse.evaluate(async () => { await navigator.serviceWorker.ready; return await window.caches.keys(); });
-    assert.ok(caches.includes("medical-mobile-v96"), `caches: ${caches}`);
+    assert.ok(caches.includes("medical-mobile-v97"), `caches: ${caches}`);
   });
 
   // ---------- Doctor ----------
@@ -225,19 +225,48 @@ try {
     await adminPage.click("#adminLogin button");
     await adminPage.waitForSelector("nav button, .nav button", { timeout: 6000 });
   });
-  await step("admin sees patients of all clinics and every tab renders", async () => {
-    const tabs = await adminPage.locator("nav button, .nav button").allInnerTexts();
-    assert.ok(tabs.length >= 4, `tabs: ${tabs}`);
+  await step("admin nav: everyday tabs visible, the rest in the 'Ещё' menu, no duplicate tab", async () => {
+    const visible = await adminPage.locator('.nav > button[data-action="admin-tab"]').allInnerTexts();
+    assert.deepEqual(visible, ["Статистика", "Контроль диабета", "Пациенты", "Врачи", "Журнал"]);
+    assert.equal(await adminPage.locator('[data-tab="control"]').count(), 0, "duplicate 'control' tab must be gone");
+  });
+  await step("admin sees every tab render without broken values", async () => {
+    const tabs = await adminPage.locator('[data-action="admin-tab"]').evaluateAll((els) => els.map((el) => el.dataset.tab));
+    assert.ok(tabs.length >= 10, `tabs: ${tabs}`);
     let sawQrTab = false;
-    for (const tab of tabs.filter((t) => !/Выйти|шрифт/i.test(t))) {
-      await adminPage.locator("nav button, .nav button").filter({ hasText: tab.trim() }).first().click();
-      await adminPage.waitForTimeout(500);
-      const text = await adminPage.locator("body").innerText();
-      assert.ok(text.length > 100, `tab "${tab}" rendered empty`);
+    for (const tab of tabs) {
+      if (await adminPage.locator(`.nav-more [data-tab="${tab}"]`).count()) await adminPage.click(".nav-more > summary");
+      await adminPage.click(`[data-action="admin-tab"][data-tab="${tab}"]`);
+      await adminPage.waitForTimeout(400);
+      const text = await adminPage.locator("main").innerText();
+      assert.ok(text.length > 40, `tab "${tab}" rendered empty`);
       assert.doesNotMatch(text, /undefined|NaN|\[object Object\]/, `tab "${tab}" shows broken values`);
       if (/Отдельные ссылки приложений/.test(text)) sawQrTab = true;
     }
     assert.ok(sawQrTab, "the links/QR tab must render");
+    assert.equal(await adminPage.locator(".nav-more > summary").innerText(), "Ссылки и QR", "the menu shows the active section");
+  });
+  await step("admin tools (import, backup, Telegram) are collapsed and open on click", async () => {
+    await adminPage.click('[data-action="admin-tab"][data-tab="center"]');
+    assert.equal(await adminPage.locator("details.admin-tools").evaluate((el) => el.open), false);
+    await adminPage.click("details.admin-tools > summary");
+    assert.ok(await adminPage.locator("#patientImportFile").isVisible());
+  });
+  await step("admin on a phone: no sideways scrolling, menu opens above the tab bar", async () => {
+    const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
+    await mobile.addCookies((await desktop.cookies()).filter((c) => c.name === "sid"));
+    const m = await mobile.newPage();
+    watch(m, "admin-mobile");
+    await m.goto(`${base}/app-1-admin-panel`);
+    await m.waitForSelector(".nav-more > summary");
+    const [scrollWidth, clientWidth] = await m.evaluate(() => [document.querySelector(".nav").scrollWidth, document.querySelector(".nav").clientWidth]);
+    assert.ok(scrollWidth <= clientWidth, "tab bar must not scroll sideways");
+    const brandTop = await m.locator(".topbar .brand").boundingBox();
+    const navBox = await m.locator(".nav").boundingBox();
+    assert.ok(navBox.y > brandTop.y + 200, "tab bar must sit at the bottom, not over the title");
+    await m.click(".nav-more > summary");
+    await m.click('.nav-more__menu [data-tab="doctors"], .nav-more__menu [data-tab="qr"]');
+    await mobile.close();
   });
 
   // ---------- Public pages ----------

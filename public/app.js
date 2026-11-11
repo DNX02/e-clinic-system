@@ -983,6 +983,17 @@ function topbar(title, nav = "") {
   `;
 }
 
+// Keep the admin "Инструменты" block open across re-renders (e.g. after saving settings).
+document.addEventListener("toggle", (event) => {
+  if (event.target.matches?.("details.admin-tools")) state.adminToolsOpen = event.target.open;
+}, true);
+
+document.addEventListener("click", (event) => {
+  document.querySelectorAll("details.nav-more[open]").forEach((menu) => {
+    if (!menu.contains(event.target) || event.target.closest("[data-action]")) menu.removeAttribute("open");
+  });
+});
+
 document.addEventListener("click", async (event) => {
   const action = event.target.closest("[data-action]")?.dataset.action;
   if (!action) return;
@@ -2116,15 +2127,31 @@ async function loadAdmin() {
   }
 }
 
+const ADMIN_TAB_NAMES = {
+  stats: "Статистика", center: "Контроль диабета", surveys: "Пациенты", doctors: "Врачи", audit: "Журнал",
+  training: "Обучение врачей №4", nurseTraining: "Тесты медсестёр №5", visits: "Назначения", operations: "План и сообщения",
+  headNurses: "Контроль старших", access: "Доступы", qr: "Ссылки и QR"
+};
+// Everyday sections stay visible; the rest go into the "Ещё" menu.
+const ADMIN_PRIMARY_TABS = ["stats", "center", "surveys", "doctors", "audit"];
+
 function renderAdmin() {
+  // "control" was a duplicate tab of "center" (same screen); keep the old value working.
+  if (state.tab === "control") state.tab = "center";
   const visibleTabs = state.me?.role === "head_nurse"
-    ? ["stats", "center", "surveys", "operations", "audit"]
-    : ["stats", "center", "control", "doctors", "training", "nurseTraining", "surveys", "visits", "operations", "audit", "access", "qr"];
+    ? ["stats", "center", "surveys", "audit", "operations"]
+    : ["stats", "center", "surveys", "doctors", "audit", "training", "nurseTraining", "visits", "operations", "access", "qr"];
   if (state.me?.role === "owner") visibleTabs.splice(visibleTabs.indexOf("access"), 0, "headNurses");
-  const nav = visibleTabs.map((tab) => {
-    const names = { stats: "Статистика", center: "Диабет-контроль 2.0", control: "Контроль диабета", doctors: "Врачи", training: "Обучение №4", nurseTraining: "Медсестры №5", surveys: "Пациенты", visits: "Назначения", operations: "План и сообщения", audit: "Журнал", headNurses: "Контроль старших", access: "Доступы", qr: "QR" };
-    return `<button data-action="admin-tab" data-tab="${tab}" class="${state.tab === tab ? "active" : ""}">${names[tab]}</button>`;
-  }).join("");
+  let primary = visibleTabs.filter((tab) => ADMIN_PRIMARY_TABS.includes(tab));
+  let extra = visibleTabs.filter((tab) => !ADMIN_PRIMARY_TABS.includes(tab));
+  if (extra.length <= 1) { primary = visibleTabs; extra = []; }
+  const tabButton = (tab) => `<button data-action="admin-tab" data-tab="${tab}" class="${state.tab === tab ? "active" : ""}">${ADMIN_TAB_NAMES[tab]}</button>`;
+  const extraActive = extra.includes(state.tab);
+  const nav = primary.map(tabButton).join("") + (extra.length ? html`
+    <details class="nav-more${extraActive ? " active" : ""}">
+      <summary>${extraActive ? ADMIN_TAB_NAMES[state.tab] : "Ещё"}</summary>
+      <div class="nav-more__menu">${extra.map(tabButton).join("")}</div>
+    </details>` : "");
   setPage(html`
     <div class="layout">
       ${topbar("Панель администратора", nav)}
@@ -2139,7 +2166,7 @@ function renderAdmin() {
 }
 
 function adminTab() {
-  if (state.tab === "center" || state.tab === "control") return renderCareControlAdmin();
+  if (state.tab === "center") return renderCareControlAdmin();
   if (state.tab === "doctors") return renderDoctorsAdmin();
   if (state.tab === "training") return renderTrainingAdmin();
   if (state.tab === "nurseTraining") return renderNurseTrainingAdmin();
@@ -2914,7 +2941,6 @@ function renderCareControlAdmin() {
         <div class="card metric">Повтор запланирован<strong>${money(s.followUpPlanned)}</strong></div><div class="card metric">Повтор выполнен<strong>${money(s.followUpCompleted)}</strong></div><div class="card metric">Проверить данные<strong>${money(s.qualityWarnings)}</strong></div>
       </div>
     </section>
-    <section class="panel"><div class="section-title"><div><h2>Импорт из Excel</h2><p class="muted">Сохраните таблицу Excel как CSV UTF‑8. Дубли будут пропущены автоматически.</p></div></div><div class="actions"><input id="patientImportFile" type="file" accept=".csv,text/csv"/><button type="button" data-action="import-patients" ${state.admin.canEdit ? "" : "disabled"}>Импортировать пациентов</button></div></section>
     <section class="panel">
       <div class="section-title"><div><h2>Регистр и этапы пациента</h2><p class="muted">Нажмите на имя, чтобы открыть полную анкету.</p></div></div>
       <form id="careSearchForm" class="audit-search-form"><label>Поиск</label><div class="actions"><input name="query" type="search" value="${escapeHtml(state.careSearch)}" placeholder="Пациент, поликлиника, медсестра или этап"/><button>Найти</button>${state.careSearch ? `<button type="button" class="secondary" data-action="clear-care-search">Сбросить</button>` : ""}</div></form>
@@ -2925,10 +2951,14 @@ function renderCareControlAdmin() {
       <section class="panel"><h2>Ежедневный отчёт старшей медсестры</h2><div class="table-wrap"><table><thead><tr><th>Дата</th><th>Поликлиника</th><th>Медсестра</th><th>Осмотрено</th><th>К врачу</th></tr></thead><tbody>${nurses || `<tr><td colspan="5">Пока нет данных</td></tr>`}</tbody></table></div></section>
       <section class="panel"><h2>Возможные дубликаты</h2><p class="muted">Система только предлагает совпадения. Объединение выполняется вручную в разделе «Пациенты».</p><div class="table-wrap"><table><thead><tr><th>Причина</th><th>Поликлиника</th><th>Карточки</th></tr></thead><tbody>${duplicates || `<tr><td colspan="3">Подозрительных дублей нет</td></tr>`}</tbody></table></div></section>
     </section>
-    <section class="grid two">
+    <details class="panel admin-tools"${state.adminToolsOpen ? " open" : ""}>
+      <summary><strong>Инструменты</strong> <span class="muted">импорт из Excel, резервная копия, сводка в Telegram</span></summary>
+      <section class="panel"><div class="section-title"><div><h2>Импорт из Excel</h2><p class="muted">Сохраните таблицу Excel как CSV UTF‑8. Дубли будут пропущены автоматически.</p></div></div><div class="actions"><input id="patientImportFile" type="file" accept=".csv,text/csv"/><button type="button" data-action="import-patients" ${state.admin.canEdit ? "" : "disabled"}>Импортировать пациентов</button></div></section>
+      <section class="grid two">
       <section class="panel"><h2>Резервное копирование</h2><p>${backup ? `Последняя копия: <strong>${new Date(backup.createdAt).toLocaleString("ru-RU")}</strong><br><span class="pill ${backup.verified ? "ok" : "warn"}">${backup.verified ? "Файл проверен" : "Нужна проверка"}</span><br><span class="muted">Хранится на сервере, сохранено до 14 копий.</span>` : "Резервная копия ещё не создавалась."}</p><button type="button" data-action="create-backup" ${state.admin.canManageAdmins ? "" : "disabled"}>Создать и проверить копию</button></section>
       <section class="panel"><h2>Ежедневная сводка Telegram</h2><p class="muted">Отправляется только агрегированная статистика без ФИО пациентов.</p><form id="dailyReportForm" class="form"><label class="checkbox"><input type="checkbox" name="enabled" ${reports.enabled ? "checked" : ""}/> Включить ежедневный отчёт</label><label>Время<input name="time" type="time" value="${escapeHtml(reports.time || "18:00")}"/></label><label>Telegram Chat ID<input name="chatId" value="${escapeHtml(reports.chatId || "")}" placeholder="Например, 123456789"/></label><div class="notice ${reports.tokenConfigured ? "ok" : "warn"}">${reports.tokenConfigured ? "Telegram-бот настроен на сервере." : "На сервере не задан TELEGRAM_BOT_TOKEN."}${reports.lastSentAt ? `<br>Последняя отправка: ${new Date(reports.lastSentAt).toLocaleString("ru-RU")}` : ""}${reports.lastError ? `<br>Последняя ошибка: ${escapeHtml(reports.lastError)}` : ""}</div><div class="actions"><button ${state.admin.canManageAdmins ? "" : "disabled"}>Сохранить</button><button type="button" class="secondary" data-action="test-daily-report" ${state.admin.canManageAdmins ? "" : "disabled"}>Отправить тест</button></div></form></section>
-    </section>`;
+      </section>
+    </details>`;
 }
 
 function auditValue(value, fallback = "-") {
