@@ -3553,15 +3553,69 @@ function getOfflineIdb() {
   return offlineIdbPromise;
 }
 
-async function persistToIdb(storeName, item, action = "put") {
-  try {
+// All IndexedDB writes go through one chain so they commit in order and callers can wait for them.
+let offlineIdbWriteChain = Promise.resolve();
+
+function runIdbWrite(storeName, deleteIds, putItems) {
+  const task = offlineIdbWriteChain.then(async () => {
     const db = await getOfflineIdb();
-    if (!db) return;
-    const tx = db.transaction(storeName, "readwrite");
-    const store = tx.objectStore(storeName);
-    if (action === "put") store.put(item);
-    else if (action === "delete") store.delete(item);
-  } catch {}
+    if (!db) return false;
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(storeName, "readwrite");
+        const store = tx.objectStore(storeName);
+        deleteIds.forEach((id) => store.delete(id));
+        putItems.forEach((item) => store.put(item));
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = tx.onabort = () => {
+          console.warn("IndexedDB write failed", storeName, tx.error);
+          resolve(false);
+        };
+      } catch (error) {
+        console.warn("IndexedDB write failed", storeName, error);
+        resolve(false);
+      }
+    });
+  });
+  offlineIdbWriteChain = task.catch(() => false);
+  return task;
+}
+
+async function persistToIdb(storeName, item, action = "put") {
+  return action === "delete" ? runIdbWrite(storeName, [item], []) : runIdbWrite(storeName, [], [item]);
+}
+
+// Replaces a whole queue by writing only what changed (never store.clear()), so a tab with a
+// stale in-memory copy cannot wipe items another tab saved.
+function persistQueueDiff(storeName, previousQueue, nextQueue) {
+  const nextIds = new Set(nextQueue.map((item) => item.id));
+  const removed = (previousQueue || []).map((item) => item.id).filter((id) => !nextIds.has(id));
+  return runIdbWrite(storeName, removed, nextQueue);
+}
+
+async function readAllFromIdb(storeName) {
+  await offlineIdbWriteChain;
+  const db = await getOfflineIdb();
+  if (!db) return null;
+  return new Promise((resolve) => {
+    try {
+      const req = db.transaction(storeName, "readonly").objectStore(storeName).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+// Before syncing, pick up surveys saved by other tabs. Keeping our own items too is safe:
+// a survey another tab already sent is answered with alreadySaved and removed again.
+async function refreshOfflineSurveysFromIdb() {
+  const stored = await readAllFromIdb("nurse_surveys");
+  if (!stored) return;
+  const merged = new Map(stored.map((item) => [item.id, item]));
+  for (const item of offlineSurveyQueue()) if (!merged.has(item.id)) merged.set(item.id, item);
+  offlineSurveyCache = Array.from(merged.values());
 }
 
 async function initOfflineStores() {
@@ -3640,19 +3694,12 @@ function offlineSurveyQueue() {
 }
 
 function writeOfflineSurveyQueue(queue) {
+  const previous = offlineSurveyCache || [];
   offlineSurveyCache = queue;
   try {
     localStorage.setItem(OFFLINE_SURVEY_QUEUE_KEY, JSON.stringify(queue));
   } catch {}
-  getOfflineIdb().then((db) => {
-    if (!db) return;
-    try {
-      const tx = db.transaction("nurse_surveys", "readwrite");
-      const store = tx.objectStore("nurse_surveys");
-      store.clear();
-      queue.forEach((item) => store.put(item));
-    } catch {}
-  });
+  return persistQueueDiff("nurse_surveys", previous, queue);
 }
 
 function saveOfflineSurvey(data) {
@@ -3945,23 +3992,30 @@ async function syncOfflineSurveys() {
   return doSyncOfflineSurveys();
 }
 
+// Only these statuses mean the survey itself is wrong. Other 4xx (408, 425, 429, 401/403 from a
+// proxy or login portal, 404/405 during a deploy) are temporary and must keep being retried.
+const PERMANENT_SURVEY_ERROR_STATUSES = [400, 413, 422];
+const isPermanentSurveyError = (error) => PERMANENT_SURVEY_ERROR_STATUSES.includes(Number(error?.status));
+
 async function doSyncOfflineSurveys() {
   if (syncNurseInFlight) return;
   syncNurseInFlight = true;
   const button = document.querySelector("#syncSurveysButton");
   const result = document.querySelector("#surveyResult");
   try {
-    let queue = offlineSurveyQueue();
-    if (!queue.length) {
+    await refreshOfflineSurveysFromIdb();
+    const snapshot = [...offlineSurveyQueue()];
+    if (!snapshot.length) {
       updateOfflineSurveyStatus();
       return;
     }
     if (button) button.disabled = true;
-    const remaining = [];
+    const processed = new Map();
     let sent = 0;
-    for (const item of queue) {
-      if (item.requiresEdit) {
-        remaining.push(item);
+    for (const item of snapshot) {
+      // Items flagged by an older app version for a temporary error (e.g. 429) are retried again.
+      if (item.requiresEdit && isPermanentSurveyError({ status: item.status })) {
+        processed.set(item.id, item);
         continue;
       }
       try {
@@ -3969,18 +4023,25 @@ async function doSyncOfflineSurveys() {
         await persistToIdb("nurse_surveys", item.id, "delete");
         sent += 1;
       } catch (error) {
-        const isClientError = error?.status >= 400 && error.status < 500 && error.status !== 409;
         const updated = {
           ...item,
           attempts: Number(item.attempts || 0) + 1,
           lastTriedAt: new Date().toISOString(),
           lastError: String(error.message || "Ошибка сети").slice(0, 200),
           status: error?.status || 0,
-          requiresEdit: isClientError
+          requiresEdit: isPermanentSurveyError(error)
         };
-        remaining.push(updated);
+        processed.set(item.id, updated);
         await persistToIdb("nurse_surveys", updated, "put");
       }
+    }
+    // The queue may have changed while we were sending (new survey saved, one deleted by the nurse).
+    // Rebuild it from the current queue instead of overwriting it with our stale snapshot.
+    const snapshotIds = new Set(snapshot.map((item) => item.id));
+    const remaining = [];
+    for (const item of offlineSurveyQueue()) {
+      if (!snapshotIds.has(item.id)) remaining.push(item);
+      else if (processed.has(item.id)) remaining.push(processed.get(item.id));
     }
     writeOfflineSurveyQueue(remaining);
     updateOfflineSurveyStatus();
@@ -4006,19 +4067,12 @@ function offlineDoctorQueue() {
 }
 
 function writeOfflineDoctorQueue(queue) {
+  const previous = offlineDoctorCache || [];
   offlineDoctorCache = queue;
   try {
     localStorage.setItem(OFFLINE_DOCTOR_QUEUE_KEY, JSON.stringify(queue));
   } catch {}
-  getOfflineIdb().then((db) => {
-    if (!db) return;
-    try {
-      const tx = db.transaction("doctor_actions", "readwrite");
-      const store = tx.objectStore("doctor_actions");
-      store.clear();
-      queue.forEach((item) => store.put(item));
-    } catch {}
-  });
+  return persistQueueDiff("doctor_actions", previous, queue);
 }
 
 function saveOfflineDoctorAction(action) {

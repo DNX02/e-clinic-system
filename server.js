@@ -455,6 +455,7 @@ async function ensureFileDb() {
 async function ensureCloudDb() {
   const pool = await pgPool();
   const client = await pool.connect();
+  const syncCtx = createSyncContext();
   try {
     await client.query("begin");
     await client.query(`create table if not exists app_state (id text primary key, data jsonb not null, updated_at timestamptz not null default now())`);
@@ -480,7 +481,7 @@ async function ensureCloudDb() {
           initialDb = createDefaultDb();
         }
       }
-      await syncNormalizedCloudDb(client, initialDb);
+      await syncNormalizedCloudDb(client, initialDb, syncCtx);
       await client.query(
         "insert into app_state (id, data, updated_at) values ($1, $2::jsonb, now()) on conflict (id) do update set data = excluded.data, updated_at = now()",
         ["main", JSON.stringify(initialDb)]
@@ -488,6 +489,7 @@ async function ensureCloudDb() {
       await client.query("insert into app_meta (id, data) values ($1, $2::jsonb)", ["schema", JSON.stringify({ version: 2, migratedAt: new Date().toISOString() })]);
     }
     await client.query("commit");
+    applySyncContext(syncCtx);
   } catch (error) {
     await client.query("rollback").catch(() => {});
     throw error;
@@ -497,13 +499,25 @@ async function ensureCloudDb() {
 }
 
 const syncedItemHashes = new Map();
-const syncedTableCounts = new Map();
+const syncedTableIds = new Map();
 
 function hashRecord(data) {
-  return crypto.createHash("md5").update(JSON.stringify(data)).digest("hex");
+  return crypto.createHash("sha1").update(JSON.stringify(data)).digest("hex");
 }
 
-async function syncCloudCollection(client, table, values, dataSelector = (item) => item) {
+// Changes to the in-memory sync bookkeeping are staged here and applied only after
+// the surrounding transaction commits, so a rollback can never mark rows as saved.
+function createSyncContext() {
+  return { hashes: new Map(), dropHashes: new Set(), ids: new Map() };
+}
+
+function applySyncContext(ctx) {
+  for (const key of ctx.dropHashes) syncedItemHashes.delete(key);
+  for (const [key, hash] of ctx.hashes) syncedItemHashes.set(key, hash);
+  for (const [table, ids] of ctx.ids) syncedTableIds.set(table, ids);
+}
+
+async function syncCloudCollection(client, table, values, dataSelector = (item) => item, ctx) {
   const rawRows = (Array.isArray(values) ? values : []).filter((item) => item?.id);
   const currentIds = new Set();
   const dirtyRows = [];
@@ -531,35 +545,28 @@ async function syncCloudCollection(client, table, values, dataSelector = (item) 
         where ${table}.data is distinct from excluded.data
       `, [JSON.stringify(batch.map((r) => ({ id: r.id, data: r.data })))]);
     }
-    for (const r of dirtyRows) {
-      syncedItemHashes.set(r.key, r.hash);
-    }
+    for (const r of dirtyRows) ctx.hashes.set(r.key, r.hash);
   }
 
-  const lastCount = syncedTableCounts.get(table);
-  if (rawRows.length === 0) {
-    if (lastCount && lastCount > 0) {
-      await client.query(`delete from ${table}`);
-      for (const key of Array.from(syncedItemHashes.keys())) {
-        if (key.startsWith(`${table}:`)) syncedItemHashes.delete(key);
-      }
-    }
-  } else if (lastCount !== undefined && rawRows.length < lastCount) {
-    await client.query(`delete from ${table} where not (id = any($1::text[]))`, [Array.from(currentIds)]);
-    for (const key of Array.from(syncedItemHashes.keys())) {
-      if (key.startsWith(`${table}:`)) {
-        const id = key.slice(table.length + 1);
-        if (!currentIds.has(id)) syncedItemHashes.delete(key);
-      }
+  // Delete exactly the rows this process knew about that are no longer present.
+  const knownIds = syncedTableIds.get(table) || new Set();
+  const removedIds = [];
+  for (const id of knownIds) if (!currentIds.has(id)) removedIds.push(id);
+  if (removedIds.length) {
+    await client.query(`delete from ${table} where id = any($1::text[])`, [removedIds]);
+    for (const id of removedIds) {
+      const key = `${table}:${id}`;
+      ctx.dropHashes.add(key);
+      ctx.hashes.delete(key);
     }
   }
-  syncedTableCounts.set(table, rawRows.length);
+  ctx.ids.set(table, currentIds);
 }
 
-async function syncNormalizedCloudDb(client, db) {
-  for (const [key, table] of Object.entries(normalizedCollectionTables)) await syncCloudCollection(client, table, db[key]);
+async function syncNormalizedCloudDb(client, db, ctx) {
+  for (const [key, table] of Object.entries(normalizedCollectionTables)) await syncCloudCollection(client, table, db[key], undefined, ctx);
   const sessions = Object.entries(db.sessions || {}).map(([id, data]) => ({ id, data }));
-  await syncCloudCollection(client, "app_sessions", sessions, (item) => item.data);
+  await syncCloudCollection(client, "app_sessions", sessions, (item) => item.data, ctx);
   const currentSettingsHash = hashRecord(db.settings || {});
   if (syncedItemHashes.get("app_settings:main") !== currentSettingsHash) {
     await client.query(`
@@ -567,7 +574,7 @@ async function syncNormalizedCloudDb(client, db) {
       on conflict (id) do update set data = excluded.data, updated_at = now()
       where app_settings.data is distinct from excluded.data
     `, [JSON.stringify(db.settings || {})]);
-    syncedItemHashes.set("app_settings:main", currentSettingsHash);
+    ctx.hashes.set("app_settings:main", currentSettingsHash);
   }
 }
 
@@ -653,21 +660,61 @@ async function readDb() {
   return dbLoadPromise;
 }
 
+const STATE_SNAPSHOT_INTERVAL_MS = Number(process.env.STATE_SNAPSHOT_INTERVAL_MS || 5 * 60 * 1000);
+let lastStateSnapshotAt = 0;
+
+// app_state holds a full legacy snapshot used only for restore checks and migration.
+// Rewriting the whole database into it on every request is O(N), so it is throttled.
+async function writeStateSnapshot(client, db) {
+  await client.query(
+    "insert into app_state (id, data, updated_at) values ($1, $2::jsonb, now()) on conflict (id) do update set data = excluded.data, updated_at = now()",
+    ["main", JSON.stringify(db)]
+  );
+}
+
+async function flushStateSnapshot() {
+  if (!DATABASE_URL || !dbCache) return;
+  await dbWritePromise.catch(() => {});
+  const pool = await pgPool();
+  const client = await pool.connect();
+  try {
+    await writeStateSnapshot(client, dbCache);
+    lastStateSnapshotAt = Date.now();
+  } finally {
+    client.release();
+  }
+}
+
+// A write that failed leaves changes only in memory. Callers that answer "already saved"
+// from memory must first make sure those changes reached storage (see ensureDbPersisted).
+let dbRequestedVersion = 0;
+let dbPersistedVersion = 0;
+
+async function ensureDbPersisted() {
+  if (dbPersistedVersion < dbRequestedVersion && dbCache) await writeDb(dbCache);
+}
+
 async function writeDb(db) {
   dbCache = db;
-  const body = JSON.stringify(db);
+  const version = ++dbRequestedVersion;
+  await writeDbToStorage(db);
+  dbPersistedVersion = Math.max(dbPersistedVersion, version);
+}
+
+async function writeDbToStorage(db) {
   if (DATABASE_URL) {
     const writeTask = dbWritePromise.catch(() => {}).then(async () => {
       const pool = await pgPool();
       const client = await pool.connect();
+      const syncCtx = createSyncContext();
+      const snapshotDue = Date.now() - lastStateSnapshotAt >= STATE_SNAPSHOT_INTERVAL_MS;
       try {
         await client.query("begin");
-        await syncNormalizedCloudDb(client, db);
-        await client.query(
-          "insert into app_state (id, data, updated_at) values ($1, $2::jsonb, now()) on conflict (id) do update set data = excluded.data, updated_at = now()",
-          ["main", body]
-        );
+        await syncNormalizedCloudDb(client, db, syncCtx);
+        if (snapshotDue) await writeStateSnapshot(client, db);
         await client.query("commit");
+        applySyncContext(syncCtx);
+        if (snapshotDue) lastStateSnapshotAt = Date.now();
       } catch (error) {
         await client.query("rollback").catch(() => {});
         throw error;
@@ -679,6 +726,7 @@ async function writeDb(db) {
     await writeTask;
     return;
   }
+  const body = JSON.stringify(db);
   const tmpPath = `${dbPath}.${process.pid}.${Date.now()}.tmp`;
   const writeTask = dbWritePromise.catch(() => {}).then(async () => {
     await writeFile(tmpPath, body, "utf8");
@@ -694,17 +742,20 @@ async function readCloudDb() {
   for (const [key, table] of Object.entries(normalizedCollectionTables)) {
     const result = await pool.query(`select data from ${table} order by id`);
     db[key] = result.rows.map((row) => row.data);
+    const ids = new Set();
     for (const item of db[key]) {
-      if (item?.id) syncedItemHashes.set(`${table}:${item.id}`, hashRecord(item));
+      if (!item?.id) continue;
+      ids.add(String(item.id));
+      syncedItemHashes.set(`${table}:${item.id}`, hashRecord(item));
     }
-    syncedTableCounts.set(table, db[key].length);
+    syncedTableIds.set(table, ids);
   }
   const sessions = await pool.query("select id, data from app_sessions");
   db.sessions = Object.fromEntries(sessions.rows.map((row) => [row.id, row.data]));
   for (const [id, data] of Object.entries(db.sessions)) {
     syncedItemHashes.set(`app_sessions:${id}`, hashRecord(data));
   }
-  syncedTableCounts.set("app_sessions", sessions.rowCount);
+  syncedTableIds.set("app_sessions", new Set(Object.keys(db.sessions)));
   const settings = await pool.query("select data from app_settings where id = 'main'");
   db.settings = settings.rowCount ? settings.rows[0].data : {};
   syncedItemHashes.set("app_settings:main", hashRecord(db.settings));
@@ -939,8 +990,8 @@ async function getSession(req) {
     ? db.admins.some((item) => item.id === session.userId)
     : session.userType === "doctor" && db.doctors.some((item) => item.id === session.userId);
   if (!Number.isFinite(createdAt) || Date.now() - createdAt >= SESSION_TTL_MS || !userExists) {
+    // Dropped from memory; the next regular write removes it from storage too.
     delete db.sessions[sid];
-    await writeDb(db);
     return null;
   }
   return session;
@@ -2509,6 +2560,7 @@ function setWeeklyDocxCache(key, buffer) {
     if (clientSurveyId && isValidUuid(clientSurveyId)) {
       const existing = (db.nurseSurveys || []).find((s) => s.clientSurveyId === clientSurveyId || s.id === clientSurveyId);
       if (existing) {
+        await ensureDbPersisted();
         return send(res, 200, { ok: true, alreadySaved: true, id: existing.id });
       }
     }
@@ -4078,6 +4130,7 @@ async function gracefulShutdown(signal) {
   server.close(async () => {
     console.log("HTTP server closed.");
     try {
+      await flushStateSnapshot().catch((err) => console.error("State snapshot failed:", err));
       if (pgPoolPromise) {
         const pool = await pgPoolPromise;
         await pool.end();

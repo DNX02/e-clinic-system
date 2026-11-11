@@ -1,6 +1,6 @@
 {
   "name": "medical-qr-system",
-  "version": "0.1.0",
+  "version": "2.4.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,7 @@
     "dev": "node server.js",
     "test:product": "node scripts/test-product-improvements.mjs",
     "test:ui": "node scripts/check-ui-contract.mjs",
+    "test:pg": "node scripts/test-postgres-sync.mjs",
     "upload-db": "node scripts/upload-db-to-postgres.mjs"
   },
   "dependencies": {

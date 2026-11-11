@@ -26,13 +26,17 @@ npm run test:product
 
 # Проверка контрактов пользовательских интерфейсов (7 PWA-экранов x 2 профиля устройств)
 npm run test:ui
+
+# Интеграционный тест записи в PostgreSQL (откат, удаление, рестарт). Нужна одноразовая БД;
+# без TEST_DATABASE_URL тест пропускается.
+TEST_DATABASE_URL=postgresql://user:password@localhost:5432/eclinic_test PGSSLMODE=disable npm run test:pg
 \`\`\`
 
 ---
 
 ## 3. Переменные окружения (Environment Variables)
 - `PORT` — порт веб-сервера (по умолчанию `3000`).
-- `DATABASE_URL` — строка подключения к PostgreSQL (например, `postgresql://user:pass@host:5432/eclinic`). Если не задана, данные читаются/пишутся в локальный `data/db.json`.
+- `DATABASE_URL` — строка подключения к PostgreSQL (например, `postgresql://user:password@host:5432/eclinic`). Если не задана, данные читаются/пишутся в локальный `data/db.json`.
 - `TELEGRAM_BOT_TOKEN` — токен бота для алертов мониторинга и вечерней сводки.
 - `TELEGRAM_REPORT_CHAT_ID` — ID чата Telegram для ежедневных отчётов.
 
