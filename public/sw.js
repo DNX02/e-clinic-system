@@ -11,7 +11,7 @@ const SHELL = [
   "/nurse-training.html",
   "/investor.html",
   "/monitor.html",
-  "/styles.css?v=20261111adminnav-pagination",
+  "/styles.css?v=20261111adminnav",
   "/app.js?v=20261111adminnav",
   "/workflow-ui.js?v=20260924workflow",
   "/admin.webmanifest",
