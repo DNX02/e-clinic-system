@@ -10,6 +10,7 @@
     "test:ui": "node scripts/check-ui-contract.mjs",
     "test:pg": "node scripts/test-postgres-sync.mjs",
     "test:e2e": "node scripts/e2e-browser.mjs",
+    "check:prod": "node scripts/prod-health-check.mjs",
     "upload-db": "node scripts/upload-db-to-postgres.mjs"
   },
   "dependencies": {
