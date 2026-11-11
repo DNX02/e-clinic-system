@@ -6,13 +6,31 @@ source_dir=/opt/e-clinic-source
 backup_dir=/opt/e-clinic-deploy-backups
 state_dir=/var/lib/eclinic-deploy
 state_file="$state_dir/last-successful-sha"
+repo_url=${ECLINIC_REPO_URL:-https://github.com/DNX02/e-clinic-system.git}
 deploy_key=/home/admin/.ssh/eclinic_repo_deploy
 known_hosts=/home/admin/.ssh/known_hosts
 
 exec 9>/run/eclinic-auto-deploy.lock
 flock -n 9 || exit 0
 
-export GIT_SSH_COMMAND="ssh -i $deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$known_hosts"
+# Report failures to Telegram (same bot as the daily report), if configured in /etc/e-clinic.env.
+notify() {
+  local token chat
+  token=$(grep -E '^TELEGRAM_BOT_TOKEN=' /etc/e-clinic.env 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+  chat=$(grep -E '^TELEGRAM_REPORT_CHAT_ID=' /etc/e-clinic.env 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+  [[ -n "$token" && -n "$chat" ]] || return 0
+  curl --silent --max-time 15 -o /dev/null "https://api.telegram.org/bot${token}/sendMessage" \
+    --data-urlencode "chat_id=${chat}" --data-urlencode "text=$1" || true
+}
+trap 'notify "E-Clinic: автодеплой ${target_sha:-?} не удался (строка $LINENO). Сайт работает на прежней версии. Логи: journalctl -u eclinic-auto-deploy"' ERR
+
+# The repository is public: a deploy key is optional.
+if [[ -f "$deploy_key" ]]; then
+  export GIT_SSH_COMMAND="ssh -i $deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$known_hosts"
+fi
+if [[ ! -d "$source_dir/.git" ]]; then
+  git clone --quiet "$repo_url" "$source_dir"
+fi
 
 git -C "$source_dir" fetch --quiet origin main
 target_sha=$(git -C "$source_dir" rev-parse origin/main)
@@ -36,6 +54,7 @@ cleanup() {
 trap cleanup EXIT
 
 git -C "$source_dir" archive "$target_sha" | tar -x -C "$staging_dir"
+printf '%s\n' "$target_sha" > "$staging_dir/DEPLOYED_COMMIT"
 node --check "$staging_dir/server.js"
 node --check "$staging_dir/public/app.js"
 npm --prefix "$staging_dir" ci --omit=dev
@@ -59,8 +78,12 @@ tar \
   -cf - -C "$staging_dir" . | tar -xf - -C "$app_dir"
 chown -R root:root "$app_dir"
 chmod 755 "$app_dir"
-install -d -o eclinic -g eclinic -m 750 "$app_dir/data" "$app_dir/data/backups"
-chown -R eclinic:eclinic "$app_dir/data"
+# Data must stay writable by whatever user the e-clinic service runs as.
+app_user=$(systemctl show -p User --value e-clinic 2>/dev/null || true)
+app_user=${app_user:-root}
+app_group=$(id -gn "$app_user")
+install -d -o "$app_user" -g "$app_group" -m 750 "$app_dir/data" "$app_dir/data/backups"
+chown -R "$app_user:$app_group" "$app_dir/data"
 systemctl restart e-clinic
 
 healthy=false
@@ -73,7 +96,9 @@ for attempt in 1 2 3 4 5 6; do
 done
 
 if [[ "$healthy" != true ]]; then
+  trap - ERR
   restore_previous_release
+  notify "E-Clinic: новая версия ${target_sha:0:7} не запустилась, выполнен откат на предыдущую."
   exit 1
 fi
 
@@ -92,6 +117,6 @@ done
 
 curl --fail --silent --show-error \
   --retry 5 --retry-delay 5 \
-  https://doctor.e-clinic-control.ru/api/health >/dev/null
+  https://admin.e-clinic-control.ru/api/health >/dev/null || notify "E-Clinic: ${target_sha:0:7} выкачен, но сайт снаружи не отвечает"
 
 echo "Deployed E-Clinic commit $target_sha"

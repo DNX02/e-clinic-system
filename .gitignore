@@ -39,3 +39,6 @@ android-admin-app/**/*.keystore
 # Local secrets
 .env
 .env.*
+
+# Written by scripts/auto-deploy.sh on the server
+DEPLOYED_COMMIT

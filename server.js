@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { readFile, writeFile, mkdir, rename, readdir, unlink } from "node:fs/promises";
-import { existsSync, createReadStream } from "node:fs";
+import { existsSync, createReadStream, readFileSync } from "node:fs";
 import { stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,6 +21,10 @@ const DATABASE_URL = process.env.DATABASE_URL || "";
 const PG_TIMEOUT_MS = Number(process.env.PG_TIMEOUT_MS || 8000);
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_REPORT_CHAT_ID = process.env.TELEGRAM_REPORT_CHAT_ID || "";
+// Written by scripts/auto-deploy.sh; lets anyone verify which commit is live via /api/health.
+const DEPLOYED_COMMIT = (() => {
+  try { return readFileSync(new URL("./DEPLOYED_COMMIT", import.meta.url), "utf8").trim().slice(0, 40); } catch { return ""; }
+})();
 const INITIAL_ADMIN_PASSWORD = process.env.INITIAL_ADMIN_PASSWORD || "";
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 12 * 60 * 60 * 1000);
 const MAX_JSON_BODY_BYTES = Number(process.env.MAX_JSON_BODY_BYTES || 1024 * 1024);
@@ -1756,6 +1760,7 @@ async function handleApi(req, res, url) {
       return send(res, 200, {
         ok: true,
         server: true,
+        commit: DEPLOYED_COMMIT || null,
         database: await databaseHealth()
       });
     } catch (error) {
