@@ -27,6 +27,10 @@ npm run test:product
 # Проверка контрактов пользовательских интерфейсов (7 PWA-экранов x 2 профиля устройств)
 npm run test:ui
 
+# Сквозной браузерный тест (Chromium/Playwright): медсестра на телефоне (онлайн, офлайн, дубликат,
+# таджикский), врач (вход, изоляция поликлиник, осмотр, PDF), админка, публичные страницы, ошибки консоли
+npm run test:e2e
+
 # Интеграционный тест записи в PostgreSQL (откат, удаление, рестарт). Нужна одноразовая БД;
 # без TEST_DATABASE_URL тест пропускается.
 TEST_DATABASE_URL=postgresql://user:password@localhost:5432/eclinic_test PGSSLMODE=disable npm run test:pg

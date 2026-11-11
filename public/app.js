@@ -3096,6 +3096,7 @@ function renderQrAdmin() {
   const trainingUrl = `${location.origin}${TRAINING_APP_PATH}`;
   const nurseTrainingUrl = `${location.origin}${NURSE_TRAINING_APP_PATH}`;
   const investorUrl = `${location.origin}${INVESTOR_APP_PATH}`;
+  const monitorUrl = `${location.origin}${MONITOR_APP_PATH}`;
   const qr = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(surveyUrl)}`;
   const doctorQr = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(doctorUrl)}`;
   const trainingQr = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(trainingUrl)}`;
