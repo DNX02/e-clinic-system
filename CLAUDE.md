@@ -91,12 +91,19 @@ TEST_DATABASE_URL=postgresql://user:password@localhost:5432/eclinic_test PGSSLMO
 ---
 
 ## 7. Процесс развертывания (Деплой)
-- Репозиторий: `https://github.com/DNX02/e-clinic-system.git`, основная ветка `main`.
-- Боевой сервер: AWS Lightsail (`13.63.64.38`, Ubuntu 24.04).
-- Сервис: `e-clinic.service` (systemd).
-- После пуша в `main` на сервере выполняется:
-  \`\`\`bash
-  cd /opt/e-clinic-system
-  git fetch origin main && git reset --hard origin/main
-  sudo systemctl restart e-clinic.service
-  \`\`\`
+- Репозиторий: `https://github.com/DNX02/e-clinic-system.git` (публичный), основная ветка `main`.
+- Боевой сервер: AWS Lightsail (`13.63.64.38`, Ubuntu 24.04), домен `admin.e-clinic-control.ru`.
+- Сервис: `e-clinic.service` (systemd, пользователь `eclinic`, папка `/opt/e-clinic-system`, env `/etc/e-clinic.env`).
+- **Автодеплой (установлен 12.11.2026):** таймер `eclinic-auto-deploy.timer` раз в 2 минуты запускает
+  `/usr/local/sbin/eclinic-auto-deploy` (= `scripts/auto-deploy.sh`). Скрипт берёт новый коммит из `main`,
+  прогоняет `test:product` и `test:ui`, делает резервную копию, подменяет код (без `data/db.json`),
+  перезапускает сервис и при неудаче откатывается; об ошибках пишет в Telegram.
+- **Деплой = push в `main`.** Заходить на сервер не нужно. Проверка снаружи:
+  `curl https://admin.e-clinic-control.ru/api/health` → поле `commit` должно совпасть с `git rev-parse origin/main`.
+- При изменении `scripts/auto-deploy.sh` его нужно переустановить на сервере вручную (копия лежит в `/usr/local/sbin`):
+  `sudo curl -fsSL https://raw.githubusercontent.com/DNX02/e-clinic-system/main/scripts/auto-deploy.sh -o /usr/local/sbin/eclinic-auto-deploy`
+- Логи деплоя на сервере: `sudo journalctl -u eclinic-auto-deploy -n 60 --no-pager`.
+- Из облачной сессии Claude SSH к серверу недоступен (только HTTPS). Действия на сервере выполняет владелец в консоли Lightsail.
+
+## 8. История и открытые задачи
+См. `docs/SESSION_HANDOFF.md` — что сделано, найденные проблемы и что осталось.
