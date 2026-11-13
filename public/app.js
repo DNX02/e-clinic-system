@@ -247,6 +247,13 @@ const TAJIK_TEXT = {
   "Логин и пароль обновлены.": "Логин ва парол нав карда шуданд.",
   "Осмотренные пациенты": "Беморони муоинашуда",
   "Всего осмотров": "Ҳамагӣ муоинаҳо",
+  "Все пациенты поликлиники": "Ҳамаи беморони дармонгоҳ",
+  "Добавлено мной сегодня": "Имрӯз ман илова кардам",
+  "Мои сохранённые осмотры": "Муоинаҳои сабткардаи ман",
+  "Пациент добавлен. Чтобы засчитать осмотр, заполните форму ниже и нажмите «Сохранить осмотр».": "Бемор илова шуд. Барои ба ҳисоб гирифтани муоина, шаклро дар поён пур кунед ва «Нигоҳ доштани муоина»-ро пахш кунед.",
+  "Пациент сохранён на этом устройстве и будет отправлен при синхронизации. Осмотр можно заполнить ниже.": "Бемор дар ҳамин дастгоҳ нигоҳ дошта шуд ва ҳангоми ҳамоҳангсозӣ фиристода мешавад. Муоинаро дар поён пур кардан мумкин аст.",
+  "Не отправлено": "Фиристода нашуд",
+  "Ошибка": "Хато",
   "Пациентов": "Беморон",
   "История осмотров": "Таърихи муоинаҳо",
   "Последние осмотры": "Муоинаҳои охирин",
@@ -4118,10 +4125,20 @@ function updateOfflineDoctorStatus() {
   const status = document.querySelector("#doctorSyncStatus");
   const button = document.querySelector("#doctorSyncButton");
   if (!status || !button) return;
-  const count = offlineDoctorQueue().length;
-  status.textContent = count ? `${translateDoctorText("Ожидают синхронизации")}: ${count}` : translateDoctorText("Все записи отправлены.");
-  const failed = offlineDoctorQueue().filter((item) => item.lastError);
-  status.title = failed.length ? failed.map((item) => `${new Date(item.savedAt).toLocaleString("ru-RU")}: ${item.lastError}`).join("\n") : "";
+  const queue = offlineDoctorQueue();
+  const count = queue.length;
+  const failed = queue.filter((item) => item.lastError);
+  const t = (value) => translateDoctorText(value);
+  // The error used to be only in a hover tooltip, which phones never show.
+  const errors = failed.map((item) => {
+    const kind = item.type === "survey" ? t("Добавить пациента") : t("Сохранить осмотр");
+    const when = new Date(item.savedAt).toLocaleString("ru-RU");
+    return `<li>${escapeHtml(t("Не отправлено"))}: ${escapeHtml(kind)} (${escapeHtml(when)}). ${escapeHtml(t("Ошибка"))}: ${escapeHtml(item.lastError)}</li>`;
+  }).join("");
+  status.innerHTML = count
+    ? `<strong>${escapeHtml(t("Ожидают синхронизации"))}: ${count}</strong>${errors ? `<ul class="doctor-sync-errors">${errors}</ul>` : ""}`
+    : escapeHtml(t("Все записи отправлены."));
+  status.title = "";
   button.disabled = count === 0;
 }
 
@@ -5239,6 +5256,12 @@ function doctorPatientsPanel() {
   const visits = state.doctor?.visits || [];
   const patientCount = new Set(visits.map((visit) => visit.surveyId)).size;
   const queueCount = state.doctor?.surveys?.length || 0;
+  const doctorId = state.doctor?.doctor?.id;
+  const today = new Date().toDateString();
+  const addedTodayCount = (state.doctor?.surveys || []).filter((survey) => {
+    const mine = survey.offline || (doctorId && survey.createdByDoctorId === doctorId);
+    return mine && survey.createdAt && new Date(survey.createdAt).toDateString() === today;
+  }).length;
   const primaryPanel = state.doctorMode === "add"
     ? doctorPatientSurveyForm()
     : state.selectedSurvey
@@ -5258,8 +5281,9 @@ function doctorPatientsPanel() {
         <p>${escapeHtml(state.doctor.doctor?.fullName || state.me?.name || "")}</p>
       </div>
       <div class="doctor-hero-metrics">
-        <div><strong>${queueCount}</strong><span>${escapeHtml(t("Пациенты"))}</span></div>
-        <div><strong>${visits.length}</strong><span>${escapeHtml(t("Всего осмотров"))}</span></div>
+        <div><strong>${queueCount}</strong><span>${escapeHtml(t("Все пациенты поликлиники"))}</span></div>
+        <div><strong>${addedTodayCount}</strong><span>${escapeHtml(t("Добавлено мной сегодня"))}</span></div>
+        <div><strong>${visits.length}</strong><span>${escapeHtml(t("Мои сохранённые осмотры"))}</span></div>
         <div><strong>${patientCount}</strong><span>${escapeHtml(t("Осмотренные пациенты"))}</span></div>
       </div>
     </section>
@@ -5811,6 +5835,8 @@ function bindDoctorPatientSurvey() {
       clearDraft(form);
       state.doctor.surveys = [survey, ...state.doctor.surveys.filter((item) => item.id !== survey.id)];
       state.selectedSurvey = survey;
+      state.lastSavedDoctorVisitId = "";
+      state.doctorVisitNotice = "Пациент добавлен. Чтобы засчитать осмотр, заполните форму ниже и нажмите «Сохранить осмотр».";
       state.doctorMode = "visit";
       renderDoctor();
       setTimeout(() => document.querySelector("#doctorPrimaryPanel")?.scrollIntoView({ block: "start" }), 0);
@@ -5831,6 +5857,8 @@ function bindDoctorPatientSurvey() {
               clearDraft(form);
               state.doctor.surveys = [forcedSurvey, ...state.doctor.surveys.filter((item) => item.id !== forcedSurvey.id)];
               state.selectedSurvey = forcedSurvey;
+              state.lastSavedDoctorVisitId = "";
+              state.doctorVisitNotice = "Пациент добавлен. Чтобы засчитать осмотр, заполните форму ниже и нажмите «Сохранить осмотр».";
               state.doctorMode = "visit";
               renderDoctor();
               setTimeout(() => document.querySelector("#doctorPrimaryPanel")?.scrollIntoView({ block: "start" }), 0);
@@ -5883,6 +5911,8 @@ function bindDoctorPatientSurvey() {
       clearDraft(form);
       state.doctor.surveys = [localSurvey, ...state.doctor.surveys];
       state.selectedSurvey = localSurvey;
+      state.lastSavedDoctorVisitId = "";
+      state.doctorVisitNotice = "Пациент сохранён на этом устройстве и будет отправлен при синхронизации. Осмотр можно заполнить ниже.";
       state.doctorMode = "visit";
       renderDoctor();
       setTimeout(() => document.querySelector("#doctorPrimaryPanel")?.scrollIntoView({ block: "start" }), 0);

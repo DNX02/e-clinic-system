@@ -671,7 +671,7 @@ th {
 .doctor-hero-metrics {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   position: relative;
   z-index: 1;
 }
@@ -692,6 +692,13 @@ th {
 
 .doctor-primary-panel {
   min-height: 360px;
+}
+
+.doctor-sync-errors {
+  color: #b42318;
+  font-size: 13px;
+  margin: 6px 0 0;
+  padding-left: 18px;
 }
 
 .doctor-empty-state {
