@@ -51,5 +51,9 @@
 - Не исправлено из аудита: публичный `POST /api/nurse-surveys` без rate-limit; `clientIp` доверяет
   `cf-connecting-ip`/`x-real-ip` (обход лимита входа); `rateLimits`/`securityAlertState` не чистятся;
   PBKDF2 100k итераций; данные граждан РТ хранятся в Швеции (вопрос локализации).
+- **Cloudflare кэширует `/sw.js` на 7 дней** (`cache-control: public, max-age=604800`, хотя сервер отдаёт
+  `no-cache`): 13.11.2026 на краю Cloudflare висел `medical-mobile-v94`. Страницы и `app.js?v=` обновляются
+  нормально, но новый Service Worker доходит до телефонов с опозданием. Нужно правило в Cloudflare
+  (Caching → Cache Rules: `/sw.js` — Bypass cache) и Purge для `/sw.js`. Делает владелец в панели Cloudflare.
 - UX: окно выбора языка на каждой загрузке; презентация на телефоне шире экрана; список пациентов врача
   грузится целиком (нужна пагинация на клиенте); скрипт Cloudflare Analytics блокируется CSP.
