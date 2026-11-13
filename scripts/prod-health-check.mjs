@@ -28,6 +28,22 @@ try {
   record("fail", "API /api/health", error.message);
 }
 
+// 1b. Load over the last hour (runtime self-diagnostics, no patient data)
+try {
+  const { response } = await timed(`${base}/api/health/details`);
+  if (!response.ok) record("warn", "API /api/health/details", `HTTP ${response.status} (not deployed yet?)`);
+  else {
+    const d = await response.json();
+    const h = d.lastHour || {};
+    const summary = `uptime ${Math.round(d.uptimeSec / 60)} min, loop max ${h.maxLoopMs} ms, node CPU max ${h.maxProcessCpuPercent}%, load max ${h.maxSystemLoad1}/${d.cpuCount} CPU, free mem min ${h.minFreeMemMb}/${d.totalMemMb} MB, db write max ${h.maxDbWriteMs} ms, slow requests ${h.slowRequests}`;
+    const worrying = h.maxLoopMs >= 1000 || h.slowRequests > 0 || h.maxDbWriteMs >= 2000 || h.minFreeMemMb < 100;
+    record(worrying ? "warn" : "ok", "Server load, last hour", summary);
+    for (const item of (d.slowRequests || []).slice(-5)) record("warn", "  slow request", `${item.at} ${item.method} ${item.route} ${item.durationMs} ms${item.aborted ? " (client gave up)" : ""}`);
+  }
+} catch (error) {
+  record("warn", "API /api/health/details", error.message);
+}
+
 // 2. Every app page answers 200 and looks like our HTML
 const pages = ["/app-1-admin-panel", "/app-2-doctor", "/app-3-patient-survey", "/app-4-doctor-knowledge", "/app-5-nurse-knowledge", "/app-6-investor-dashboard", "/app-7-operations-monitor", "/app-8-diabetes-risk", "/presentation.html", "/app.js", "/styles.css", "/sw.js"];
 for (const path of pages) {

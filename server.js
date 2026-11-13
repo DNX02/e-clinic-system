@@ -10,6 +10,7 @@ import { gzipSync } from "node:zlib";
 import { labHasResult, patientChanges, waitingPatients, verifyBackupRestore } from './care-workflow.js';
 import PDFDocument from "pdfkit";
 import { buildWeeklyMonitorReportDocx, monitorReportPeriod } from "./weekly-monitor-report.js";
+import { recordDbWrite, runtimeSnapshot, startRuntimeMonitor, trackRequest } from "./runtime-monitor.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "public");
@@ -701,7 +702,9 @@ async function ensureDbPersisted() {
 async function writeDb(db) {
   dbCache = db;
   const version = ++dbRequestedVersion;
+  const writeStartedAt = performance.now();
   await writeDbToStorage(db);
+  recordDbWrite(performance.now() - writeStartedAt);
   dbPersistedVersion = Math.max(dbPersistedVersion, version);
 }
 
@@ -1755,6 +1758,11 @@ function scorePostTask(task, answers = {}) {
 }
 
 async function handleApi(req, res, url) {
+  // Load history of the last hour (no patient data): lets us tell from outside why the site hung.
+  if (req.method === "GET" && url.pathname === "/api/health/details") {
+    return send(res, 200, { ...runtimeSnapshot(), commit: DEPLOYED_COMMIT || null }, { "X-Robots-Tag": "noindex, nofollow" });
+  }
+
   if (req.method === "GET" && url.pathname === "/api/health") {
     try {
       return send(res, 200, {
@@ -4081,6 +4089,7 @@ const server = createServer(async (req, res) => {
   res.setHeader("X-Request-Id", req.requestId);
   if (isShuttingDown) return send(res, 503, { error: "Сервер перезагружается, повторите запрос" });
   const startedAt = Date.now();
+  trackRequest(req, res, startedAt);
   res.once("finish", () => {
     // Routine 404s are common from crawlers and status-endpoint probes. Do not
     // emit each one as a security warning (including its IP and requested path).
@@ -4123,6 +4132,7 @@ server.listen(PORT, HOST, () => {
     console.log(`  Investor:     ${baseUrl}${INVESTOR_APP_PATH}`);
     console.log(`  Monitor:      ${baseUrl}${MONITOR_APP_PATH}`);
   }
+  startRuntimeMonitor();
   setTimeout(() => runScheduledMaintenance(), 5000);
   setInterval(() => runScheduledMaintenance(), 60 * 1000).unref();
 });
