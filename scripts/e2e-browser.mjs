@@ -136,6 +136,24 @@ try {
     }, null, { timeout: 8000 });
     assert.equal((await clinic1Patients()).filter((s) => s.patient.lastName === "Офлайнов").length, 1);
   });
+  await step("offline duplicate: sync says why it is stuck and stops resending it", async () => {
+    await openSurvey();
+    await fillSurvey(nurseFields.high); // Рахимов is already on the server
+    await phone.setOffline(true);
+    await nurse.click('#surveyForm button[type="submit"]');
+    await nurse.waitForFunction(() => /сохран|офлайн|очеред|синхрониз/i.test(document.querySelector("#surveyResult")?.innerText || ""), null, { timeout: 5000 });
+    await phone.setOffline(false);
+    await nurse.waitForFunction(() => /Уже есть в базе: 1/.test(document.querySelector("#surveyResult")?.innerText || ""), null, { timeout: 8000 });
+    assert.equal(await nurse.locator("#offlineSurveysDrawer .mark-synced-btn").count(), 1, "the list with «Уже в базе» must open by itself");
+    let posted = 0;
+    nurse.on("request", (r) => { if (r.method() === "POST" && r.url().includes("/api/nurse-surveys")) posted += 1; });
+    await nurse.click("#syncSurveysButton");
+    await nurse.waitForTimeout(500);
+    assert.equal(posted, 0, "a known duplicate must not be resent by the bulk sync");
+    await nurse.locator("#offlineSurveysDrawer .mark-synced-btn").click();
+    assert.match(await nurse.locator("#syncSurveysStatus").innerText(), /Все анкеты отправлены/);
+    assert.equal((await clinic1Patients()).filter((s) => s.patient.lastName === "Рахимов").length, 1);
+  });
   await step("Tajik language switch works", async () => {
     await nurse.goto(`${base}/app-3-patient-survey`);
     await nurse.locator("[data-survey-lang-choice=tg]").click({ timeout: 3000 });

@@ -72,7 +72,9 @@ const api = async (url, options = {}) => {
     ...options
   });
   const contentType = response.headers.get("content-type") || "";
-  const data = contentType.includes("application/json") ? await response.json() : { error: await response.text() };
+  const data = contentType.includes("application/json")
+    ? await response.json()
+    : { error: response.ok ? await response.text() : `Сервер ответил ошибкой ${response.status}` };
   if (!response.ok) {
     const error = new Error(data.error || "Ошибка запроса");
     error.status = response.status;
@@ -248,6 +250,11 @@ const TAJIK_TEXT = {
   "Осмотренные пациенты": "Беморони муоинашуда",
   "Всего осмотров": "Ҳамагӣ муоинаҳо",
   "Все пациенты поликлиники": "Ҳамаи беморони дармонгоҳ",
+  "Уже есть в базе": "Аллакай дар пойгоҳ ҳаст",
+  "Откройте «Сохранённые анкеты» и нажмите «✓ Уже в базе» или «➕ Как нового».": "«Сохранённые анкеты»-ро кушоед ва «✓ Уже в базе» ё «➕ Как нового»-ро пахш кунед.",
+  "Нужно исправить": "Ислоҳ кардан лозим",
+  "Причина указана в «Сохранённые анкеты».": "Сабаб дар «Сохранённые анкеты» нишон дода шудааст.",
+  "Не отправлено из-за сети или сервера": "Аз сабаби интернет ё сервер фиристода нашуд",
   "Добавлено мной сегодня": "Имрӯз ман илова кардам",
   "Мои сохранённые осмотры": "Муоинаҳои сабткардаи ман",
   "Пациент добавлен. Чтобы засчитать осмотр, заполните форму ниже и нажмите «Сохранить осмотр».": "Бемор илова шуд. Барои ба ҳисоб гирифтани муоина, шаклро дар поён пур кунед ва «Нигоҳ доштани муоина»-ро пахш кунед.",
@@ -4034,6 +4041,7 @@ async function syncOfflineSurveys() {
 // proxy or login portal, 404/405 during a deploy) are temporary and must keep being retried.
 const PERMANENT_SURVEY_ERROR_STATUSES = [400, 413, 422];
 const isPermanentSurveyError = (error) => PERMANENT_SURVEY_ERROR_STATUSES.includes(Number(error?.status));
+const isDuplicateSurveyItem = (item) => Number(item?.status) === 409 || String(item?.lastError || "").includes("уже существует");
 
 async function doSyncOfflineSurveys() {
   if (syncNurseInFlight) return;
@@ -4053,6 +4061,11 @@ async function doSyncOfflineSurveys() {
     for (const item of snapshot) {
       // Items flagged by an older app version for a temporary error (e.g. 429) are retried again.
       if (item.requiresEdit && isPermanentSurveyError({ status: item.status })) {
+        processed.set(item.id, item);
+        continue;
+      }
+      // A duplicate (409) will get 409 again: the nurse must choose «Уже в базе» or «Как нового».
+      if (isDuplicateSurveyItem(item)) {
         processed.set(item.id, item);
         continue;
       }
@@ -4084,9 +4097,26 @@ async function doSyncOfflineSurveys() {
     writeOfflineSurveyQueue(remaining);
     updateOfflineSurveyStatus();
     if (result) {
+      const t = translateSurveyText;
+      const duplicates = remaining.filter(isDuplicateSurveyItem);
+      const needEdit = remaining.filter((item) => !isDuplicateSurveyItem(item) && item.requiresEdit);
+      const other = remaining.filter((item) => !isDuplicateSurveyItem(item) && !item.requiresEdit);
+      const lines = [];
+      if (duplicates.length) lines.push(`${escapeHtml(t("Уже есть в базе"))}: ${duplicates.length}. ${escapeHtml(t("Откройте «Сохранённые анкеты» и нажмите «✓ Уже в базе» или «➕ Как нового»."))}`);
+      if (needEdit.length) lines.push(`${escapeHtml(t("Нужно исправить"))}: ${needEdit.length}. ${escapeHtml(t("Причина указана в «Сохранённые анкеты»."))}`);
+      if (other.length) {
+        const lastError = other.find((item) => item.lastError)?.lastError;
+        lines.push(`${escapeHtml(t("Не отправлено из-за сети или сервера"))}: ${other.length}. ${escapeHtml(t("Попробуйте еще раз, когда интернет будет стабильным."))}${lastError ? ` (${escapeHtml(t("Ошибка"))}: ${escapeHtml(lastError)})` : ""}`);
+      }
       result.innerHTML = remaining.length
-        ? `<div class="notice warn">${escapeHtml(translateSurveyText("Отправлено"))}: ${sent}. ${escapeHtml(translateSurveyText("Осталось без синхронизации"))}: ${remaining.length}. ${escapeHtml(translateSurveyText("Попробуйте еще раз, когда интернет будет стабильным."))}</div>`
-        : `<div class="notice ok">${escapeHtml(translateSurveyText("Синхронизация завершена. Отправлено анкет"))}: ${sent}.</div>`;
+        ? `<div class="notice warn">${escapeHtml(t("Отправлено"))}: ${sent}. ${escapeHtml(t("Осталось без синхронизации"))}: ${remaining.length}.<br>${lines.join("<br>")}</div>`
+        : `<div class="notice ok">${escapeHtml(t("Синхронизация завершена. Отправлено анкет"))}: ${sent}.</div>`;
+      // Duplicates and surveys to fix need the nurse's decision: open the list right away.
+      const drawer = document.querySelector("#offlineSurveysDrawer");
+      if (drawer && (duplicates.length || needEdit.length)) {
+        drawer.style.display = "block";
+        renderOfflineSurveysDrawer();
+      }
     }
   } finally {
     syncNurseInFlight = false;
