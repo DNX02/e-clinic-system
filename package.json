@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test:product": "node scripts/test-product-improvements.mjs && node scripts/test-runtime-monitor.mjs",
+    "test:product": "node scripts/test-product-improvements.mjs && node scripts/test-runtime-monitor.mjs && node scripts/test-staff-ip.mjs",
     "test:ui": "node scripts/check-ui-contract.mjs",
     "test:pg": "node scripts/test-postgres-sync.mjs",
     "test:e2e": "node scripts/e2e-browser.mjs",

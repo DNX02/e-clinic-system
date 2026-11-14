@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { readFile, writeFile, mkdir, rename, readdir, unlink } from "node:fs/promises";
 import { existsSync, createReadStream, readFileSync } from "node:fs";
 import { stat } from 'node:fs/promises';
@@ -10,7 +11,12 @@ import { gzipSync } from "node:zlib";
 import { labHasResult, patientChanges, waitingPatients, verifyBackupRestore } from './care-workflow.js';
 import PDFDocument from "pdfkit";
 import { buildWeeklyMonitorReportDocx, monitorReportPeriod } from "./weekly-monitor-report.js";
-import { recordDbWrite, runtimeSnapshot, startRuntimeMonitor, trackRequest } from "./runtime-monitor.js";
+import { recordDbWrite, recordRequestSource, runtimeSnapshot, startRuntimeMonitor, trackRequest } from "./runtime-monitor.js";
+import { clientIpInfo, deviceLabel } from "./client-info.js";
+
+// The request being handled, so the activity log can note who did it (IP, device) without
+// passing req through every function that writes to the log.
+const requestContext = new AsyncLocalStorage();
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "public");
@@ -851,7 +857,7 @@ async function parseBody(req) {
 }
 
 function clientIp(req) {
-  return String(req.headers["cf-connecting-ip"] || req.headers["x-real-ip"] || req.socket.remoteAddress || "unknown").trim();
+  return clientIpInfo(req).ip;
 }
 
 const securityAlertState = new Map();
@@ -1530,9 +1536,45 @@ function buildNurseSurvey(body) {
   return survey;
 }
 
+// Doctors and nurses with the addresses they worked from (newest first), for the main administrator.
+function buildStaffIpSummary(events) {
+  const staff = new Map();
+  const sorted = (events || [])
+    .filter((event) => event.ip && ["doctor", "nurse"].includes(event.actorRole))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  for (const event of sorted) {
+    const key = event.actorRole === "doctor" && event.actorId
+      ? `doctor:${event.actorId}`
+      : `nurse:${String(event.actorName || "").trim().toLocaleLowerCase("ru-RU")}`;
+    let row = staff.get(key);
+    if (!row) {
+      row = {
+        name: event.actorName || "-",
+        role: event.actorRole,
+        clinic: event.clinic || "",
+        lastAt: event.createdAt,
+        lastIp: event.ip,
+        lastIpVia: event.ipVia || "cloudflare",
+        lastDevice: event.device || "",
+        actions: 0,
+        ips: []
+      };
+      staff.set(key, row);
+    }
+    row.actions += 1;
+    const known = row.ips.find((item) => item.ip === event.ip);
+    if (known) known.count += 1;
+    else row.ips.push({ ip: event.ip, device: event.device || "", lastAt: event.createdAt, count: 1 });
+  }
+  return [...staff.values()].slice(0, 300).map((row) => ({ ...row, ipCount: row.ips.length, ips: row.ips.slice(0, 10) }));
+}
+
 function appendActivity(db, event) {
   db.activityEvents ||= [];
+  const req = requestContext.getStore();
+  const origin = req ? clientIpInfo(req) : null;
   db.activityEvents.push({
+    ...(origin ? { ip: origin.ip, ...(origin.via === "cloudflare" ? {} : { ipVia: origin.via }), device: deviceLabel(req.headers["user-agent"]) } : {}),
     id: crypto.randomUUID(),
     type: event.type,
     actorRole: event.actorRole || "",
@@ -1843,6 +1885,15 @@ async function handleApi(req, res, url) {
       return send(res, 401, { error: "Неверный логин или ключ" });
     }
     clearRateLimit(rateLimitKey);
+    appendActivity(db, {
+      type: "doctor_login",
+      actorRole: "doctor",
+      actorId: doctor.id,
+      actorName: doctor.fullName,
+      clinic: doctor.clinic || "",
+      details: "Вход в кабинет врача"
+    });
+    await writeDb(db);
     const sid = await createSession("doctor", doctor.id);
     securityEvent("login_succeeded", req, { accountType: "doctor", actorId: doctor.id });
     return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(req, sid) });
@@ -1972,19 +2023,24 @@ async function handleApi(req, res, url) {
       const requestedPage = Math.max(1, Number.parseInt(url.searchParams.get("page") || "1", 10) || 1);
       const selectedClinic = String(url.searchParams.get("clinic") || "all").trim();
       const searchQuery = String(requestBody.search || "").trim().toLocaleLowerCase("ru-RU");
+      // IP addresses and devices of staff are shown to the main administrator only.
+      const showIp = canManageAdmins(session, db);
       const sourceEvents = viewDb.activityEvents || [];
       const clinics = [...new Set(sourceEvents.map((event) => String(event.clinic || "").trim()).filter(Boolean))]
         .sort((a, b) => a.localeCompare(b, "ru-RU", { numeric: true }));
       const filteredEvents = sourceEvents.filter((event) => {
         if (selectedClinic !== "all" && String(event.clinic || "").trim() !== selectedClinic) return false;
         if (!searchQuery) return true;
-        return [event.patientName, event.actorName, event.clinic, event.details, event.type]
+        return [event.patientName, event.actorName, event.clinic, event.details, event.type, ...(showIp ? [event.ip, event.device] : [])]
           .some((value) => String(value || "").toLocaleLowerCase("ru-RU").includes(searchQuery));
       }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       const pageCount = Math.max(1, Math.ceil(filteredEvents.length / pageSize));
       const page = Math.min(requestedPage, pageCount);
       const start = (page - 1) * pageSize;
-      dashboard.activityEvents = filteredEvents.slice(start, start + pageSize);
+      dashboard.activityEvents = filteredEvents.slice(start, start + pageSize)
+        .map((event) => showIp ? event : (({ ip, ipVia, device, ...rest }) => rest)(event));
+      dashboard.showStaffIps = showIp;
+      if (showIp) dashboard.staffIps = buildStaffIpSummary(sourceEvents);
       dashboard.auditClinics = clinics;
       dashboard.auditTotal = filteredEvents.length;
       dashboard.auditPage = page;
@@ -4090,6 +4146,7 @@ const server = createServer(async (req, res) => {
   if (isShuttingDown) return send(res, 503, { error: "Сервер перезагружается, повторите запрос" });
   const startedAt = Date.now();
   trackRequest(req, res, startedAt);
+  recordRequestSource(clientIpInfo(req).via);
   res.once("finish", () => {
     // Routine 404s are common from crawlers and status-endpoint probes. Do not
     // emit each one as a security warning (including its IP and requested path).
@@ -4104,7 +4161,7 @@ const server = createServer(async (req, res) => {
       securityEvent("cross_site_request_blocked", req);
       return send(res, 403, { error: "Межсайтовый запрос заблокирован" });
     }
-    if (url.pathname.startsWith("/api/")) return await handleApi(req, res, url);
+    if (url.pathname.startsWith("/api/")) return await requestContext.run(req, () => handleApi(req, res, url));
     return await serveStatic(req, res, url);
   } catch (error) {
     securityEvent("application_error", req, { errorName: error?.name || "Error" });

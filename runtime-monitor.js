@@ -24,7 +24,7 @@ let lastTick = performance.now();
 let timer = null;
 
 function emptyMinute() {
-  return { requests: 0, slowRequests: 0, aborted: 0, errors5xx: 0, dbWrites: 0, dbWriteMaxMs: 0 };
+  return { requests: 0, slowRequests: 0, aborted: 0, errors5xx: 0, dbWrites: 0, dbWriteMaxMs: 0, via: { cloudflare: 0, direct: 0, unverified: 0 } };
 }
 
 const mb = (bytes) => Math.round(bytes / 1024 / 1024);
@@ -97,6 +97,11 @@ export function trackRequest(req, res, startedAtMs = Date.now()) {
   });
 }
 
+// How requests reached us (counts only, no addresses): shows whether the real-IP check works in production.
+export function recordRequestSource(via) {
+  if (via in current.via) current.via[via] += 1;
+}
+
 export function recordDbWrite(durationMs) {
   current.dbWrites += 1;
   current.dbWriteMaxMs = Math.max(current.dbWriteMaxMs, Math.round(durationMs));
@@ -128,6 +133,10 @@ export function runtimeSnapshot() {
       minFreeMemMb: minutes.length ? Math.min(...minutes.map((item) => item.freeMemMb)) : mb(freemem()),
       maxDbWriteMs: Math.max(0, ...minutes.map((item) => item.dbWriteMaxMs)),
       requests: minutes.reduce((sum, item) => sum + item.requests, 0),
+      via: minutes.reduce((sum, item) => {
+        for (const key of Object.keys(sum)) sum[key] += item.via?.[key] || 0;
+        return sum;
+      }, { cloudflare: 0, direct: 0, unverified: 0 }),
       slowRequests: recentSlow.length
     },
     minutes,

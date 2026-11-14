@@ -2843,12 +2843,15 @@ function renderAuditAdmin() {
     admin_updated: "Изменён администратор",
     admin_deleted: "Удалён администратор"
     , admin_login: "Вход в аккаунт"
+    , doctor_login: "Вход врача"
     , survey_answers_corrected: "Исправлена анкета"
   };
   const events = state.admin.activityEvents || [];
   const clinics = state.admin.auditClinics || [];
   const page = Number(state.admin.auditPage || 1);
   const pageCount = Number(state.admin.auditPageCount || 1);
+  const showIp = Boolean(state.admin.showStaffIps);
+  const columns = showIp ? 7 : 6;
   const rows = events.map((event) => html`<tr>
     <td>${new Date(event.createdAt).toLocaleString("ru-RU")}</td>
     <td>${escapeHtml(event.actorName || event.actorRole || "Система")}</td>
@@ -2858,12 +2861,13 @@ function renderAuditAdmin() {
       : escapeHtml(event.patientName || "-")}</td>
     <td>${escapeHtml(event.clinic || "-")}</td>
     <td>${escapeHtml(event.details || "-")}</td>
+    ${showIp ? `<td>${auditIpCell(event.ip, event.device, event.ipVia)}</td>` : ""}
   </tr>`).join("");
-  return html`<section class="panel"><div class="section-title"><div><h2>Журнал действий</h2><p class="muted">Найдите пациента по фамилии, медсестре или поликлинике и нажмите на имя, чтобы открыть анкету.</p></div></div>
+  return html`${showIp ? renderStaffIpsAdmin() : ""}<section class="panel"><div class="section-title"><div><h2>Журнал действий</h2><p class="muted">Найдите пациента по фамилии, медсестре или поликлинике и нажмите на имя, чтобы открыть анкету.</p></div></div>
     <form id="auditSearchForm" class="audit-search-form">
       <label for="auditSearch">Поиск и фильтры журнала</label>
       <div class="actions">
-        <input id="auditSearch" name="query" type="search" value="${escapeHtml(state.auditSearch)}" placeholder="Фамилия пациента, медсестра или поликлиника" autocomplete="off" />
+        <input id="auditSearch" name="query" type="search" value="${escapeHtml(state.auditSearch)}" placeholder="${showIp ? "Фамилия, медсестра, поликлиника или IP" : "Фамилия пациента, медсестра или поликлиника"}" autocomplete="off" />
         <select id="auditClinic" name="clinic" aria-label="Фильтр по поликлинике">
           <option value="all" ${state.auditClinic === "all" ? "selected" : ""}>Все поликлиники</option>
           ${clinics.map((clinic) => `<option value="${escapeHtml(clinic)}" ${state.auditClinic === clinic ? "selected" : ""}>${escapeHtml(clinic)}</option>`).join("")}
@@ -2878,7 +2882,40 @@ function renderAuditAdmin() {
       <span>Страница ${page} из ${pageCount}</span>
       <button type="button" class="secondary" data-action="audit-page" data-direction="1" ${page >= pageCount ? "disabled" : ""}>Вперёд →</button>
     </div>
-    <div class="table-wrap"><table><thead><tr><th>Дата</th><th>Пользователь</th><th>Действие</th><th>Пациент</th><th>Поликлиника</th><th>Описание</th></tr></thead><tbody>${rows || `<tr><td colspan="6">По вашему запросу записи не найдены</td></tr>`}</tbody></table></div>${renderAuditSurveyModal()}</section>`;
+    <div class="table-wrap"><table><thead><tr><th>Дата</th><th>Пользователь</th><th>Действие</th><th>Пациент</th><th>Поликлиника</th><th>Описание</th>${showIp ? "<th>IP / устройство</th>" : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${columns}">По вашему запросу записи не найдены</td></tr>`}</tbody></table></div>${renderAuditSurveyModal()}</section>`;
+}
+
+function auditIpCell(ip, device, via) {
+  if (!ip) return `<span class="muted">—</span>`;
+  const warning = via === "direct"
+    ? `<div class="danger-text" title="Запрос пришёл напрямую на сервер, минуя Cloudflare">⚠ в обход Cloudflare</div>`
+    : via === "unverified" ? `<div class="muted" title="Сервер не смог проверить, что запрос пришёл через Cloudflare">не проверен</div>` : "";
+  return `<div class="ip-cell"><span class="ip-address">${escapeHtml(ip)}</span>${device ? `<div class="muted">${escapeHtml(device)}</div>` : ""}${warning}</div>`;
+}
+
+function renderStaffIpsAdmin() {
+  const staff = state.admin.staffIps || [];
+  const roleNames = { doctor: "Врач", nurse: "Медсестра" };
+  const rows = staff.map((row) => html`<tr>
+    <td data-label="Сотрудник"><strong>${escapeHtml(row.name)}</strong></td>
+    <td data-label="Роль">${escapeHtml(roleNames[row.role] || row.role)}</td>
+    <td data-label="Поликлиника">${escapeHtml(row.clinic || "-")}</td>
+    <td data-label="Последнее действие">${escapeHtml(new Date(row.lastAt).toLocaleString("ru-RU"))}</td>
+    <td data-label="Последний IP">${auditIpCell(row.lastIp, row.lastDevice, row.lastIpVia)}</td>
+    <td data-label="Разных IP">${row.ipCount > 1
+      ? `<details><summary>${row.ipCount}</summary><ul class="staff-ip-list">${row.ips.map((item) => `<li><span class="ip-address">${escapeHtml(item.ip)}</span> — ${escapeHtml(item.device || "?")}, ${item.count} раз, последний ${escapeHtml(new Date(item.lastAt).toLocaleString("ru-RU"))}</li>`).join("")}</ul></details>`
+      : row.ipCount}</td>
+  </tr>`).join("");
+  return html`<section class="panel staff-ips-panel">
+    <details open>
+      <summary><h2 style="display:inline">Сотрудники и их IP-адреса</h2></summary>
+      <p class="muted">Последний адрес, с которого врач или медсестра работали в системе (вход, анкета, осмотр). Видно только главному администратору.
+      IP мобильного интернета часто меняется и бывает общим у многих абонентов одного оператора — это подсказка, а не точное место.
+      Адреса записываются с 14.11.2026, более ранние действия показаны без IP.</p>
+      <div class="table-wrap staff-ips-table"><table><thead><tr><th>Сотрудник</th><th>Роль</th><th>Поликлиника</th><th>Последнее действие</th><th>Последний IP / устройство</th><th>Разных IP</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="6">Пока нет действий с записанным IP. Они появятся, когда врачи и медсёстры начнут работать после обновления.</td></tr>`}</tbody></table></div>
+    </details>
+  </section>`;
 }
 
 function renderHeadNurseActivityAdmin() {
