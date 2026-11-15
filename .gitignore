@@ -42,3 +42,7 @@ android-admin-app/**/*.keystore
 
 # Written by scripts/auto-deploy.sh on the server
 DEPLOYED_COMMIT
+
+# Local database (contains password hashes and sessions; never commit)
+data/db.json
+data/*.tmp
