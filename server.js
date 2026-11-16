@@ -13,6 +13,7 @@ import PDFDocument from "pdfkit";
 import { buildWeeklyMonitorReportDocx, monitorReportPeriod } from "./weekly-monitor-report.js";
 import { recordDbWrite, recordRequestSource, runtimeSnapshot, startRuntimeMonitor, trackRequest } from "./runtime-monitor.js";
 import { clientIpInfo, deviceLabel } from "./client-info.js";
+import { buildNurseReport } from "./nurse-report.js";
 
 // The request being handled, so the activity log can note who did it (IP, device) without
 // passing req through every function that writes to the log.
@@ -2013,6 +2014,7 @@ async function handleApi(req, res, url) {
         patient: { lastName: patient?.lastName, firstName: patient?.firstName, middleName: patient?.middleName, clinic: patient?.clinic }
       }));
     }
+    if (tab === "nurses") dashboard.nurseReport = nurseReportFor(viewDb, url);
     if (tab === "operations") {
       dashboard.surveyClinics = [...new Set(viewDb.nurseSurveys.map((survey) => survey.patient?.clinic || survey.clinic).filter(Boolean))];
       dashboard.reminderQueue = viewDb.reminderQueue || [];
@@ -2068,6 +2070,17 @@ async function handleApi(req, res, url) {
     }
     if (tab === "access") dashboard.admins = (canManageAdmins(session, db) ? db.admins : viewDb.admins).map(publicAdmin);
     return send(res, 200, dashboard);
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/admin/nurse-report.xls") {
+    if (!requireAdmin(session)) return send(res, 403, { error: "Нет доступа" });
+    const report = nurseReportFor(scopedDbForAdmin(db, session), url);
+    const { clinic, from, to } = report.filters;
+    const suffix = [clinic === "all" ? "vse" : `gcz-${clinicKey(clinic)}`, from || "nachalo", to || "segodnya"].join("_");
+    return send(res, 200, Buffer.from(buildNurseReportExcel(report), "utf8"), {
+      "Content-Type": "application/vnd.ms-excel; charset=utf-8",
+      "Content-Disposition": `attachment; filename="nurses-${suffix}.xls"`
+    });
   }
 
   if (req.method === "GET" && url.pathname === "/api/admin/care-control.xls") {
@@ -3866,6 +3879,27 @@ function excelXmlSheet(name, headers, rows) {
   const header = `<Row ss:StyleID="Header">${headers.map((item) => excelXmlCell(item)).join("")}</Row>`;
   const body = rows.map((row) => `<Row>${row.map((item) => excelXmlCell(item, typeof item === "number" ? "Number" : "String")).join("")}</Row>`).join("");
   return `<Worksheet ss:Name="${name}"><Table>${header}${body}</Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane></WorksheetOptions></Worksheet>`;
+}
+
+// ?clinic=Поликлиника №11&from=2026-11-01&to=2026-11-19 (dates in Dushanbe time, both inclusive).
+function nurseReportFor(db, url) {
+  const day = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? String(value) : "";
+  const clinic = String(url.searchParams.get("clinic") || "all").trim().slice(0, 100) || "all";
+  const surveys = (db.nurseSurveys || []).filter((survey) => !isExcludedClinic(survey.patient?.clinic || survey.clinic));
+  return buildNurseReport(surveys, { clinic, from: day(url.searchParams.get("from")), to: day(url.searchParams.get("to")), clinicKey });
+}
+
+function buildNurseReportExcel(report) {
+  const { clinic, from, to } = report.filters;
+  const period = `${from || "с начала"} — ${to || "по сегодня"}`;
+  const sheets = [
+    excelXmlSheet("Медсёстры", ["Медсестра", "Поликлиника", "Анкет", "Направлено к врачу", "Дней работы", "Первая анкета", "Последняя анкета", "Варианты написания ФИО"],
+      report.rows.map((row) => [row.name, row.clinic, row.surveys, row.needsDoctor, row.activeDays, row.firstDate, row.lastDate, row.variants.map((item) => `${item.name} (${item.count})`).join("; ")])
+        .concat([["ИТОГО", clinic === "all" ? "Все поликлиники" : clinic, report.totals.surveys, report.totals.needsDoctor, "", "", "", `Период: ${period}`]])),
+    excelXmlSheet("По дням", ["Дата", "Поликлиника", "Медсестра", "Анкет", "Направлено к врачу"],
+      report.byDay.map((row) => [row.date, row.clinic, row.name, row.surveys, row.needsDoctor]))
+  ].join("");
+  return `<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="Header"><Font ss:Bold="1"/><Interior ss:Color="#D9EDE8" ss:Pattern="Solid"/></Style></Styles>${sheets}</Workbook>`;
 }
 
 function buildCareControlExcel(db) {

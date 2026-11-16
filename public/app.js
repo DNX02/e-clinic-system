@@ -8,6 +8,9 @@ const initialState = () => ({
   auditSurvey: null,
   auditSearch: "",
   auditClinic: "all",
+  nurseReportClinic: "all",
+  nurseReportFrom: "",
+  nurseReportTo: "",
   auditPage: 1,
   headNurseAuditSearch: "",
   careSearch: "",
@@ -1040,6 +1043,16 @@ document.addEventListener("click", async (event) => {
     renderAdmin();
   }
   if (action === "print-patient-card") window.print();
+  if (action === "nurse-report-period") {
+    const today = dushanbeToday();
+    const shift = (days) => new Date(Date.parse(`${today}T00:00:00Z`) - days * 86400000).toISOString().slice(0, 10);
+    const period = event.target.closest("[data-action]").dataset.period;
+    state.nurseReportFrom = period === "today" ? today : period === "week" ? shift(6) : period === "month" ? `${today.slice(0, 8)}01` : "";
+    state.nurseReportTo = period === "all" ? "" : today;
+    loadAdmin();
+    return;
+  }
+
   if (action === "clear-audit-search") {
     state.auditSearch = "";
     state.auditClinic = "all";
@@ -2124,6 +2137,11 @@ async function loadAdmin() {
       params.set("page", String(state.auditPage || 1));
       params.set("clinic", state.auditClinic || "all");
     }
+    if (state.tab === "nurses") {
+      params.set("clinic", state.nurseReportClinic || "all");
+      if (state.nurseReportFrom) params.set("from", state.nurseReportFrom);
+      if (state.nurseReportTo) params.set("to", state.nurseReportTo);
+    }
     if (state.tab === "surveys") {
       params.set("page", String(state.surveyPage || 1));
       params.set("clinic", state.surveyClinicFilter || "all");
@@ -2144,7 +2162,7 @@ async function loadAdmin() {
 const ADMIN_TAB_NAMES = {
   stats: "Статистика", center: "Контроль диабета", surveys: "Пациенты", doctors: "Врачи", audit: "Журнал",
   training: "Обучение врачей №4", nurseTraining: "Тесты медсестёр №5", visits: "Назначения", operations: "План и сообщения",
-  headNurses: "Контроль старших", access: "Доступы", qr: "Ссылки и QR"
+  headNurses: "Контроль старших", access: "Доступы", qr: "Ссылки и QR", nurses: "Медсёстры"
 };
 // Everyday sections stay visible; the rest go into the "Ещё" menu.
 const ADMIN_PRIMARY_TABS = ["stats", "center", "surveys", "doctors", "audit"];
@@ -2153,8 +2171,8 @@ function renderAdmin() {
   // "control" was a duplicate tab of "center" (same screen); keep the old value working.
   if (state.tab === "control") state.tab = "center";
   const visibleTabs = state.me?.role === "head_nurse"
-    ? ["stats", "center", "surveys", "audit", "operations"]
-    : ["stats", "center", "surveys", "doctors", "audit", "training", "nurseTraining", "visits", "operations", "access", "qr"];
+    ? ["stats", "center", "surveys", "audit", "nurses", "operations"]
+    : ["stats", "center", "surveys", "doctors", "audit", "nurses", "training", "nurseTraining", "visits", "operations", "access", "qr"];
   if (state.me?.role === "owner") visibleTabs.splice(visibleTabs.indexOf("access"), 0, "headNurses");
   let primary = visibleTabs.filter((tab) => ADMIN_PRIMARY_TABS.includes(tab));
   let extra = visibleTabs.filter((tab) => !ADMIN_PRIMARY_TABS.includes(tab));
@@ -2191,6 +2209,7 @@ function adminTab() {
   if (state.tab === "headNurses") return renderHeadNurseActivityAdmin();
   if (state.tab === "access") return renderAccessAdmin();
   if (state.tab === "qr") return renderQrAdmin();
+  if (state.tab === "nurses") return renderNurseReportAdmin();
   return renderStatsAdmin();
 }
 
@@ -2885,6 +2904,61 @@ function renderAuditAdmin() {
     <div class="table-wrap"><table><thead><tr><th>Дата</th><th>Пользователь</th><th>Действие</th><th>Пациент</th><th>Поликлиника</th><th>Описание</th>${showIp ? "<th>IP / устройство</th>" : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${columns}">По вашему запросу записи не найдены</td></tr>`}</tbody></table></div>${renderAuditSurveyModal()}</section>`;
 }
 
+// Today's date in Dushanbe (UTC+5), the time zone the report and the clinics use.
+function dushanbeToday() {
+  return new Date(Date.now() + 5 * 3600000).toISOString().slice(0, 10);
+}
+
+function renderNurseReportAdmin() {
+  const report = state.admin.nurseReport;
+  if (!report) return `<section class="panel"><p class="muted">Загрузка…</p></section>`;
+  const { totals } = report;
+  const query = new URLSearchParams({ clinic: state.nurseReportClinic || "all" });
+  if (state.nurseReportFrom) query.set("from", state.nurseReportFrom);
+  if (state.nurseReportTo) query.set("to", state.nurseReportTo);
+  const date = (value) => value ? value.split("-").reverse().join(".") : "";
+  const period = state.nurseReportFrom || state.nurseReportTo
+    ? `${date(state.nurseReportFrom) || "с начала"} — ${date(state.nurseReportTo) || "сегодня"}`
+    : "за всё время";
+  const rows = report.rows.map((row) => html`<tr class="${row.special ? "muted" : ""}">
+    <td data-label="Медсестра"><div><strong>${escapeHtml(row.name)}</strong>${row.variants.length ? `<div class="muted nurse-variants">Написания: ${row.variants.map((item) => `${escapeHtml(item.name)} (${item.count})`).join(", ")}</div>` : ""}</div></td>
+    <td data-label="Поликлиника">${escapeHtml(row.clinic || "-")}</td>
+    <td data-label="Анкет"><strong>${row.surveys}</strong></td>
+    <td data-label="К врачу">${row.needsDoctor}</td>
+    <td data-label="Дней работы">${row.activeDays}</td>
+    <td data-label="Первая / последняя">${escapeHtml(date(row.firstDate))} — ${escapeHtml(date(row.lastDate))}</td>
+  </tr>`).join("");
+  return html`<section class="panel">
+    <div class="section-title"><div><h2>Медсёстры</h2><p class="muted">Сколько анкет отправила каждая медсестра. Одна и та же медсестра в разном написании (х/ҳ, ч/ҷ, с отчеством и без) собрана в одну строку — все написания видны под именем.</p></div>
+      <a class="button-link" href="/api/admin/nurse-report.xls?${escapeHtml(query.toString())}">Скачать Excel</a></div>
+    <form id="nurseReportForm" class="nurse-report-form">
+      <label>Поликлиника
+        <select name="clinic">
+          <option value="all" ${state.nurseReportClinic === "all" ? "selected" : ""}>Все поликлиники</option>
+          ${report.clinics.map((clinic) => `<option value="${escapeHtml(clinic)}" ${state.nurseReportClinic === clinic ? "selected" : ""}>${escapeHtml(clinic)}</option>`).join("")}
+        </select>
+      </label>
+      <label>С даты<input type="date" name="from" value="${escapeHtml(state.nurseReportFrom)}" /></label>
+      <label>По дату<input type="date" name="to" value="${escapeHtml(state.nurseReportTo)}" /></label>
+      <button type="submit">Показать</button>
+    </form>
+    <div class="actions nurse-report-periods">
+      <button type="button" class="secondary" data-action="nurse-report-period" data-period="today">Сегодня</button>
+      <button type="button" class="secondary" data-action="nurse-report-period" data-period="week">7 дней</button>
+      <button type="button" class="secondary" data-action="nurse-report-period" data-period="month">Этот месяц</button>
+      <button type="button" class="secondary" data-action="nurse-report-period" data-period="all">Всё время</button>
+    </div>
+    <section class="grid three">
+      <div class="metric"><span>Анкет (${escapeHtml(period)})</span><strong>${totals.surveys}</strong></div>
+      <div class="metric"><span>Медсестёр</span><strong>${totals.nurses}</strong></div>
+      <div class="metric"><span>Направлено к врачу</span><strong>${totals.needsDoctor}</strong></div>
+    </section>
+    ${totals.withoutName ? `<p class="muted">Без ФИО медсестры (добавлены врачом или старые записи): ${totals.withoutName} — показаны в конце таблицы.</p>` : ""}
+    <div class="table-wrap nurse-report-table"><table><thead><tr><th>Медсестра</th><th>Поликлиника</th><th>Анкет</th><th>К врачу</th><th>Дней работы</th><th>Первая / последняя</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="6">За выбранный период анкет нет.</td></tr>`}</tbody></table></div>
+  </section>`;
+}
+
 function auditIpCell(ip, device, via) {
   if (!ip) return `<span class="muted">—</span>`;
   const warning = via === "direct"
@@ -3251,6 +3325,14 @@ function bindAdminForms() {
       alert("Настройки ежедневной сводки сохранены.");
       await loadAdmin();
     } catch (error) { alert(error.message); }
+  });
+  document.querySelector("#nurseReportForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    state.nurseReportClinic = String(data.get("clinic") || "all");
+    state.nurseReportFrom = String(data.get("from") || "");
+    state.nurseReportTo = String(data.get("to") || "");
+    loadAdmin();
   });
   document.querySelector("#auditSearchForm")?.addEventListener("submit", (event) => {
     event.preventDefault();

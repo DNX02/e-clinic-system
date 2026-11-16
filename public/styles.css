@@ -2563,3 +2563,89 @@ th {
     display: block;
   }
 }
+
+.nurse-report-form {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(180px, 2fr) 1fr 1fr auto;
+  margin: 12px 0;
+}
+
+.nurse-report-form label {
+  display: grid;
+  font-size: 14px;
+  gap: 6px;
+}
+
+.nurse-report-periods {
+  margin-bottom: 14px;
+}
+
+.nurse-variants {
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+@media (max-width: 640px) {
+  .nurse-report-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .nurse-report-form label:first-child,
+  .nurse-report-form button {
+    grid-column: 1 / -1;
+  }
+
+  .nurse-report-table table,
+  .nurse-report-table tbody,
+  .nurse-report-table tr,
+  .nurse-report-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .nurse-report-table thead {
+    display: none;
+  }
+
+  .nurse-report-table tr {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    padding: 10px 0;
+  }
+
+  .nurse-report-table td {
+    border: 0;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 9.5em 1fr;
+    padding: 3px 12px;
+  }
+
+  .nurse-report-table td::before {
+    color: #667085;
+    content: attr(data-label);
+    font-size: 13px;
+  }
+
+  .nurse-report-table td[colspan] {
+    display: block;
+  }
+
+  .nurse-report-table td[colspan]::before {
+    content: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .nurse-report-periods {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .nurse-report-periods button {
+    margin: 0;
+    width: 100%;
+  }
+}
