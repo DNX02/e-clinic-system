@@ -14,6 +14,7 @@ import { buildWeeklyMonitorReportDocx, monitorReportPeriod } from "./weekly-moni
 import { recordDbWrite, recordRequestSource, runtimeSnapshot, startRuntimeMonitor, trackRequest } from "./runtime-monitor.js";
 import { clientIpInfo, deviceLabel } from "./client-info.js";
 import { buildNurseReport } from "./nurse-report.js";
+import { nurseReportPdf } from "./nurse-report-pdf.js";
 
 // The request being handled, so the activity log can note who did it (IP, device) without
 // passing req through every function that writes to the log.
@@ -2072,11 +2073,17 @@ async function handleApi(req, res, url) {
     return send(res, 200, dashboard);
   }
 
-  if (req.method === "GET" && url.pathname === "/api/admin/nurse-report.xls") {
+  if (req.method === "GET" && (url.pathname === "/api/admin/nurse-report.xls" || url.pathname === "/api/admin/nurse-report.pdf")) {
     if (!requireAdmin(session)) return send(res, 403, { error: "Нет доступа" });
     const report = nurseReportFor(scopedDbForAdmin(db, session), url);
     const { clinic, from, to } = report.filters;
     const suffix = [clinic === "all" ? "vse" : `gcz-${clinicKey(clinic)}`, from || "nachalo", to || "segodnya"].join("_");
+    if (url.pathname.endsWith(".pdf")) {
+      return send(res, 200, await nurseReportPdf(report), {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="nurses-${suffix}.pdf"`
+      });
+    }
     return send(res, 200, Buffer.from(buildNurseReportExcel(report), "utf8"), {
       "Content-Type": "application/vnd.ms-excel; charset=utf-8",
       "Content-Disposition": `attachment; filename="nurses-${suffix}.xls"`

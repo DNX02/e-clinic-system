@@ -93,6 +93,14 @@ try {
   assert.match(xls.text, /ИТОГО/);
   assert.doesNotMatch(xls.text, /Шарипова/, "other clinics are not in the file");
   assert.equal((await api("/api/admin/nurse-report.xls", { method: "GET" })).status, 403, "login required");
+  const pdf = await fetch(`${base}/api/admin/nurse-report.pdf?clinic=${encodeURIComponent("Поликлиника №11")}`, { headers: { Cookie: owner.cookie } });
+  assert.equal(pdf.status, 200);
+  assert.equal(pdf.headers.get("content-type"), "application/pdf");
+  assert.match(pdf.headers.get("content-disposition"), /nurses-gcz-11_nachalo_segodnya\.pdf/);
+  const pdfBytes = Buffer.from(await pdf.arrayBuffer());
+  assert.equal(pdfBytes.subarray(0, 5).toString(), "%PDF-");
+  assert.ok(pdfBytes.includes("DejaVuSans"), "the bundled font is embedded, so Tajik letters print");
+  assert.equal((await api("/api/admin/nurse-report.pdf", { method: "GET" })).status, 403, "PDF needs login too");
 
   assert.equal((await api("/api/admin/admins", { cookie: owner.cookie, body: { name: "Старшая Сестра", username: "head12", password: "HeadNurse12345", role: "head_nurse", clinic: "Поликлиника №12" } })).status, 201);
   const head = await api("/api/login/admin", { body: { username: "head12", password: "HeadNurse12345" } });

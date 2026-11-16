@@ -2930,7 +2930,7 @@ function renderNurseReportAdmin() {
   </tr>`).join("");
   return html`<section class="panel">
     <div class="section-title"><div><h2>Медсёстры</h2><p class="muted">Сколько анкет отправила каждая медсестра. Одна и та же медсестра в разном написании (х/ҳ, ч/ҷ, с отчеством и без) собрана в одну строку — все написания видны под именем.</p></div>
-      <a class="button-link" href="/api/admin/nurse-report.xls?${escapeHtml(query.toString())}">Скачать Excel</a></div>
+      <div class="actions"><a class="button-link" href="/api/admin/nurse-report.pdf?${escapeHtml(query.toString())}">Скачать PDF</a><a class="button-link" href="/api/admin/nurse-report.xls?${escapeHtml(query.toString())}">Скачать Excel</a></div></div>
     <form id="nurseReportForm" class="nurse-report-form">
       <label>Поликлиника
         <select name="clinic">
