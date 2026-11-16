@@ -2453,7 +2453,7 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/monitor/dashboard") {
-    return send(res, 200, buildOperationsMonitor(db, Object.fromEntries(url.searchParams)));
+    return send(res, 200, cachedOperationsMonitor(db, Object.fromEntries(url.searchParams)));
   }
 
   if (req.method === "GET" && url.pathname === "/api/monitor/report.csv") {
@@ -3574,6 +3574,16 @@ function buildOperationsMonitorRows(db) {
   for (const visit of db.doctorVisits || []) {
     (visitsBySurvey[visit.surveyId] ||= []).push(visit);
   }
+  // Built once: scanning all activity events / all surveys per row made this O(n²) (~3 s per call
+  // in production, and the public monitor screen polls it every 15 s).
+  const viewersBySurvey = new Map();
+  for (const event of db.activityEvents || []) {
+    if (event.type !== "doctor_survey_viewed") continue;
+    let viewers = viewersBySurvey.get(event.surveyId);
+    if (!viewers) viewersBySurvey.set(event.surveyId, viewers = new Set());
+    viewers.add(event.actorId || event.actorName);
+  }
+  const surveysById = new Map((db.nurseSurveys || []).map((survey) => [survey.id, survey]));
   const surveyRows = (db.nurseSurveys || []).map((survey) => {
     const visits = visitsBySurvey[survey.id] || [];
     const createdByDoctor = survey.createdByDoctorId ? doctorsById[survey.createdByDoctorId] : null;
@@ -3587,7 +3597,7 @@ function buildOperationsMonitorRows(db) {
       needsDoctor: Boolean(survey.needsDoctor),
       findrisc: survey.findrisc?.score || 0,
       score2: survey.score2?.percent || 0,
-      viewedByDoctors: new Set((db.activityEvents || []).filter((event) => event.type === "doctor_survey_viewed" && event.surveyId === survey.id).map((event) => event.actorId || event.actorName)).size,
+      viewedByDoctors: viewersBySurvey.get(survey.id)?.size || 0,
       visits: visits.length,
       visitsWithActions: visits.filter(hasDoctorAction).length,
       drugs: visits.reduce((sum, visit) => sum + (visit.diabetesDrugs || []).length + (visit.hypertensionDrugs || []).length, 0)
@@ -3595,7 +3605,7 @@ function buildOperationsMonitorRows(db) {
   });
   const visitRows = (db.doctorVisits || []).map((visit) => {
     const doctor = doctorsById[visit.doctorId];
-    const survey = (db.nurseSurveys || []).find((item) => item.id === visit.surveyId);
+    const survey = surveysById.get(visit.surveyId);
     return {
       id: visit.id,
       createdAt: visit.createdAt,
@@ -3633,6 +3643,22 @@ function groupMonitor(items, keyFn, seed = {}) {
     map[key] ||= { label: key, ...seed };
   }
   return map;
+}
+
+// The monitor is public and every open screen polls it: compute each filter combination at most
+// once per MONITOR_CACHE_MS (data on the screen is at most that old; it refreshes every 15 s anyway).
+const MONITOR_CACHE_MS = Number(process.env.MONITOR_CACHE_MS ?? 10000);
+const monitorCache = new Map();
+function cachedOperationsMonitor(db, filters) {
+  const key = JSON.stringify(["clinic", "nurse", "doctor", "date"].map((name) => String(filters[name] || "").slice(0, 100)));
+  const hit = monitorCache.get(key);
+  if (hit && Date.now() - hit.at < MONITOR_CACHE_MS) return hit.value;
+  const value = buildOperationsMonitor(db, filters);
+  if (MONITOR_CACHE_MS > 0) {
+    if (monitorCache.size >= 50) monitorCache.delete(monitorCache.keys().next().value);
+    monitorCache.set(key, { at: Date.now(), value });
+  }
+  return value;
 }
 
 function buildOperationsMonitor(db, filters = {}) {

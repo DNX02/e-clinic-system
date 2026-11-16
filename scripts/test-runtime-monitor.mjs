@@ -53,6 +53,10 @@ try {
   assert.ok(routes.includes("/api/doctor/patients/:id/report.pdf"), `routes: ${routes}`);
   assert.ok(routes.includes("/api/admin/dashboard"), `routes: ${routes}`);
   assert.doesNotMatch(raw, /Иванов|Рахимов|3fa85f64|search=|name=/, "no patient data, ids or query strings");
+  // The public monitor screen is served from a short cache, so many open screens cost one calculation.
+  const first = await (await fetch(`${base}/api/monitor/dashboard`)).json();
+  const second = await (await fetch(`${base}/api/monitor/dashboard`)).json();
+  assert.ok(first.generatedAt && first.generatedAt === second.generatedAt, "second request within 10 s comes from the cache");
   console.log("Runtime monitor test passed.");
 } finally {
   server.kill();
