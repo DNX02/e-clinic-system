@@ -493,15 +493,46 @@ body[data-app="admin"] .login button {
     font-size: 24px;
   }
 
-  /* Нижняя панель вкладок */
+  /* Панель вкладок сверху (снизу старшим медсёстрам неудобно нажимать).
+     Она внутри шапки, а шапка прилипает к верху экрана — вкладки всегда под рукой. */
+  body[data-app="admin"] .topbar {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: #ffffff;
+    box-shadow: 0 6px 20px rgba(16, 24, 40, 0.08);
+    gap: 8px;
+    padding: calc(8px + env(safe-area-inset-top)) 10px 8px;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+  }
+
   body[data-app="admin"] .nav {
-    background: rgba(255, 255, 255, 0.97);
+    background: transparent;
     border: 0;
     border-radius: 0;
-    border-top: 1px solid var(--line);
-    box-shadow: 0 -6px 24px rgba(16, 24, 40, 0.08);
+    box-shadow: none;
     gap: 4px;
-    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+    padding: 0;
+    position: relative;
+    width: 100%;
+  }
+
+  body[data-app="admin"] .admin-container {
+    padding-bottom: 24px;
+  }
+
+  /* «Ещё» открывается вниз, под панелью, во всю ширину */
+  body[data-app="admin"] .nav-more {
+    position: static;
+  }
+
+  body[data-app="admin"] .nav-more__menu {
+    bottom: auto;
+    left: 0;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
   }
 
   body[data-app="admin"] .nav > button,

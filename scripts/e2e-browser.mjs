@@ -271,7 +271,7 @@ try {
     await adminPage.click("details.admin-tools > summary");
     assert.ok(await adminPage.locator("#patientImportFile").isVisible());
   });
-  await step("admin on a phone: no sideways scrolling, menu opens above the tab bar", async () => {
+  await step("admin on a phone: tabs at the top under the title, stay visible, menu opens below", async () => {
     const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
     await mobile.addCookies((await desktop.cookies()).filter((c) => c.name === "sid"));
     const m = await mobile.newPage();
@@ -280,10 +280,17 @@ try {
     await m.waitForSelector(".nav-more > summary");
     const [scrollWidth, clientWidth] = await m.evaluate(() => [document.querySelector(".nav").scrollWidth, document.querySelector(".nav").clientWidth]);
     assert.ok(scrollWidth <= clientWidth, "tab bar must not scroll sideways");
-    const brandTop = await m.locator(".topbar .brand").boundingBox();
+    const brand = await m.locator(".topbar .brand").boundingBox();
     const navBox = await m.locator(".nav").boundingBox();
-    assert.ok(navBox.y > brandTop.y + 200, "tab bar must sit at the bottom, not over the title");
+    assert.ok(navBox.y >= brand.y + brand.height - 1, "tab bar must not cover the title");
+    assert.ok(navBox.y < 200, `tab bar must be at the top (head nurses find the bottom bar hard to reach), y=${navBox.y}`);
+    await m.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await m.waitForTimeout(200);
+    const navAfterScroll = await m.locator(".nav").boundingBox();
+    assert.ok(navAfterScroll.y >= 0 && navAfterScroll.y < 200, `tabs stay at the top while scrolling, y=${navAfterScroll.y}`);
     await m.click(".nav-more > summary");
+    const menu = await m.locator(".nav-more__menu").boundingBox();
+    assert.ok(menu.y > navAfterScroll.y && menu.x >= 0 && menu.x + menu.width <= 390, "'Ещё' opens below the tabs, fully on screen");
     await m.click('.nav-more__menu [data-tab="doctors"], .nav-more__menu [data-tab="qr"]');
     await mobile.close();
   });
