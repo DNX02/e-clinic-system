@@ -102,6 +102,12 @@ const DOCTOR_LANGUAGE_KEY = "medical-doctor-language";
 let nurseTrainingLanguagePromptShown = false;
 let surveyLanguagePromptShown = false;
 let doctorLanguagePromptShown = false;
+
+// Ask for the language only once per phone: after that the choice is remembered and can be
+// changed with the language switch on the page itself.
+function languageAlreadyChosen(key) {
+  try { return Boolean(localStorage.getItem(key)); } catch { return false; }
+}
 const clinicSortKey = (value = "") => {
   const text = String(value);
   const number = text.match(/\d+/)?.[0];
@@ -254,9 +260,25 @@ const TAJIK_TEXT = {
   "Всего осмотров": "Ҳамагӣ муоинаҳо",
   "Все пациенты поликлиники": "Ҳамаи беморони дармонгоҳ",
   "Уже есть в базе": "Аллакай дар пойгоҳ ҳаст",
-  "Откройте «Сохранённые анкеты» и нажмите «✓ Уже в базе» или «➕ Как нового».": "«Сохранённые анкеты»-ро кушоед ва «✓ Уже в базе» ё «➕ Как нового»-ро пахш кунед.",
+  "Откройте «Сохранённые анкеты» и нажмите «✓ Уже в базе» или «➕ Как нового».": "«Анкетаҳои нигоҳдошта»-ро кушоед ва «✓ Аллакай дар пойгоҳ» ё «➕ Ҳамчун нав»-ро пахш кунед.",
+  "Сохранённые анкеты": "Анкетаҳои нигоҳдошта",
+  "Сохранённые на устройстве анкеты": "Анкетаҳои дар дастгоҳ нигоҳдошта",
+  "Офлайн-режим: данные сохранены на устройстве": "Реҷаи офлайн: маълумот дар дастгоҳ нигоҳ дошта шуд",
+  "Ожидает сети": "Интизори интернет",
+  "Отправить": "Фиристодан",
+  "Отправить сейчас": "Ҳозир фиристодан",
+  "Нет сохранённых офлайн-анкет.": "Анкетаҳои офлайни нигоҳдошта нестанд.",
+  "Сохранить как нового пациента": "Ҳамчун бемори нав нигоҳ доштан",
+  "Удалить из сохранённых — уже есть на сервере": "Аз рӯйхат нест кардан — аллакай дар сервер ҳаст",
+  "лет": "сола",
+  "Уже в базе": "Аллакай дар пойгоҳ",
+  "Как нового": "Ҳамчун нав",
+  "Очистить дубликаты": "Тоза кардани такрорҳо",
+  "Очистить анкеты, которые уже есть в базе": "Анкетаҳоеро, ки аллакай дар пойгоҳ ҳастанд, тоза кунед",
+  "Пациент": "Бемор",
+  "Анкета уже сохранена на сервере. Нажмите «✓ Уже в базе» или «➕ Как нового» в списке сохранённых анкет.": "Анкета аллакай дар сервер нигоҳ дошта шудааст. Дар рӯйхати анкетаҳои нигоҳдошта «✓ Аллакай дар пойгоҳ» ё «➕ Ҳамчун нав»-ро пахш кунед.",
   "Нужно исправить": "Ислоҳ кардан лозим",
-  "Причина указана в «Сохранённые анкеты».": "Сабаб дар «Сохранённые анкеты» нишон дода шудааст.",
+  "Причина указана в «Сохранённые анкеты».": "Сабаб дар «Анкетаҳои нигоҳдошта» нишон дода шудааст.",
   "Не отправлено из-за сети или сервера": "Аз сабаби интернет ё сервер фиристода нашуд",
   "Добавлено мной сегодня": "Имрӯз ман илова кардам",
   "Мои сохранённые осмотры": "Муоинаҳои сабткардаи ман",
@@ -847,7 +869,7 @@ function bindDoctorLanguageControl(onChange) {
 }
 
 function showNurseLanguagePrompt(onChoose) {
-  if (nurseTrainingLanguagePromptShown) return;
+  if (nurseTrainingLanguagePromptShown || languageAlreadyChosen(TEST_LANGUAGE_KEY)) return;
   nurseTrainingLanguagePromptShown = true;
   const overlay = document.createElement("div");
   overlay.className = "language-modal";
@@ -871,7 +893,7 @@ function showNurseLanguagePrompt(onChoose) {
 }
 
 function showSurveyLanguagePrompt(onChoose) {
-  if (surveyLanguagePromptShown) return;
+  if (surveyLanguagePromptShown || languageAlreadyChosen(SURVEY_LANGUAGE_KEY)) return;
   surveyLanguagePromptShown = true;
   const overlay = document.createElement("div");
   overlay.className = "language-modal";
@@ -895,7 +917,7 @@ function showSurveyLanguagePrompt(onChoose) {
 }
 
 function showDoctorLanguagePrompt(onChoose) {
-  if (doctorLanguagePromptShown) return;
+  if (doctorLanguagePromptShown || languageAlreadyChosen(DOCTOR_LANGUAGE_KEY)) return;
   doctorLanguagePromptShown = true;
   const overlay = document.createElement("div");
   overlay.className = "language-modal";
@@ -1089,9 +1111,12 @@ document.addEventListener("click", async (event) => {
     const file = document.querySelector("#patientImportFile")?.files?.[0];
     if (!file) return alert("Выберите CSV-файл, сохранённый из Excel.");
     try {
-      const result = await api("/api/admin/patients/import", { method: "POST", body: JSON.stringify({ rows: parseImportCsv(await file.text()) }) });
-      alert(`Импортировано: ${result.imported.length}; дублей пропущено: ${result.skipped.length}; ошибок: ${result.errors.length}`);
+      const rows = parseImportCsv(await file.text());
+      if (!rows.length) return alert("В файле нет строк с пациентами. Первая строка — названия столбцов, как в шаблоне.");
+      const result = await api("/api/admin/patients/import", { method: "POST", body: JSON.stringify({ rows }) });
+      state.importResult = result;
       await loadAdmin();
+      setTimeout(() => document.querySelector("#importResult")?.scrollIntoView({ block: "center" }), 0);
     } catch (error) { alert(error.message); }
   }
   if (action === "create-backup") {
@@ -3028,16 +3053,75 @@ function renderHeadNurseActivityAdmin() {
   </section>`;
 }
 
+// Column names as people write them in Excel -> survey fields. Units after a comma or in brackets
+// are ignored ("Рост, см", "Вес (кг)").
+const IMPORT_COLUMNS = {
+  "фамилия": "lastName", "имя": "firstName", "отчество": "middleName", "дата рождения": "birthDate",
+  "телефон": "phone", "адрес": "address", "поликлиника": "clinic", "пол": "sex", "возраст": "age",
+  "рост": "height", "вес": "weight", "талия": "rabitoWaist", "окружность талии": "rabitoWaist",
+  "окружность плеча": "arm", "плечо": "arm", "окружность голени": "calf", "голень": "calf",
+  "сад": "systolic", "систолическое ад": "systolic", "дад": "diastolic", "диастолическое ад": "diastolic",
+  "медсестра": "nurseName", "фио медсестры": "nurseName",
+  "физическая активность": "activity", "активность": "activity", "овощи/фрукты": "vegetables", "овощи": "vegetables",
+  "препараты от давления": "bpMeds", "лекарства от давления": "bpMeds", "высокий сахар": "highGlucose",
+  "диабет у родственников": "familyDiabetes", "наследственность": "familyDiabetes", "курение": "smoker",
+  "сахар": "glucoseLevel", "глюкоза": "glucoseLevel", "уровень сахара": "glucoseLevel"
+};
+const IMPORT_TEMPLATE = [
+  ["Фамилия", "Имя", "Отчество", "Дата рождения", "Пол", "Телефон", "Адрес", "Поликлиника", "Медсестра", "Рост, см", "Вес, кг", "Талия, см", "Окружность плеча", "Окружность голени", "Физическая активность", "Овощи/фрукты", "Препараты от давления", "Высокий сахар", "Диабет у родственников", "Курение", "САД", "ДАД", "Сахар"],
+  ["Каримов", "Алишер", "Рустамович", "05.11.1964", "м", "+992900111222", "Душанбе, ул. Рудаки 1", "Поликлиника №11", "Раҳимова Мехри", "170", "86", "98", "", "", "нет", "да", "нет", "нет", "1 линия", "нет", "140", "90", "6.2"]
+];
+
+// CSV saved from Excel: ";" or "," separator, quoted cells may contain separators, quotes and line breaks.
+function parseCsvLines(text) {
+  const source = String(text || "").replace(/^\uFEFF/, "");
+  const firstLine = source.split(/\r?\n/, 1)[0] || "";
+  const delimiter = (firstLine.match(/;/g) || []).length >= (firstLine.match(/,/g) || []).length ? ";" : ",";
+  const rows = [];
+  let row = [], cell = "", quoted = false;
+  for (let i = 0; i < source.length; i += 1) {
+    const ch = source[i];
+    if (quoted) {
+      if (ch === '"' && source[i + 1] === '"') { cell += '"'; i += 1; }
+      else if (ch === '"') quoted = false;
+      else cell += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === delimiter) { row.push(cell.trim()); cell = ""; }
+    else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && source[i + 1] === "\n") i += 1;
+      row.push(cell.trim()); cell = "";
+      if (row.some(Boolean)) rows.push(row);
+      row = [];
+    } else cell += ch;
+  }
+  row.push(cell.trim());
+  if (row.some(Boolean)) rows.push(row);
+  return rows;
+}
+
 function parseImportCsv(text) {
-  const lines = String(text || '').replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean);
-  if (lines.length < 2) return [];
-  const delimiter = lines[0].includes(';') ? ';' : ',';
-  const headers = lines.shift().split(delimiter).map(item => item.trim().replace(/^"|"$/g, ''));
-  const aliases = { 'Фамилия': 'lastName', 'Имя': 'firstName', 'Отчество': 'middleName', 'Дата рождения': 'birthDate', 'Телефон': 'phone', 'Адрес': 'address', 'Поликлиника': 'clinic', 'Пол': 'sex', 'Возраст': 'age', 'Рост': 'height', 'Вес': 'weight', 'Талия': 'rabitoWaist', 'САД': 'systolic', 'ДАД': 'diastolic', 'Медсестра': 'nurseName' };
-  return lines.map(line => {
-    const values = line.split(delimiter).map(item => item.trim().replace(/^"|"$/g, ''));
-    return Object.fromEntries(headers.map((header, index) => [aliases[header] || header, values[index] || '']));
+  const rows = parseCsvLines(text);
+  if (rows.length < 2) return [];
+  const headers = rows.shift().map((header) => {
+    const name = header.toLocaleLowerCase("ru-RU").replace(/ё/g, "е").split(/[,(]/)[0].trim();
+    return IMPORT_COLUMNS[name] || header;
   });
+  return rows.map((values) => Object.fromEntries(headers.map((header, index) => [header, values[index] || ""])));
+}
+
+function importTemplateHref() {
+  const csv = "\uFEFF" + IMPORT_TEMPLATE.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(";")).join("\r\n");
+  return `data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`;
+}
+
+function renderImportResult() {
+  const result = state.importResult;
+  if (!result) return "";
+  const errors = result.errors.slice(0, 200).map((item) => `<li><strong>Строка ${item.row}:</strong> ${escapeHtml(item.error)}</li>`).join("");
+  return html`<div class="notice ${result.errors.length ? "warn" : "ok"}" id="importResult">
+    <strong>Импортировано: ${result.imported.length}. Дублей пропущено: ${result.skipped.length}. С ошибками: ${result.errors.length}.</strong>
+    ${errors ? `<p>Исправьте эти строки в файле и загрузите файл ещё раз — уже загруженные пациенты будут пропущены как дубли.</p><ul class="import-errors">${errors}</ul>` : ""}
+  </div>`;
 }
 
 function renderCareControlAdmin() {
@@ -3078,7 +3162,7 @@ function renderCareControlAdmin() {
     </section>
     <details class="panel admin-tools"${state.adminToolsOpen ? " open" : ""}>
       <summary><strong>Инструменты</strong> <span class="muted">импорт из Excel, резервная копия, сводка в Telegram</span></summary>
-      <section class="panel"><div class="section-title"><div><h2>Импорт из Excel</h2><p class="muted">Сохраните таблицу Excel как CSV UTF‑8. Дубли будут пропущены автоматически.</p></div></div><div class="actions"><input id="patientImportFile" type="file" accept=".csv,text/csv"/><button type="button" data-action="import-patients" ${state.admin.canEdit ? "" : "disabled"}>Импортировать пациентов</button></div></section>
+      <section class="panel"><div class="section-title"><div><h2>Импорт из Excel</h2><p class="muted">Сохраните таблицу Excel как CSV UTF‑8. Все ответы FINDRISC, пол, поликлиника и ФИО медсестры обязательны: пустые значения больше не подставляются, такие строки будут показаны с ошибкой. Ответы можно писать «да/нет», «+/−», «ҳа/не». Дубли пропускаются автоматически.</p></div></div><div class="actions"><input id="patientImportFile" type="file" accept=".csv,text/csv"/><button type="button" data-action="import-patients" ${state.admin.canEdit ? "" : "disabled"}>Импортировать пациентов</button><a class="button-link" download="shablon-importa-pacientov.csv" href="${importTemplateHref()}">Скачать шаблон</a></div>${renderImportResult()}</section>
       <section class="grid two">
       <section class="panel"><h2>Резервное копирование</h2><p>${backup ? `Последняя копия: <strong>${new Date(backup.createdAt).toLocaleString("ru-RU")}</strong><br><span class="pill ${backup.verified ? "ok" : "warn"}">${backup.verified ? "Файл проверен" : "Нужна проверка"}</span><br><span class="muted">Хранится на сервере, сохранено до 14 копий.</span>` : "Резервная копия ещё не создавалась."}</p><button type="button" data-action="create-backup" ${state.admin.canManageAdmins ? "" : "disabled"}>Создать и проверить копию</button></section>
       <section class="panel"><h2>Ежедневная сводка Telegram</h2><p class="muted">Отправляется только агрегированная статистика без ФИО пациентов.</p><form id="dailyReportForm" class="form"><label class="checkbox"><input type="checkbox" name="enabled" ${reports.enabled ? "checked" : ""}/> Включить ежедневный отчёт</label><label>Время<input name="time" type="time" value="${escapeHtml(reports.time || "18:00")}"/></label><label>Telegram Chat ID<input name="chatId" value="${escapeHtml(reports.chatId || "")}" placeholder="Например, 123456789"/></label><div class="notice ${reports.tokenConfigured ? "ok" : "warn"}">${reports.tokenConfigured ? "Telegram-бот настроен на сервере." : "На сервере не задан TELEGRAM_BOT_TOKEN."}${reports.lastSentAt ? `<br>Последняя отправка: ${new Date(reports.lastSentAt).toLocaleString("ru-RU")}` : ""}${reports.lastError ? `<br>Последняя ошибка: ${escapeHtml(reports.lastError)}` : ""}</div><div class="actions"><button ${state.admin.canManageAdmins ? "" : "disabled"}>Сохранить</button><button type="button" class="secondary" data-action="test-daily-report" ${state.admin.canManageAdmins ? "" : "disabled"}>Отправить тест</button></div></form></section>
@@ -3980,13 +4064,13 @@ function renderOfflineSurveysDrawer() {
   drawer.innerHTML = `
     <div class="offline-drawer-header">
       <strong>📋 ${escapeHtml(translateSurveyText("Сохранённые на устройстве анкеты"))} (${queue.length})</strong>
-      ${dupCount > 0 ? `<button type="button" class="mini-btn ok-ghost" id="clearAllDuplicatesBtn" style="margin-left:auto; margin-right:8px;" title="Очистить анкеты, которые уже есть в базе">✓ Очистить дубликаты (${dupCount})</button>` : ""}
+      ${dupCount > 0 ? `<button type="button" class="mini-btn ok-ghost" id="clearAllDuplicatesBtn" style="margin-left:auto; margin-right:8px;" title="${escapeHtml(translateSurveyText("Очистить анкеты, которые уже есть в базе"))}">✓ ${escapeHtml(translateSurveyText("Очистить дубликаты"))} (${dupCount})</button>` : ""}
       <button type="button" class="mini-btn" id="closeOfflineDrawerBtn">✕</button>
     </div>
     <div class="offline-list">
       ${queue.map((item, idx) => {
         const p = item.data || {};
-        const name = [p.lastName, p.firstName].filter(Boolean).join(" ") || `Пациент #${idx + 1}`;
+        const name = [p.lastName, p.firstName].filter(Boolean).join(" ") || `${translateSurveyText("Пациент")} #${idx + 1}`;
         const time = new Date(item.savedAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
         const hasErr = Boolean(item.lastError);
         const isDup = item.status === 409 || String(item.lastError || "").includes("уже существует");
@@ -3999,8 +4083,8 @@ function renderOfflineSurveysDrawer() {
             </div>
             <div class="offline-card-actions">
               ${isDup ? `
-                <button type="button" class="mini-btn ok-ghost mark-synced-btn" data-offline-id="${item.id}" title="${escapeHtml(translateSurveyText("Удалить из сохранённых — уже есть на сервере"))}">✓ Уже в базе</button>
-                <button type="button" class="mini-btn warning sync-force-btn" data-force-id="${item.id}" title="${escapeHtml(translateSurveyText("Сохранить как нового пациента"))}">➕ Как нового</button>
+                <button type="button" class="mini-btn ok-ghost mark-synced-btn" data-offline-id="${item.id}" title="${escapeHtml(translateSurveyText("Удалить из сохранённых — уже есть на сервере"))}">✓ ${escapeHtml(translateSurveyText("Уже в базе"))}</button>
+                <button type="button" class="mini-btn warning sync-force-btn" data-force-id="${item.id}" title="${escapeHtml(translateSurveyText("Сохранить как нового пациента"))}">➕ ${escapeHtml(translateSurveyText("Как нового"))}</button>
               ` : `
                 <button type="button" class="mini-btn sync-single-btn" data-offline-id="${item.id}" title="${escapeHtml(translateSurveyText("Отправить сейчас"))}">📤 ${escapeHtml(translateSurveyText("Отправить"))}</button>
               `}
@@ -4088,7 +4172,7 @@ async function syncSingleOfflineSurvey(id, forceAsNew = false) {
     updateOfflineSurveyStatus();
     if (result) {
       if (isDup && !forceAsNew) {
-        result.innerHTML = `<div class="notice warn">⚠️ <strong>${escapeHtml(err.message)}</strong><br><small>Анкета уже сохранена на сервере. Нажмите «✓ Уже в базе» или «➕ Как нового» в списке сохранённых анкет.</small></div>`;
+        result.innerHTML = `<div class="notice warn">⚠️ <strong>${escapeHtml(err.message)}</strong><br><small>${escapeHtml(translateSurveyText("Анкета уже сохранена на сервере. Нажмите «✓ Уже в базе» или «➕ Как нового» в списке сохранённых анкет."))}</small></div>`;
       } else {
         result.innerHTML = `<div class="notice danger">${escapeHtml(err.message)}</div>`;
       }

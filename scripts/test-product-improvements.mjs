@@ -408,7 +408,12 @@ try {
   await request(admin, "/api/admin/account", { method: "PUT", body: { currentPassword: adminPassword, newPassword: adminNewPassword } });
   const adminRelogin = session();
   await request(adminRelogin, "/api/login/admin", { method: "POST", body: { username: "admin", password: adminNewPassword } });
-  const imported = await request(adminRelogin, "/api/admin/patients/import", { method: "POST", body: { rows: [{ lastName: "Импорт", firstName: "Тест", birthDate: "1985-01-01", clinic: "Поликлиника №1", sex: "female", age: 41, height: 165, weight: 70, rabitoWaist: 85, systolic: 120, diastolic: 80, nurseName: "Тестовая медсестра" }] } });
+  const importRow = { lastName: "Импорт", firstName: "Тест", birthDate: "1985-01-01", clinic: "Поликлиника №1", sex: "female", age: 41, height: 165, weight: 70, rabitoWaist: 85, systolic: 120, diastolic: 80, nurseName: "Тестовая медсестра" };
+  // FINDRISC answers are no longer filled with "no" when a column is missing: the row is reported instead.
+  const withoutAnswers = await request(adminRelogin, "/api/admin/patients/import", { method: "POST", body: { rows: [importRow] } });
+  assert.equal(withoutAnswers.imported.length, 0);
+  assert.match(withoutAnswers.errors[0].error, /Курение: не указано/);
+  const imported = await request(adminRelogin, "/api/admin/patients/import", { method: "POST", body: { rows: [{ ...importRow, activity: "да", vegetables: "да", bpMeds: "нет", highGlucose: "нет", familyDiabetes: "нет", smoker: "нет" }] } });
   assert.equal(imported.imported.length, 1);
   console.log("Product workflow integration test passed.");
 } finally {

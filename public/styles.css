@@ -1937,6 +1937,15 @@ th {
     flex-direction: column;
   }
 
+  /* In a column, a flex-basis such as 240px becomes the HEIGHT: search boxes (doctor's patient
+     search, admin log search) grew to half the screen. Fields keep their natural height. */
+  .actions:not(.nav) > input,
+  .actions:not(.nav) > select,
+  .actions:not(.nav) > textarea {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
   .actions:not(.nav) > button,
   .actions:not(.nav) > a,
   form > button {

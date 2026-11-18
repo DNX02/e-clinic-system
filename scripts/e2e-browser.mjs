@@ -154,11 +154,15 @@ try {
     assert.match(await nurse.locator("#syncSurveysStatus").innerText(), /Все анкеты отправлены/);
     assert.equal((await clinic1Patients()).filter((s) => s.patient.lastName === "Рахимов").length, 1);
   });
-  await step("Tajik language switch works", async () => {
+  await step("language is asked once per phone; the on-page switch changes it to Tajik", async () => {
     await nurse.goto(`${base}/app-3-patient-survey`);
-    await nurse.locator("[data-survey-lang-choice=tg]").click({ timeout: 3000 });
     await nurse.waitForSelector("#surveyForm");
-    assert.doesNotMatch(await nurse.locator("#surveyForm h1").innerText(), /Опросник медсестры/);
+    assert.equal(await nurse.locator("[data-survey-lang-choice]").count(), 0, "the language was chosen before: no prompt on reload");
+    await nurse.selectOption("#surveyLanguage", "tg");
+    await nurse.waitForFunction(() => !/Опросник медсестры/.test(document.querySelector("#surveyForm h1")?.innerText || "Опросник медсестры"));
+    await nurse.goto(`${base}/app-3-patient-survey`);
+    await nurse.waitForSelector("#surveyForm");
+    assert.equal(await nurse.locator("#surveyLanguage").inputValue(), "tg", "the choice is remembered");
   });
   await step("service worker is active with the current cache", async () => {
     await nurse.goto(`${base}/app-3-patient-survey`);
@@ -270,6 +274,18 @@ try {
     assert.equal(await adminPage.locator("details.admin-tools").evaluate((el) => el.open), false);
     await adminPage.click("details.admin-tools > summary");
     assert.ok(await adminPage.locator("#patientImportFile").isVisible());
+  });
+  await step("CSV import: quoted cells, Excel dates, row errors listed instead of silent defaults", async () => {
+    const csv = "﻿Фамилия;Имя;Дата рождения;Пол;Телефон;Адрес;Поликлиника;Медсестра;Рост, см;Вес, кг;Талия, см;Физическая активность;Овощи/фрукты;Препараты от давления;Высокий сахар;Диабет у родственников;Курение;САД;ДАД\r\n"
+      + "Импортов;Сино;05.11.1964;м;+992900777888;\"Душанбе; ул. Рудаки, 1\";Поликлиника №1;Сестрина Мария;170;86;98;нет;да;нет;нет;1 линия;нет;140;90\r\n"
+      + "Пустов;Тест;01.01.1970;;+992900777999;Душанбе;Поликлиника №1;Сестрина Мария;170;80;90;нет;да;нет;нет;нет;;120;80\r\n";
+    await adminPage.setInputFiles("#patientImportFile", { name: "import.csv", mimeType: "text/csv", buffer: Buffer.from(csv, "utf8") });
+    await adminPage.click('[data-action="import-patients"]');
+    await adminPage.waitForSelector("#importResult", { timeout: 6000 });
+    const text = await adminPage.locator("#importResult").innerText();
+    assert.match(text, /Импортировано: 1\. Дублей пропущено: 0\. С ошибками: 1\./);
+    assert.match(text, /Строка 3:.*Пол: не указан.*Курение: не указано/s);
+    assert.ok(await adminPage.locator('a[download="shablon-importa-pacientov.csv"]').count(), "a template can be downloaded");
   });
   await step("admin on a phone: tabs at the top under the title, stay visible, menu opens below", async () => {
     const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });

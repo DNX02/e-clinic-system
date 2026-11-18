@@ -15,6 +15,7 @@ import { recordDbWrite, recordRequestSource, runtimeSnapshot, startRuntimeMonito
 import { clientIpInfo, deviceLabel } from "./client-info.js";
 import { buildNurseReport } from "./nurse-report.js";
 import { nurseReportPdf } from "./nurse-report-pdf.js";
+import { normalizeImportRow } from "./patient-import.js";
 
 // The request being handled, so the activity log can note who did it (IP, device) without
 // passing req through every function that writes to the log.
@@ -2253,12 +2254,8 @@ async function handleApi(req, res, url) {
     const imported = [], skipped = [], errors = [];
     for (const [index, row] of rows.entries()) {
       try {
-        const input = validateSurveyInput({
-          ...row,
-          sex: row.sex === "male" || row.sex === "Мужской" ? "male" : "female",
-          age: Number(row.age || 0), weight: row.weight === "" ? undefined : Number(row.weight || 0), height: row.height === "" ? undefined : Number(row.height || 0),
-          clinic: allowedClinic(row.clinic), nurseName: row.nurseName || "Импорт из файла", activity: row.activity || "no", vegetables: row.vegetables || "no", bpMeds: row.bpMeds || "no", highGlucose: row.highGlucose || "no", familyDiabetes: row.familyDiabetes || "none", smoker: row.smoker || "no"
-        });
+        // No silent defaults: a missing answer would change the FINDRISC score (see patient-import.js).
+        const input = validateSurveyInput(normalizeImportRow(row && typeof row === "object" ? row : {}));
         const duplicate = findDuplicateSurvey(db, input);
         if (duplicate) { skipped.push({ row: index + 2, reason: "Дубликат", duplicateId: duplicate.id }); continue; }
         const survey = buildNurseSurvey(input);

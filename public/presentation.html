@@ -422,6 +422,26 @@
       font-family: monospace;
     }
 
+    /* Phone: a 16:9 slide was ~190px tall and cut the text, and the control bar ran off the
+       screen. Here the slide fills the height and scrolls inside, columns stack, the keyboard
+       hints (no keyboard on a phone) are hidden and the buttons fit the width. */
+    @media (max-width: 700px) {
+      body { height: 100dvh; }
+      .deck-container { padding: 10px; align-items: stretch; min-height: 0; }
+      .slide { aspect-ratio: auto; max-height: none; height: 100%; padding: 22px 18px; border-radius: 14px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+      .slide-title { font-size: 22px; }
+      .title-slide h1 { font-size: 28px; }
+      .title-slide .lead { font-size: 16px; margin-bottom: 18px; }
+      .title-meta { flex-wrap: wrap; gap: 14px; }
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+      .deck-controls { height: auto; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); gap: 8px; }
+      .shortcuts-hint, #btnFullscreen { display: none; }
+      .deck-counter { font-size: 12px; letter-spacing: 0; white-space: nowrap; }
+      .control-buttons { gap: 4px; min-width: 0; }
+      .btn { padding: 8px 8px; font-size: 12.5px; gap: 4px; white-space: nowrap; }
+      .speaker-notes-modal { left: 10px; right: 10px; width: auto; bottom: calc(64px + env(safe-area-inset-bottom)); max-height: 55vh; }
+    }
+
     @media print {
       body { overflow: visible; height: auto; background: #fff; }
       .deck-controls, .progress-bar-container, .speaker-notes-modal { display: none; }
