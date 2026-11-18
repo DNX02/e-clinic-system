@@ -26,10 +26,10 @@ await pool.query("drop function if exists test_block_writes() cascade");
 
 let server;
 let serverOutput = "";
-const startServer = async () => {
+const startServer = async (extraEnv = {}) => {
   server = spawn(process.execPath, ["server.js"], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", DATA_DIR: dataDir, INITIAL_ADMIN_PASSWORD: adminPassword, DATABASE_URL: databaseUrl, PGSSLMODE: "disable" },
+    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", DATA_DIR: dataDir, INITIAL_ADMIN_PASSWORD: adminPassword, DATABASE_URL: databaseUrl, PGSSLMODE: "disable", ...extraEnv },
     stdio: ["ignore", "pipe", "pipe"]
   });
   server.stdout.on("data", (c) => { serverOutput += c; });
@@ -104,6 +104,19 @@ try {
   const snapshot = await pool.query("select data from app_state where id = 'main'");
   assert.equal(snapshot.rowCount, 1);
   assert.equal(snapshot.rows[0].data.nurseSurveys.length, 2);
+
+  // 6. A save does not wait for the snapshot: it is written in the background afterwards.
+  await startServer({ STATE_SNAPSHOT_INTERVAL_MS: "1500" });
+  const third = await post("/api/nurse-surveys", { ...patient("Третий"), phone: "+992900005566" });
+  assert.equal(third.status, 201);
+  const snapshotSize = async () => (await pool.query("select data from app_state where id = 'main'")).rows[0].data.nurseSurveys.length;
+  assert.equal(await snapshotSize(), 2, "the save itself must not rewrite the whole snapshot");
+  let size = 2;
+  for (let i = 0; i < 40 && size !== 3; i += 1) {
+    await new Promise((r) => setTimeout(r, 250));
+    size = await snapshotSize();
+  }
+  assert.equal(size, 3, "the background snapshot catches up");
 
   console.log("PostgreSQL sync integration test passed.");
 } catch (error) {

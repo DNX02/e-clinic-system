@@ -688,14 +688,35 @@ async function writeStateSnapshot(client, db) {
 async function flushStateSnapshot() {
   if (!DATABASE_URL || !dbCache) return;
   await dbWritePromise.catch(() => {});
+  const version = dbPersistedVersion;
   const pool = await pgPool();
   const client = await pool.connect();
   try {
     await writeStateSnapshot(client, dbCache);
     lastStateSnapshotAt = Date.now();
+    snapshotVersion = Math.max(snapshotVersion, version);
   } finally {
     client.release();
   }
+}
+
+// The snapshot used to be written inside whichever user save came due, so every 5 minutes one
+// nurse or doctor waited 3-5 s. Now it is written in the background, only when data changed.
+let snapshotVersion = 0;
+let snapshotRunning = false;
+function startStateSnapshots() {
+  if (!DATABASE_URL) return;
+  setInterval(async () => {
+    if (snapshotRunning || !dbCache || dbPersistedVersion <= snapshotVersion) return;
+    snapshotRunning = true;
+    try {
+      await flushStateSnapshot();
+    } catch (error) {
+      console.error("Background state snapshot failed:", error.message || error);
+    } finally {
+      snapshotRunning = false;
+    }
+  }, STATE_SNAPSHOT_INTERVAL_MS).unref();
 }
 
 // A write that failed leaves changes only in memory. Callers that answer "already saved"
@@ -722,14 +743,11 @@ async function writeDbToStorage(db) {
       const pool = await pgPool();
       const client = await pool.connect();
       const syncCtx = createSyncContext();
-      const snapshotDue = Date.now() - lastStateSnapshotAt >= STATE_SNAPSHOT_INTERVAL_MS;
       try {
         await client.query("begin");
         await syncNormalizedCloudDb(client, db, syncCtx);
-        if (snapshotDue) await writeStateSnapshot(client, db);
         await client.query("commit");
         applySyncContext(syncCtx);
-        if (snapshotDue) lastStateSnapshotAt = Date.now();
       } catch (error) {
         await client.query("rollback").catch(() => {});
         throw error;
@@ -4257,6 +4275,7 @@ server.listen(PORT, HOST, () => {
     console.log(`  Monitor:      ${baseUrl}${MONITOR_APP_PATH}`);
   }
   startRuntimeMonitor();
+  startStateSnapshots();
   setTimeout(() => runScheduledMaintenance(), 5000);
   setInterval(() => runScheduledMaintenance(), 60 * 1000).unref();
 });
