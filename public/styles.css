@@ -1946,6 +1946,11 @@ th {
     width: 100%;
   }
 
+  /* The doctor's search box has its own id rule (flex: 1 1 240px) that outranks the one above. */
+  .doctor-patient-search .actions > input#patientSearch {
+    flex: 0 0 auto;
+  }
+
   .actions:not(.nav) > button,
   .actions:not(.nav) > a,
   form > button {

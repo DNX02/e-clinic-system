@@ -262,6 +262,20 @@ const TAJIK_TEXT = {
   "Уже есть в базе": "Аллакай дар пойгоҳ ҳаст",
   "Откройте «Сохранённые анкеты» и нажмите «✓ Уже в базе» или «➕ Как нового».": "«Анкетаҳои нигоҳдошта»-ро кушоед ва «✓ Аллакай дар пойгоҳ» ё «➕ Ҳамчун нав»-ро пахш кунед.",
   "Сохранённые анкеты": "Анкетаҳои нигоҳдошта",
+  "Ожидают врача": "Интизори духтур",
+  "Календарь": "Тақвим",
+  "Задачи": "Вазифаҳо",
+  "Поиск пациента": "Ҷустуҷӯи бемор",
+  "Можно искать по ФИО, телефону, дате рождения или поликлинике": "Аз рӯи ному насаб, телефон, санаи таваллуд ё дармонгоҳ ҷустуҷӯ кардан мумкин аст",
+  "Все пациенты": "Ҳамаи беморон",
+  "Высокое давление": "Фишори баланд",
+  "Высокий сахар": "Қанди баланд",
+  "Просрочен повторный визит": "Мӯҳлати ташрифи такрорӣ гузаштааст",
+  "Сбросить": "Тоза кардан",
+  "обязательное поле": "майдони ҳатмӣ",
+  "ФИО медсестры": "Ному насаби ҳамшира",
+  "Если это другой пациент с такими же ФИО или повторный скрининг:": "Агар ин бемори дигар бо ҳамин ному насаб ё скрининги такрорӣ бошад:",
+  "Пароль изменён. Для безопасности войдите заново.": "Парол иваз шуд. Барои бехатарӣ аз нав ворид шавед.",
   "Сохранённые на устройстве анкеты": "Анкетаҳои дар дастгоҳ нигоҳдошта",
   "Офлайн-режим: данные сохранены на устройстве": "Реҷаи офлайн: маълумот дар дастгоҳ нигоҳ дошта шуд",
   "Ожидает сети": "Интизори интернет",
@@ -5537,19 +5551,19 @@ function doctorPatientsPanel() {
       <div class="muted" id="doctorSyncStatus"></div>
       <div id="doctorSyncResult"></div>
       <div class="doctor-patient-search">
-        <label for="patientSearch">Поиск пациента</label>
+        <label for="patientSearch">${escapeHtml(t("Поиск пациента"))}</label>
         <div class="actions">
           <input id="patientSearch" type="search" value="${escapeHtml(state.doctorPatientSearch)}" placeholder="${escapeHtml(t("Введите имя или фамилию"))}" autocomplete="off" />
-          ${state.doctorPatientSearch ? `<button type="button" class="secondary" data-action="clear-doctor-patient-search">Сбросить</button>` : ""}
+          ${state.doctorPatientSearch ? `<button type="button" class="secondary" data-action="clear-doctor-patient-search">${escapeHtml(t("Сбросить"))}</button>` : ""}
         </div>
-        <small class="muted">Можно искать по ФИО, телефону, дате рождения или поликлинике</small>
+        <small class="muted">${escapeHtml(t("Можно искать по ФИО, телефону, дате рождения или поликлинике"))}</small>
       </div>
       <select id="doctorPatientFilter" aria-label="Фильтр пациентов">
-        <option value="all" ${state.doctorPatientFilter === "all" ? "selected" : ""}>Все пациенты</option>
-        <option value="risk" ${state.doctorPatientFilter === "risk" ? "selected" : ""}>Повышенный риск</option>
-        <option value="pressure" ${state.doctorPatientFilter === "pressure" ? "selected" : ""}>Высокое давление</option>
-        <option value="glucose" ${state.doctorPatientFilter === "glucose" ? "selected" : ""}>Высокий сахар</option>
-        <option value="overdue" ${state.doctorPatientFilter === "overdue" ? "selected" : ""}>Просрочен повторный визит</option>
+        <option value="all" ${state.doctorPatientFilter === "all" ? "selected" : ""}>${escapeHtml(t("Все пациенты"))}</option>
+        <option value="risk" ${state.doctorPatientFilter === "risk" ? "selected" : ""}>${escapeHtml(t("Повышенный риск"))}</option>
+        <option value="pressure" ${state.doctorPatientFilter === "pressure" ? "selected" : ""}>${escapeHtml(t("Высокое давление"))}</option>
+        <option value="glucose" ${state.doctorPatientFilter === "glucose" ? "selected" : ""}>${escapeHtml(t("Высокий сахар"))}</option>
+        <option value="overdue" ${state.doctorPatientFilter === "overdue" ? "selected" : ""}>${escapeHtml(t("Просрочен повторный визит"))}</option>
       </select>
       <div id="patientList" style="margin-top:12px">${doctorPaginatedSurveyList(doctorSortedSurveys(doctorFilteredSurveys()))}</div>
     </section>
