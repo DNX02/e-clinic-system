@@ -16,6 +16,8 @@ import { clientIpInfo, deviceLabel } from "./client-info.js";
 import { buildNurseReport } from "./nurse-report.js";
 import { nurseReportPdf } from "./nurse-report-pdf.js";
 import { normalizeImportRow } from "./patient-import.js";
+import { buildDetectionReport } from "./detection-report.js";
+import { detectionReportPdf } from "./detection-report-pdf.js";
 
 // The request being handled, so the activity log can note who did it (IP, device) without
 // passing req through every function that writes to the log.
@@ -2035,6 +2037,7 @@ async function handleApi(req, res, url) {
       }));
     }
     if (tab === "nurses") dashboard.nurseReport = nurseReportFor(viewDb, url);
+    if (tab === "detection") dashboard.detectionReport = detectionReportFor(viewDb, url);
     if (tab === "operations") {
       dashboard.surveyClinics = [...new Set(viewDb.nurseSurveys.map((survey) => survey.patient?.clinic || survey.clinic).filter(Boolean))];
       dashboard.reminderQueue = viewDb.reminderQueue || [];
@@ -2090,6 +2093,17 @@ async function handleApi(req, res, url) {
     }
     if (tab === "access") dashboard.admins = (canManageAdmins(session, db) ? db.admins : viewDb.admins).map(publicAdmin);
     return send(res, 200, dashboard);
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/admin/detection-report.pdf") {
+    if (!requireAdmin(session)) return send(res, 403, { error: "Нет доступа" });
+    const report = detectionReportFor(scopedDbForAdmin(db, session), url);
+    const { clinic, from, to } = report.filters;
+    const suffix = [clinic === "all" ? "vse" : `gcz-${clinicKey(clinic)}`, from || "nachalo", to || "segodnya"].join("_");
+    return send(res, 200, await detectionReportPdf(report), {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="vyyavlenie-sd-ag-${suffix}.pdf"`
+    });
   }
 
   if (req.method === "GET" && (url.pathname === "/api/admin/nurse-report.xls" || url.pathname === "/api/admin/nurse-report.pdf")) {
@@ -3927,6 +3941,18 @@ function excelXmlSheet(name, headers, rows) {
   const header = `<Row ss:StyleID="Header">${headers.map((item) => excelXmlCell(item)).join("")}</Row>`;
   const body = rows.map((row) => `<Row>${row.map((item) => excelXmlCell(item, typeof item === "number" ? "Number" : "String")).join("")}</Row>`).join("");
   return `<Worksheet ss:Name="${name}"><Table>${header}${body}</Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane></WorksheetOptions></Worksheet>`;
+}
+
+function reportFilters(url) {
+  const day = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? String(value) : "";
+  const clinic = String(url.searchParams.get("clinic") || "all").trim().slice(0, 100) || "all";
+  return { clinic, from: day(url.searchParams.get("from")), to: day(url.searchParams.get("to")), clinicKey };
+}
+
+// Diabetes / hypertension found by screening and by doctors, same filters as the nurse report.
+function detectionReportFor(db, url) {
+  const surveys = (db.nurseSurveys || []).filter((survey) => !isExcludedClinic(survey.patient?.clinic || survey.clinic));
+  return buildDetectionReport(surveys, db.doctorVisits || [], reportFilters(url));
 }
 
 // ?clinic=Поликлиника №11&from=2026-11-01&to=2026-11-19 (dates in Dushanbe time, both inclusive).

@@ -2663,3 +2663,35 @@ th {
     width: 100%;
   }
 }
+
+.detection-card h3 {
+  margin: 0 0 8px;
+}
+
+.detection-card.diabetes {
+  border-top: 4px solid #9f1d1d;
+}
+
+.detection-card.hypertension {
+  border-top: 4px solid #1d4f91;
+}
+
+.detection-main {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.detection-main strong {
+  font-size: 32px;
+}
+
+.detection-card ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.detection-card li {
+  margin: 4px 0;
+}

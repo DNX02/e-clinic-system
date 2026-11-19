@@ -2176,7 +2176,7 @@ async function loadAdmin() {
       params.set("page", String(state.auditPage || 1));
       params.set("clinic", state.auditClinic || "all");
     }
-    if (state.tab === "nurses") {
+    if (state.tab === "nurses" || state.tab === "detection") {
       params.set("clinic", state.nurseReportClinic || "all");
       if (state.nurseReportFrom) params.set("from", state.nurseReportFrom);
       if (state.nurseReportTo) params.set("to", state.nurseReportTo);
@@ -2201,7 +2201,7 @@ async function loadAdmin() {
 const ADMIN_TAB_NAMES = {
   stats: "Статистика", center: "Контроль диабета", surveys: "Пациенты", doctors: "Врачи", audit: "Журнал",
   training: "Обучение врачей №4", nurseTraining: "Тесты медсестёр №5", visits: "Назначения", operations: "План и сообщения",
-  headNurses: "Контроль старших", access: "Доступы", qr: "Ссылки и QR", nurses: "Медсёстры"
+  headNurses: "Контроль старших", access: "Доступы", qr: "Ссылки и QR", nurses: "Медсёстры", detection: "Выявление СД и АГ"
 };
 // Everyday sections stay visible; the rest go into the "Ещё" menu.
 const ADMIN_PRIMARY_TABS = ["stats", "center", "surveys", "doctors", "audit"];
@@ -2210,8 +2210,8 @@ function renderAdmin() {
   // "control" was a duplicate tab of "center" (same screen); keep the old value working.
   if (state.tab === "control") state.tab = "center";
   const visibleTabs = state.me?.role === "head_nurse"
-    ? ["stats", "center", "surveys", "audit", "nurses", "operations"]
-    : ["stats", "center", "surveys", "doctors", "audit", "nurses", "training", "nurseTraining", "visits", "operations", "access", "qr"];
+    ? ["stats", "center", "surveys", "audit", "nurses", "detection", "operations"]
+    : ["stats", "center", "surveys", "doctors", "audit", "nurses", "detection", "training", "nurseTraining", "visits", "operations", "access", "qr"];
   if (state.me?.role === "owner") visibleTabs.splice(visibleTabs.indexOf("access"), 0, "headNurses");
   let primary = visibleTabs.filter((tab) => ADMIN_PRIMARY_TABS.includes(tab));
   let extra = visibleTabs.filter((tab) => !ADMIN_PRIMARY_TABS.includes(tab));
@@ -2249,6 +2249,7 @@ function adminTab() {
   if (state.tab === "access") return renderAccessAdmin();
   if (state.tab === "qr") return renderQrAdmin();
   if (state.tab === "nurses") return renderNurseReportAdmin();
+  if (state.tab === "detection") return renderDetectionReportAdmin();
   return renderStatsAdmin();
 }
 
@@ -2948,33 +2949,28 @@ function dushanbeToday() {
   return new Date(Date.now() + 5 * 3600000).toISOString().slice(0, 10);
 }
 
-function renderNurseReportAdmin() {
-  const report = state.admin.nurseReport;
-  if (!report) return `<section class="panel"><p class="muted">Загрузка…</p></section>`;
-  const { totals } = report;
+// Clinic + period filters shared by the "Медсёстры" and "Выявление" reports (same state, same form id).
+function reportQuery() {
   const query = new URLSearchParams({ clinic: state.nurseReportClinic || "all" });
   if (state.nurseReportFrom) query.set("from", state.nurseReportFrom);
   if (state.nurseReportTo) query.set("to", state.nurseReportTo);
+  return query;
+}
+
+function reportPeriodLabel() {
   const date = (value) => value ? value.split("-").reverse().join(".") : "";
-  const period = state.nurseReportFrom || state.nurseReportTo
+  return state.nurseReportFrom || state.nurseReportTo
     ? `${date(state.nurseReportFrom) || "с начала"} — ${date(state.nurseReportTo) || "сегодня"}`
     : "за всё время";
-  const rows = report.rows.map((row) => html`<tr class="${row.special ? "muted" : ""}">
-    <td data-label="Медсестра"><div><strong>${escapeHtml(row.name)}</strong>${row.variants.length ? `<div class="muted nurse-variants">Написания: ${row.variants.map((item) => `${escapeHtml(item.name)} (${item.count})`).join(", ")}</div>` : ""}</div></td>
-    <td data-label="Поликлиника">${escapeHtml(row.clinic || "-")}</td>
-    <td data-label="Анкет"><strong>${row.surveys}</strong></td>
-    <td data-label="К врачу">${row.needsDoctor}</td>
-    <td data-label="Дней работы">${row.activeDays}</td>
-    <td data-label="Первая / последняя">${escapeHtml(date(row.firstDate))} — ${escapeHtml(date(row.lastDate))}</td>
-  </tr>`).join("");
-  return html`<section class="panel">
-    <div class="section-title"><div><h2>Медсёстры</h2><p class="muted">Сколько анкет отправила каждая медсестра. Одна и та же медсестра в разном написании (х/ҳ, ч/ҷ, с отчеством и без) собрана в одну строку — все написания видны под именем.</p></div>
-      <div class="actions"><a class="button-link" href="/api/admin/nurse-report.pdf?${escapeHtml(query.toString())}">Скачать PDF</a><a class="button-link" href="/api/admin/nurse-report.xls?${escapeHtml(query.toString())}">Скачать Excel</a></div></div>
+}
+
+function reportFilterControls(clinics) {
+  return html`
     <form id="nurseReportForm" class="nurse-report-form">
       <label>Поликлиника
         <select name="clinic">
           <option value="all" ${state.nurseReportClinic === "all" ? "selected" : ""}>Все поликлиники</option>
-          ${report.clinics.map((clinic) => `<option value="${escapeHtml(clinic)}" ${state.nurseReportClinic === clinic ? "selected" : ""}>${escapeHtml(clinic)}</option>`).join("")}
+          ${clinics.map((clinic) => `<option value="${escapeHtml(clinic)}" ${state.nurseReportClinic === clinic ? "selected" : ""}>${escapeHtml(clinic)}</option>`).join("")}
         </select>
       </label>
       <label>С даты<input type="date" name="from" value="${escapeHtml(state.nurseReportFrom)}" /></label>
@@ -2986,7 +2982,74 @@ function renderNurseReportAdmin() {
       <button type="button" class="secondary" data-action="nurse-report-period" data-period="week">7 дней</button>
       <button type="button" class="secondary" data-action="nurse-report-period" data-period="month">Этот месяц</button>
       <button type="button" class="secondary" data-action="nurse-report-period" data-period="all">Всё время</button>
-    </div>
+    </div>`;
+}
+
+function renderDetectionReportAdmin() {
+  const report = state.admin.detectionReport;
+  if (!report) return `<section class="panel"><p class="muted">Загрузка…</p></section>`;
+  const t = report.totals;
+  const th = report.thresholds;
+  const query = reportQuery();
+  const rows = report.rows.map((row) => html`<tr>
+    <td data-label="Поликлиника"><strong>${escapeHtml(row.clinic)}</strong></td>
+    <td data-label="Анкет">${row.screened}</td>
+    <td data-label="Сахар ≥${th.glucose}">${row.glucose}</td>
+    <td data-label="FINDRISC ≥${th.findrisc}">${row.findrisc}</td>
+    <td data-label="Диагноз СД"><strong>${row.dxDiabetes}</strong></td>
+    <td data-label="АД ≥${th.systolic}/${th.diastolic}">${row.pressure}</td>
+    <td data-label="Диагноз АГ"><strong>${row.dxHypertension}</strong></td>
+  </tr>`).join("");
+  return html`<section class="panel">
+    <div class="section-title"><div><h2>Выявление: сахарный диабет и гипертония</h2><p class="muted">Подозрение при скрининге медсестры и диагноз, поставленный врачом в осмотре. Считаются разные пациенты. Скрининг — это подозрение, а не диагноз.</p></div>
+      <div class="actions"><a class="button-link" href="/api/admin/detection-report.pdf?${escapeHtml(query.toString())}">Скачать PDF</a></div></div>
+    ${reportFilterControls(report.clinics)}
+    <p class="muted">Период: ${escapeHtml(reportPeriodLabel())}. Обследовано медсёстрами: <strong>${t.screened}</strong>.</p>
+    <section class="grid two">
+      <div class="card detection-card diabetes">
+        <h3>Сахарный диабет 2 типа</h3>
+        <div class="detection-main"><strong>${t.dxDiabetes}</strong><span>диагноз поставлен врачом</span></div>
+        <ul>
+          <li>Преддиабет (врач): <strong>${t.dxPrediabetes}</strong></li>
+          <li>Сахар ≥ ${th.glucose} ммоль/л при скрининге: <strong>${t.glucose}</strong> (из них ≥ ${th.glucoseHigh}: ${t.glucoseHigh})</li>
+          <li>Высокий риск FINDRISC (≥ ${th.findrisc}): <strong>${t.findrisc}</strong></li>
+          <li>Назначены препараты от диабета: <strong>${t.diabetesDrugs}</strong></li>
+        </ul>
+      </div>
+      <div class="card detection-card hypertension">
+        <h3>Артериальная гипертензия</h3>
+        <div class="detection-main"><strong>${t.dxHypertension}</strong><span>диагноз поставлен врачом</span></div>
+        <ul>
+          <li>АД ≥ ${th.systolic}/${th.diastolic} при скрининге: <strong>${t.pressure}</strong></li>
+          <li>Назначены препараты от давления: <strong>${t.hypertensionDrugs}</strong></li>
+          <li>Риск и СД, и АГ (скрининг): <strong>${t.both}</strong></li>
+        </ul>
+      </div>
+    </section>
+    <div class="table-wrap nurse-report-table"><table><thead><tr><th>Поликлиника</th><th>Анкет</th><th>Сахар ≥${th.glucose}</th><th>FINDRISC ≥${th.findrisc}</th><th>Диагноз СД</th><th>АД ≥${th.systolic}/${th.diastolic}</th><th>Диагноз АГ</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="7">За выбранный период данных нет.</td></tr>`}</tbody></table></div>
+  </section>`;
+}
+
+function renderNurseReportAdmin() {
+  const report = state.admin.nurseReport;
+  if (!report) return `<section class="panel"><p class="muted">Загрузка…</p></section>`;
+  const { totals } = report;
+  const query = reportQuery();
+  const date = (value) => value ? value.split("-").reverse().join(".") : "";
+  const period = reportPeriodLabel();
+  const rows = report.rows.map((row) => html`<tr class="${row.special ? "muted" : ""}">
+    <td data-label="Медсестра"><div><strong>${escapeHtml(row.name)}</strong>${row.variants.length ? `<div class="muted nurse-variants">Написания: ${row.variants.map((item) => `${escapeHtml(item.name)} (${item.count})`).join(", ")}</div>` : ""}</div></td>
+    <td data-label="Поликлиника">${escapeHtml(row.clinic || "-")}</td>
+    <td data-label="Анкет"><strong>${row.surveys}</strong></td>
+    <td data-label="К врачу">${row.needsDoctor}</td>
+    <td data-label="Дней работы">${row.activeDays}</td>
+    <td data-label="Первая / последняя">${escapeHtml(date(row.firstDate))} — ${escapeHtml(date(row.lastDate))}</td>
+  </tr>`).join("");
+  return html`<section class="panel">
+    <div class="section-title"><div><h2>Медсёстры</h2><p class="muted">Сколько анкет отправила каждая медсестра. Одна и та же медсестра в разном написании (х/ҳ, ч/ҷ, с отчеством и без) собрана в одну строку — все написания видны под именем.</p></div>
+      <div class="actions"><a class="button-link" href="/api/admin/nurse-report.pdf?${escapeHtml(query.toString())}">Скачать PDF</a><a class="button-link" href="/api/admin/nurse-report.xls?${escapeHtml(query.toString())}">Скачать Excel</a></div></div>
+    ${reportFilterControls(report.clinics)}
     <section class="grid three">
       <div class="metric"><span>Анкет (${escapeHtml(period)})</span><strong>${totals.surveys}</strong></div>
       <div class="metric"><span>Медсестёр</span><strong>${totals.nurses}</strong></div>
