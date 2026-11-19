@@ -2695,3 +2695,7 @@ th {
 .detection-card li {
   margin: 4px 0;
 }
+
+.detection-card.weight {
+  border-top: 4px solid #8a5200;
+}

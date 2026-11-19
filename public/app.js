@@ -2201,7 +2201,7 @@ async function loadAdmin() {
 const ADMIN_TAB_NAMES = {
   stats: "Статистика", center: "Контроль диабета", surveys: "Пациенты", doctors: "Врачи", audit: "Журнал",
   training: "Обучение врачей №4", nurseTraining: "Тесты медсестёр №5", visits: "Назначения", operations: "План и сообщения",
-  headNurses: "Контроль старших", access: "Доступы", qr: "Ссылки и QR", nurses: "Медсёстры", detection: "Выявление СД и АГ"
+  headNurses: "Контроль старших", access: "Доступы", qr: "Ссылки и QR", nurses: "Медсёстры", detection: "Выявление СД, АГ, ожирения"
 };
 // Everyday sections stay visible; the rest go into the "Ещё" menu.
 const ADMIN_PRIMARY_TABS = ["stats", "center", "surveys", "doctors", "audit"];
@@ -2990,44 +2990,63 @@ function renderDetectionReportAdmin() {
   if (!report) return `<section class="panel"><p class="muted">Загрузка…</p></section>`;
   const t = report.totals;
   const th = report.thresholds;
+  const [es, ed] = th.bpExact;
+  const [hs, hd] = th.bpHypertension;
+  const g = (value) => Number(value).toFixed(1);
   const query = reportQuery();
   const rows = report.rows.map((row) => html`<tr>
     <td data-label="Поликлиника"><strong>${escapeHtml(row.clinic)}</strong></td>
     <td data-label="Анкет">${row.screened}</td>
-    <td data-label="Сахар ≥${th.glucose.toFixed(1)}">${row.glucose}</td>
-    <td data-label="Сахар ${th.glucoseImpaired}–6.9">${row.glucoseImpaired}</td>
+    <td data-label="Сахар ≥${g(th.glucose)}"><strong>${row.glucose}</strong></td>
+    <td data-label="Предиабет">${row.glucoseImpaired}</td>
     <td data-label="Диагноз СД"><strong>${row.dxDiabetes}</strong></td>
-    <td data-label="АД >${th.systolicAbove}/${th.diastolicAbove}">${row.pressure}</td>
+    <td data-label="Ровно ${es}/${ed}">${row.bpExact}</td>
+    <td data-label="Выше ${es}/${ed}">${row.bpHighNormal}</td>
+    <td data-label="АД ≥${hs}/${hd}"><strong>${row.bpHypertension}</strong></td>
     <td data-label="Диагноз АГ"><strong>${row.dxHypertension}</strong></td>
+    <td data-label="Избыточный вес">${row.overweight}</td>
+    <td data-label="Ожирение"><strong>${row.obesity}</strong></td>
   </tr>`).join("");
   return html`<section class="panel">
-    <div class="section-title"><div><h2>Выявление: сахарный диабет и гипертония</h2><p class="muted">Подозрение при скрининге медсестры и диагноз, поставленный врачом в осмотре. Считаются разные пациенты. Пороги этой сводки: сахар от 7,0 (глюкометры по плазме), давление выше 130/80; FINDRISC не учитывается. Скрининг — это подозрение, а не диагноз.</p></div>
+    <div class="section-title"><div><h2>Выявление: диабет, давление, ожирение</h2><p class="muted">Подозрение при скрининге медсестры и диагноз, поставленный врачом в осмотре. Считаются разные пациенты. Сахар: от ${g(th.glucose)} — подозрение на СД, ${g(th.glucoseImpaired)}–6.9 — предиабет (глюкометры по плазме). FINDRISC не учитывается. Скрининг — это подозрение, а не диагноз.</p></div>
       <div class="actions"><a class="button-link" href="/api/admin/detection-report.pdf?${escapeHtml(query.toString())}">Скачать PDF</a></div></div>
     ${reportFilterControls(report.clinics)}
-    <p class="muted">Период: ${escapeHtml(reportPeriodLabel())}. Обследовано медсёстрами: <strong>${t.screened}</strong>.</p>
-    <section class="grid two">
+    <p class="muted">Период: ${escapeHtml(reportPeriodLabel())}. Обследовано медсёстрами: <strong>${t.screened}</strong>. Сахар ≥ ${g(th.glucose)} и АД ≥ ${hs}/${hd} одновременно: <strong>${t.both}</strong>.</p>
+    <section class="grid three">
       <div class="card detection-card diabetes">
         <h3>Сахарный диабет 2 типа</h3>
         <div class="detection-main"><strong>${t.dxDiabetes}</strong><span>диагноз поставлен врачом</span></div>
         <ul>
-          <li>Преддиабет (врач): <strong>${t.dxPrediabetes}</strong></li>
-          <li>Сахар ≥ ${th.glucose.toFixed(1)} ммоль/л при скрининге (подозрение): <strong>${t.glucose}</strong></li>
-          <li>Сахар ${th.glucoseImpaired}–6.9 (нарушенная гликемия): <strong>${t.glucoseImpaired}</strong></li>
+          <li>Сахар ≥ ${g(th.glucose)} (подозрение на СД): <strong>${t.glucose}</strong></li>
+          <li>Предиабет, сахар ${g(th.glucoseImpaired)}–6.9: <strong>${t.glucoseImpaired}</strong></li>
+          <li>Преддиабет по диагнозу врача: <strong>${t.dxPrediabetes}</strong></li>
           <li>Назначены препараты от диабета: <strong>${t.diabetesDrugs}</strong></li>
         </ul>
       </div>
       <div class="card detection-card hypertension">
-        <h3>Артериальная гипертензия</h3>
-        <div class="detection-main"><strong>${t.dxHypertension}</strong><span>диагноз поставлен врачом</span></div>
+        <h3>Артериальное давление</h3>
+        <div class="detection-main"><strong>${t.dxHypertension}</strong><span>диагноз АГ поставлен врачом</span></div>
         <ul>
-          <li>АД выше ${th.systolicAbove}/${th.diastolicAbove} при скрининге: <strong>${t.pressure}</strong></li>
+          <li>АД ≥ ${hs}/${hd} — гипертоническая болезнь (АГ 1 ст. и выше): <strong>${t.bpHypertension}</strong></li>
+          <li>Выше ${es}/${ed}, но ниже ${hs}/${hd} — высокое нормальное: <strong>${t.bpHighNormal}</strong></li>
+          <li>Ровно ${es}/${ed}: <strong>${t.bpExact}</strong></li>
           <li>Назначены препараты от давления: <strong>${t.hypertensionDrugs}</strong></li>
-          <li>Сахар ≥ ${th.glucose.toFixed(1)} и АД выше ${th.systolicAbove}/${th.diastolicAbove}: <strong>${t.both}</strong></li>
+        </ul>
+      </div>
+      <div class="card detection-card weight">
+        <h3>Масса тела (ИМТ)</h3>
+        <div class="detection-main"><strong>${t.obesity}</strong><span>ожирение (ИМТ ≥ ${th.bmiObesity})</span></div>
+        <ul>
+          <li>Избыточный вес (ИМТ ${th.bmiOverweight}–29.9): <strong>${t.overweight}</strong></li>
+          <li>Ожирение I степени (30–34.9): <strong>${t.obesity1}</strong></li>
+          <li>Ожирение II степени (35–39.9): <strong>${t.obesity2}</strong></li>
+          <li>Ожирение III степени (≥ 40): <strong>${t.obesity3}</strong></li>
+          <li class="muted">ИМТ известен у ${t.bmiKnown} из ${t.screened}</li>
         </ul>
       </div>
     </section>
-    <div class="table-wrap nurse-report-table"><table><thead><tr><th>Поликлиника</th><th>Анкет</th><th>Сахар ≥${th.glucose.toFixed(1)}</th><th>Сахар ${th.glucoseImpaired}–6.9</th><th>Диагноз СД</th><th>АД >${th.systolicAbove}/${th.diastolicAbove}</th><th>Диагноз АГ</th></tr></thead>
-      <tbody>${rows || `<tr><td colspan="7">За выбранный период данных нет.</td></tr>`}</tbody></table></div>
+    <div class="table-wrap nurse-report-table"><table><thead><tr><th>Поликлиника</th><th>Анкет</th><th>Сахар ≥${g(th.glucose)}</th><th>Предиабет</th><th>Диагноз СД</th><th>Ровно ${es}/${ed}</th><th>Выше ${es}/${ed}</th><th>АД ≥${hs}/${hd}</th><th>Диагноз АГ</th><th>Избыт. вес</th><th>Ожирение</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="11">За выбранный период данных нет.</td></tr>`}</tbody></table></div>
   </section>`;
 }
 
