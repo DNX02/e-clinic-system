@@ -15,14 +15,15 @@ assert.deepEqual(diagnosisFlags("Пешдиабет"), { diabetes: false, predia
 assert.deepEqual(diagnosisFlags("СД2, ожирение"), { diabetes: true, prediabetes: false, hypertension: false });
 assert.deepEqual(diagnosisFlags("Багаж в норме"), { diabetes: false, prediabetes: false, hypertension: false }, "'аг' inside a word is not hypertension");
 
-// 2. Counting: thresholds of the rules, distinct patients, period by exam date, archived excluded.
+// 2. Counting with the thresholds of this report (owner, 19.11.2026): glucose >= 7.0, BP strictly above
+//    130/80, FINDRISC ignored. Distinct patients, period by exam date, archived excluded.
 const at = (day) => `${day}T06:00:00.000Z`;
 const s = (id, clinic, day, m, findrisc = 5) => ({ id, patient: { clinic }, createdAt: at(day), measurements: m, findrisc: { score: findrisc } });
 const surveys = [
-  s("a", "Поликлиника №9", "2026-11-02", { glucoseLevel: 6.1, systolic: 120, diastolic: 80 }),
-  s("b", "Поликлиника №9", "2026-11-03", { glucoseLevel: 5.0, systolic: 130, diastolic: 90 }, 14),
-  s("c", "Поликлиника №9", "2026-11-04", { glucoseLevel: 12, systolic: 150, diastolic: 95 }),
-  s("d", "Поликлиника №11", "2026-11-05", { glucoseLevel: 5.5, systolic: 139, diastolic: 89 }, 13),
+  s("a", "Поликлиника №9", "2026-11-02", { glucoseLevel: 7.0, systolic: 130, diastolic: 80 }),
+  s("b", "Поликлиника №9", "2026-11-03", { glucoseLevel: 6.9, systolic: 131, diastolic: 80 }, 20),
+  s("c", "Поликлиника №9", "2026-11-04", { glucoseLevel: 12, systolic: 130, diastolic: 81 }),
+  s("d", "Поликлиника №11", "2026-11-05", { glucoseLevel: 6.0, systolic: 120, diastolic: 75 }, 25),
   { ...s("x", "Поликлиника №9", "2026-11-05", { glucoseLevel: 20, systolic: 200, diastolic: 120 }), archivedAt: at("2026-11-06") }
 ];
 const visits = [
@@ -35,11 +36,11 @@ const visits = [
 const clinicKey = (value) => String(value || "").match(/\d+/)?.[0] || "";
 const all = buildDetectionReport(surveys, visits, { clinicKey });
 assert.equal(all.totals.screened, 4, "archived surveys are not counted");
-assert.equal(all.totals.glucose, 2, "sugar ≥ 6.1 (a, c)");
-assert.equal(all.totals.glucoseHigh, 1);
-assert.equal(all.totals.findrisc, 1, "FINDRISC ≥ 14 (b), 13 is not");
-assert.equal(all.totals.pressure, 2, "≥140 or diastolic ≥90 (b, c); 139/89 is not");
-assert.equal(all.totals.both, 2, "b (FINDRISC + DBP 90) and c (sugar + BP)");
+assert.equal(all.totals.glucose, 2, "sugar >= 7.0 (a with exactly 7.0, c)");
+assert.equal(all.totals.glucoseImpaired, 1, "6.1-6.9 (b) shown separately; 6.0 (d) is not");
+assert.equal(all.totals.pressure, 2, "131/80 (b) and 130/81 (c); exactly 130/80 (a) is not above");
+assert.equal(all.totals.both, 1, "c only: sugar >= 7 and BP above 130/80");
+assert.ok(!("findrisc" in all.totals), "FINDRISC is not part of this report");
 assert.equal(all.totals.dxDiabetes, 1, "patient a once, although two exams");
 assert.equal(all.totals.dxPrediabetes, 0, "prediabetes later turned into diabetes counts as diabetes");
 assert.equal(all.totals.dxHypertension, 1, "patient c once, although two exams");
@@ -74,8 +75,8 @@ try {
 
   const tab = await (await fetch(`${base}/api/admin/dashboard?tab=detection`, { headers: { Cookie: owner } })).json();
   assert.equal(tab.detectionReport.totals.screened, 2);
-  assert.equal(tab.detectionReport.totals.pressure, 1);
-  assert.equal(tab.detectionReport.totals.glucose, 2);
+  assert.equal(tab.detectionReport.totals.pressure, 2, "150/85 and 120/85 are both above 130/80");
+  assert.equal(tab.detectionReport.totals.glucose, 2, "7.0 counts");
 
   const pdf = await fetch(`${base}/api/admin/detection-report.pdf?clinic=${encodeURIComponent("Поликлиника №9")}`, { headers: { Cookie: owner } });
   assert.equal(pdf.status, 200);

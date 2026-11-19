@@ -10,7 +10,7 @@ const BLUE = "#1d4f91";
 const MUTED = "#5b6472";
 const LINE = "#d9e3e1";
 const ddmmyyyy = (day) => (day ? day.split("-").reverse().join(".") : "");
-const num = (value) => String(value ?? 0).replace(".", ",");
+const num = (value) => Number(value ?? 0).toFixed(1).replace(".", ","); // thresholds: 7,0 and 6,1
 
 export function detectionReportPdf(report, { generatedAt = new Date() } = {}) {
   return new Promise((resolve, reject) => {
@@ -38,7 +38,7 @@ export function detectionReportPdf(report, { generatedAt = new Date() } = {}) {
     doc.roundedRect(left, 124, width, 44, 6).fillAndStroke("#f1f6f5", LINE);
     doc.fillColor(MUTED).font("Regular").fontSize(9.5).text("Обследовано медсёстрами (анкет скрининга)", left + 14, 132);
     doc.fillColor("#111").font("Bold").fontSize(18).text(String(t.screened), left + 14, 145);
-    doc.fillColor(MUTED).font("Regular").fontSize(9.5).text("Риск и СД, и АГ одновременно (скрининг)", left + width / 2, 132);
+    doc.fillColor(MUTED).font("Regular").fontSize(9.5).text(`Сахар ≥ ${num(th.glucose)} и АД выше ${th.systolicAbove}/${th.diastolicAbove} одновременно`, left + width / 2, 132);
     doc.fillColor("#111").font("Bold").fontSize(18).text(String(t.both), left + width / 2, 145);
 
     // Two blocks: diabetes and hypertension.
@@ -58,20 +58,19 @@ export function detectionReportPdf(report, { generatedAt = new Date() } = {}) {
     block(left, 184, half, RED, "Сахарный диабет 2 типа", [
       ["Диагноз СД поставлен врачом", t.dxDiabetes, true],
       ["Преддиабет (врач)", t.dxPrediabetes],
-      [`Сахар крови ≥ ${num(th.glucose)} ммоль/л при скрининге`, t.glucose],
-      [`  из них ≥ ${num(th.glucoseHigh)} ммоль/л`, t.glucoseHigh],
-      [`Высокий риск FINDRISC (≥ ${th.findrisc} баллов)`, t.findrisc],
+      [`Сахар ≥ ${num(th.glucose)} ммоль/л при скрининге (подозрение на СД)`, t.glucose],
+      [`Сахар ${num(th.glucoseImpaired)}–6,9 ммоль/л (нарушенная гликемия)`, t.glucoseImpaired],
       ["Назначены препараты от диабета", t.diabetesDrugs]
     ]);
     block(left + half + 14, 184, half, BLUE, "Артериальная гипертензия", [
       ["Диагноз АГ поставлен врачом", t.dxHypertension, true],
-      [`АД ≥ ${th.systolic}/${th.diastolic} мм рт.ст. при скрининге`, t.pressure],
+      [`АД выше ${th.systolicAbove}/${th.diastolicAbove} мм рт.ст. при скрининге`, t.pressure],
       ["Назначены препараты от давления", t.hypertensionDrugs]
     ]);
 
     // Table by clinic.
     let y = 398;
-    const cols = [["Поликлиника", 118], ["Анкет", 58], [`Сахар ≥${num(th.glucose)}`, 52], [`FINDRISC ≥${th.findrisc}`, 58], ["Диагноз СД", 56], [`АД ≥${th.systolic}/${th.diastolic}`, 62], ["Диагноз АГ", 56], ["СД+АГ риск", 55]];
+    const cols = [["Поликлиника", 120], ["Анкет", 52], [`Сахар ≥${num(th.glucose)}`, 58], [`Сахар ${num(th.glucoseImpaired)}–6,9`, 60], ["Диагноз СД", 56], [`АД >${th.systolicAbove}/${th.diastolicAbove}`, 60], ["Диагноз АГ", 56], ["СД+АГ", 53]];
     doc.fillColor("#111").font("Bold").fontSize(11).text("По поликлиникам", left, y);
     y += 18;
     const header = () => {
@@ -88,7 +87,7 @@ export function detectionReportPdf(report, { generatedAt = new Date() } = {}) {
       const total = r === t;
       if (total) doc.rect(left, y, width, 20).fill("#eef5f3");
       else if (index % 2) doc.rect(left, y, width, 20).fill("#f7faf9");
-      const values = [r.clinic, r.screened, r.glucose, r.findrisc, r.dxDiabetes, r.pressure, r.dxHypertension, r.both];
+      const values = [r.clinic, r.screened, r.glucose, r.glucoseImpaired, r.dxDiabetes, r.pressure, r.dxHypertension, r.both];
       let x = left;
       values.forEach((value, i) => {
         doc.fillColor("#111").font(total || i === 4 || i === 6 ? "Bold" : "Regular").fontSize(8.8)
@@ -105,7 +104,7 @@ export function detectionReportPdf(report, { generatedAt = new Date() } = {}) {
     doc.fillColor(MUTED).font("Bold").fontSize(8.5).text("Как считается", left, y + 16);
     doc.font("Regular").fontSize(7.8).text([
       "• Считаются разные пациенты: повторные анкеты и осмотры одного пациента не удваивают число.",
-      `• Скрининг (медсестра): дата анкеты. Пороги — правила проекта: сахар ≥ ${num(th.glucose)} ммоль/л, FINDRISC ≥ ${th.findrisc}, АД ≥ ${th.systolic} или ≥ ${th.diastolic} мм рт.ст. Это подозрение, а не диагноз.`,
+      `• Скрининг (медсестра): дата анкеты. Сахар ≥ ${num(th.glucose)} ммоль/л — подозрение на СД (глюкометры откалиброваны по плазме); ${num(th.glucoseImpaired)}–6,9 — нарушенная гликемия. Давление: верхнее выше ${th.systolicAbove} или нижнее выше ${th.diastolicAbove} мм рт.ст. FINDRISC в этой сводке не учитывается. Скрининг — подозрение, а не диагноз.`,
       "• Диагноз врача: дата осмотра; берётся из текста диагноза в сохранённом осмотре (русский или таджикский). Преддиабет считается отдельно; если у пациента был и преддиабет, и диабет — он учтён как диабет.",
       "• Удалённые (архивные) анкеты не учитываются."
     ].join("\n"), left, doc.y + 4, { width, lineGap: 2 });

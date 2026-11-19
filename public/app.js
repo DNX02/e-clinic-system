@@ -2994,14 +2994,14 @@ function renderDetectionReportAdmin() {
   const rows = report.rows.map((row) => html`<tr>
     <td data-label="Поликлиника"><strong>${escapeHtml(row.clinic)}</strong></td>
     <td data-label="Анкет">${row.screened}</td>
-    <td data-label="Сахар ≥${th.glucose}">${row.glucose}</td>
-    <td data-label="FINDRISC ≥${th.findrisc}">${row.findrisc}</td>
+    <td data-label="Сахар ≥${th.glucose.toFixed(1)}">${row.glucose}</td>
+    <td data-label="Сахар ${th.glucoseImpaired}–6.9">${row.glucoseImpaired}</td>
     <td data-label="Диагноз СД"><strong>${row.dxDiabetes}</strong></td>
-    <td data-label="АД ≥${th.systolic}/${th.diastolic}">${row.pressure}</td>
+    <td data-label="АД >${th.systolicAbove}/${th.diastolicAbove}">${row.pressure}</td>
     <td data-label="Диагноз АГ"><strong>${row.dxHypertension}</strong></td>
   </tr>`).join("");
   return html`<section class="panel">
-    <div class="section-title"><div><h2>Выявление: сахарный диабет и гипертония</h2><p class="muted">Подозрение при скрининге медсестры и диагноз, поставленный врачом в осмотре. Считаются разные пациенты. Скрининг — это подозрение, а не диагноз.</p></div>
+    <div class="section-title"><div><h2>Выявление: сахарный диабет и гипертония</h2><p class="muted">Подозрение при скрининге медсестры и диагноз, поставленный врачом в осмотре. Считаются разные пациенты. Пороги этой сводки: сахар от 7,0 (глюкометры по плазме), давление выше 130/80; FINDRISC не учитывается. Скрининг — это подозрение, а не диагноз.</p></div>
       <div class="actions"><a class="button-link" href="/api/admin/detection-report.pdf?${escapeHtml(query.toString())}">Скачать PDF</a></div></div>
     ${reportFilterControls(report.clinics)}
     <p class="muted">Период: ${escapeHtml(reportPeriodLabel())}. Обследовано медсёстрами: <strong>${t.screened}</strong>.</p>
@@ -3011,8 +3011,8 @@ function renderDetectionReportAdmin() {
         <div class="detection-main"><strong>${t.dxDiabetes}</strong><span>диагноз поставлен врачом</span></div>
         <ul>
           <li>Преддиабет (врач): <strong>${t.dxPrediabetes}</strong></li>
-          <li>Сахар ≥ ${th.glucose} ммоль/л при скрининге: <strong>${t.glucose}</strong> (из них ≥ ${th.glucoseHigh}: ${t.glucoseHigh})</li>
-          <li>Высокий риск FINDRISC (≥ ${th.findrisc}): <strong>${t.findrisc}</strong></li>
+          <li>Сахар ≥ ${th.glucose.toFixed(1)} ммоль/л при скрининге (подозрение): <strong>${t.glucose}</strong></li>
+          <li>Сахар ${th.glucoseImpaired}–6.9 (нарушенная гликемия): <strong>${t.glucoseImpaired}</strong></li>
           <li>Назначены препараты от диабета: <strong>${t.diabetesDrugs}</strong></li>
         </ul>
       </div>
@@ -3020,13 +3020,13 @@ function renderDetectionReportAdmin() {
         <h3>Артериальная гипертензия</h3>
         <div class="detection-main"><strong>${t.dxHypertension}</strong><span>диагноз поставлен врачом</span></div>
         <ul>
-          <li>АД ≥ ${th.systolic}/${th.diastolic} при скрининге: <strong>${t.pressure}</strong></li>
+          <li>АД выше ${th.systolicAbove}/${th.diastolicAbove} при скрининге: <strong>${t.pressure}</strong></li>
           <li>Назначены препараты от давления: <strong>${t.hypertensionDrugs}</strong></li>
-          <li>Риск и СД, и АГ (скрининг): <strong>${t.both}</strong></li>
+          <li>Сахар ≥ ${th.glucose.toFixed(1)} и АД выше ${th.systolicAbove}/${th.diastolicAbove}: <strong>${t.both}</strong></li>
         </ul>
       </div>
     </section>
-    <div class="table-wrap nurse-report-table"><table><thead><tr><th>Поликлиника</th><th>Анкет</th><th>Сахар ≥${th.glucose}</th><th>FINDRISC ≥${th.findrisc}</th><th>Диагноз СД</th><th>АД ≥${th.systolic}/${th.diastolic}</th><th>Диагноз АГ</th></tr></thead>
+    <div class="table-wrap nurse-report-table"><table><thead><tr><th>Поликлиника</th><th>Анкет</th><th>Сахар ≥${th.glucose.toFixed(1)}</th><th>Сахар ${th.glucoseImpaired}–6.9</th><th>Диагноз СД</th><th>АД >${th.systolicAbove}/${th.diastolicAbove}</th><th>Диагноз АГ</th></tr></thead>
       <tbody>${rows || `<tr><td colspan="7">За выбранный период данных нет.</td></tr>`}</tbody></table></div>
   </section>`;
 }
