@@ -39,6 +39,10 @@ const DEPLOYED_COMMIT = (() => {
 })();
 const INITIAL_ADMIN_PASSWORD = process.env.INITIAL_ADMIN_PASSWORD || "";
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 12 * 60 * 60 * 1000);
+// Doctors work on their own phone and were logged out every 12 h, then mistyped the key (owner, 20.11.2026).
+// Admins keep the short session: they can see and change much more.
+const DOCTOR_SESSION_TTL_MS = Number(process.env.DOCTOR_SESSION_TTL_MS || 30 * 24 * 60 * 60 * 1000);
+const sessionTtlMs = (userType) => (userType === "doctor" ? DOCTOR_SESSION_TTL_MS : SESSION_TTL_MS);
 const MAX_JSON_BODY_BYTES = Number(process.env.MAX_JSON_BODY_BYTES || 1024 * 1024);
 const LOGIN_RATE_LIMIT = 5;
 const LOGIN_RATE_WINDOW_MS = 60 * 1000;
@@ -1025,7 +1029,7 @@ async function getSession(req) {
   const userExists = session.userType === "admin"
     ? db.admins.some((item) => item.id === session.userId)
     : session.userType === "doctor" && db.doctors.some((item) => item.id === session.userId);
-  if (!Number.isFinite(createdAt) || Date.now() - createdAt >= SESSION_TTL_MS || !userExists) {
+  if (!Number.isFinite(createdAt) || Date.now() - createdAt >= sessionTtlMs(session.userType) || !userExists) {
     // Dropped from memory; the next regular write removes it from storage too.
     delete db.sessions[sid];
     return null;
@@ -1938,7 +1942,7 @@ async function handleApi(req, res, url) {
     await writeDb(db);
     const sid = await createSession("doctor", doctor.id);
     securityEvent("login_succeeded", req, { accountType: "doctor", actorId: doctor.id });
-    return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(req, sid) });
+    return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(req, sid, Math.floor(DOCTOR_SESSION_TTL_MS / 1000)) });
   }
 
   if (req.method === "POST" && url.pathname === "/api/logout") {

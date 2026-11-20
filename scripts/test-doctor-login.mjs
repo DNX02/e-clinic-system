@@ -34,6 +34,14 @@ try {
   assert.equal(await login("", "1234s"), 401);
 
   assert.equal((await doctor({ fullName: "Другой Врач", login: "SAIDA", accessKey: "abc12" })).status, 409, "a login differing only in case is taken");
+
+  // Doctors stay logged in on their phone for 30 days; admins keep 12 hours.
+  const doctorCookie = (await post("/api/login/doctor", { login: "saida", accessKey: "1234s" })).headers.get("set-cookie");
+  assert.match(doctorCookie, /Max-Age=2592000/, "doctor session: 30 days");
+  const adminCookie = (await post("/api/login/admin", { username: "admin", password: "TestAdmin1234" })).headers.get("set-cookie");
+  assert.match(adminCookie, /Max-Age=43200/, "admin session: still 12 hours");
+  const workspace = await fetch(`${base}/api/doctor/workspace`, { headers: { Cookie: doctorCookie.split(";")[0] } });
+  assert.equal(workspace.status, 200);
   console.log("Doctor login test passed.");
 } finally {
   server.kill();
