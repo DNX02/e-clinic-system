@@ -1214,6 +1214,25 @@ function invalidInput(message) {
   throw error;
 }
 
+// Doctors log in from phones that capitalise the first letter ("Saida") and add a space after a
+// suggested word ("saida "), so logins are compared trimmed and case-insensitively.
+const loginKey = (value) => String(value ?? "").trim().toLocaleLowerCase("ru-RU");
+
+function findDoctorByLogin(db, rawLogin) {
+  const typed = String(rawLogin ?? "").trim();
+  if (!typed) return null;
+  const exact = (db.doctors || []).find((item) => item.login === typed);
+  if (exact) return exact;
+  const matches = (db.doctors || []).filter((item) => loginKey(item.login) === loginKey(typed));
+  return matches.length === 1 ? matches[0] : null; // two logins differing only in case: require the exact one
+}
+
+// Keys are trimmed when they are created, so a space added by the keyboard must not lock the doctor out.
+function verifyAccessKey(rawKey, hash) {
+  const key = String(rawKey ?? "");
+  return verifyPassword(key, hash) || (key.trim() !== key && verifyPassword(key.trim(), hash));
+}
+
 function cleanText(value, label, { required = false, max = 200 } = {}) {
   const text = String(value ?? "").trim();
   if (required && !text) invalidInput(`${label}: поле обязательно`);
@@ -1902,8 +1921,8 @@ async function handleApi(req, res, url) {
     const rateLimitKey = enforceLoginRateLimit(req, res, "doctor");
     if (!rateLimitKey) return;
     const body = await parseBody(req);
-    const doctor = db.doctors.find((item) => item.login === body.login);
-    if (!doctor || !verifyPassword(body.accessKey || "", doctor.accessKeyHash)) {
+    const doctor = findDoctorByLogin(db, body.login);
+    if (!doctor || !verifyAccessKey(body.accessKey, doctor.accessKeyHash)) {
       securityEvent("login_failed", req, { accountType: "doctor" });
       return send(res, 401, { error: "Неверный логин или ключ" });
     }
@@ -2614,7 +2633,7 @@ function setWeeklyDocxCache(key, buffer) {
   if (req.method === "POST" && url.pathname === "/api/admin/doctors") {
     if (!canMutateAdmin(session, db)) return send(res, 403, { error: "Недостаточно прав для изменения данных" });
     const body = await parseBody(req);
-    if (db.doctors.some((item) => item.login === String(body.login || "").trim())) return send(res, 409, { error: "Такой логин уже используется" });
+    if (db.doctors.some((item) => loginKey(item.login) === loginKey(body.login))) return send(res, 409, { error: "Такой логин уже используется" });
     const accessKey = body.accessKey ? validateNewPassword(body.accessKey, "Пароль врача") : `${crypto.randomBytes(6).toString("base64url")}7a`;
     const doctor = {
       id: crypto.randomUUID(),
@@ -2641,7 +2660,7 @@ function setWeeklyDocxCache(key, buffer) {
     if (!doctor) return send(res, 404, { error: "Врач не найден" });
     const body = await parseBody(req);
     const login = body.login === undefined ? doctor.login : String(body.login || "").trim();
-    if (login !== doctor.login && db.doctors.some((item) => item.id !== doctor.id && item.login === login)) return send(res, 409, { error: "Такой логин уже используется" });
+    if (login !== doctor.login && db.doctors.some((item) => item.id !== doctor.id && loginKey(item.login) === loginKey(login))) return send(res, 409, { error: "Такой логин уже используется" });
     Object.assign(doctor, {
       fullName: body.fullName ?? doctor.fullName,
       login,
@@ -2794,7 +2813,7 @@ function setWeeklyDocxCache(key, buffer) {
     const accessKey = String(body.accessKey || "").trim();
     if (!verifyPassword(currentAccessKey, doctor.accessKeyHash)) return send(res, 401, { error: "Текущий пароль указан неверно" });
     if (!login) return send(res, 400, { error: "Логин обязателен" });
-    const loginTaken = db.doctors.some((item) => item.id !== doctor.id && item.login === login);
+    const loginTaken = db.doctors.some((item) => item.id !== doctor.id && loginKey(item.login) === loginKey(login));
     if (loginTaken) return send(res, 409, { error: "Такой логин уже используется" });
     doctor.login = login;
     if (accessKey) {

@@ -2121,7 +2121,7 @@ function renderAdminLogin() {
     <main class="login">
       <form class="panel form" id="adminLogin">
         <h1>Вход администратора</h1>
-        <div class="form-row"><label>Логин</label><input name="username" autocomplete="username" required /></div>
+        <div class="form-row"><label>Логин</label><input name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required /></div>
         <div class="form-row"><label>Пароль</label><input type="password" name="password" autocomplete="current-password" required /></div>
         <button>Войти</button>
         <p class="muted">Используйте выданные вам учётные данные.</p>
@@ -2147,8 +2147,8 @@ function renderDoctorLogin() {
       <form class="panel form" id="doctorLogin">
         <h1>${escapeHtml(t("Вход врача"))}</h1>
         ${doctorLanguageControl()}
-        <div class="form-row"><label>${escapeHtml(t("Логин врача"))}</label><input name="login" required /></div>
-        <div class="form-row"><label>${escapeHtml(t("Специальный ключ"))}</label><input type="password" name="accessKey" required /></div>
+        <div class="form-row"><label>${escapeHtml(t("Логин врача"))}</label><input name="login" required autocapitalize="none" autocorrect="off" autocomplete="username" spellcheck="false" /></div>
+        <div class="form-row"><label>${escapeHtml(t("Специальный ключ"))}</label><input type="password" name="accessKey" required autocapitalize="none" autocorrect="off" autocomplete="current-password" spellcheck="false" /></div>
         <button>${escapeHtml(t("Войти"))}</button>
       </form>
     </main>
