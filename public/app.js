@@ -262,6 +262,8 @@ const TAJIK_TEXT = {
   "Уже есть в базе": "Аллакай дар пойгоҳ ҳаст",
   "Откройте «Сохранённые анкеты» и нажмите «✓ Уже в базе» или «➕ Как нового».": "«Анкетаҳои нигоҳдошта»-ро кушоед ва «✓ Аллакай дар пойгоҳ» ё «➕ Ҳамчун нав»-ро пахш кунед.",
   "Сохранённые анкеты": "Анкетаҳои нигоҳдошта",
+  "Отправляется…": "Фиристода истодааст…",
+  "Эта анкета уже сохранена — повторно отправлять не нужно.": "Ин анкета аллакай нигоҳ дошта шудааст — дубора фиристодан лозим нест.",
   "Ожидают врача": "Интизори духтур",
   "Календарь": "Тақвим",
   "Задачи": "Вазифаҳо",
@@ -3816,14 +3818,27 @@ function renderNurseSurvey() {
   bindOfflineSurveySync(form);
   showSurveyLanguagePrompt(renderNurseSurvey);
   form.noValidate = true;
+  const submitButton = form.querySelector('button[type="submit"]');
+  // One id per filled-in form, sent every time: a resend after a lost answer is confirmed by the server
+  // instead of becoming a second patient. Taps while a send is running are ignored.
+  const finishForm = () => { delete form.dataset.clientSurveyId; form.reset(); };
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (form.dataset.sending === "1") return;
     if (!validateNurseSurveyForm(form, t)) return;
-    const data = Object.fromEntries(new FormData(form));
+    form.dataset.clientSurveyId ||= crypto.randomUUID();
+    const data = { ...Object.fromEntries(new FormData(form)), clientSurveyId: form.dataset.clientSurveyId };
+    form.dataset.sending = "1";
+    const buttonText = submitButton?.textContent;
+    if (submitButton) { submitButton.disabled = true; submitButton.textContent = t("Отправляется…"); }
     try {
-      const { survey } = await sendNurseSurvey(data);
-      showSurveySubmitted(survey);
-      form.reset();
+      const result = await sendNurseSurvey(data);
+      if (result.alreadySaved) {
+        document.querySelector("#surveyResult").innerHTML = `<div class="notice ok">${escapeHtml(t("Эта анкета уже сохранена — повторно отправлять не нужно."))}</div>`;
+      } else {
+        showSurveySubmitted(result.survey);
+      }
+      finishForm();
       updateOfflineSurveyStatus();
     } catch (error) {
       if (error?.status === 409 || String(error?.message || "").includes("уже существует")) {
@@ -3840,8 +3855,8 @@ function renderNurseSurvey() {
             try {
               const forcedData = { ...data, allowDuplicate: true };
               const { survey: forcedSurvey } = await sendNurseSurvey(forcedData);
-              showSurveySubmitted(forcedSurvey);
-              form.reset();
+              if (forcedSurvey) showSurveySubmitted(forcedSurvey);
+              finishForm();
               updateOfflineSurveyStatus();
             } catch (err2) {
               resultEl.innerHTML = `<div class="notice danger">${escapeHtml(err2.message)}</div>`;
@@ -3860,8 +3875,11 @@ function renderNurseSurvey() {
           ${escapeHtml(t("Интернет недоступен или сервер не ответил. Анкета сохранена на этом устройстве и будет отправлена через кнопку синхронизации."))}
         </div>
       `;
-      form.reset();
+      finishForm();
       updateOfflineSurveyStatus();
+    } finally {
+      delete form.dataset.sending;
+      if (submitButton) { submitButton.disabled = false; submitButton.textContent = buttonText; }
     }
   });
 }
@@ -4051,7 +4069,10 @@ function saveOfflineSurvey(data) {
   const id = data.clientSurveyId || data.id || crypto.randomUUID();
   const surveyData = { ...data, clientSurveyId: id };
   const item = { id, savedAt: new Date().toISOString(), attempts: 0, lastError: "", data: surveyData };
-  queue.push(item);
+  // The same form saved twice (same id) replaces its earlier copy instead of queueing a second one.
+  const existing = queue.findIndex((queued) => queued.id === id);
+  if (existing >= 0) queue[existing] = item;
+  else queue.push(item);
   writeOfflineSurveyQueue(queue);
   persistToIdb("nurse_surveys", item, "put");
   if (typeof navigator !== "undefined" && "serviceWorker" in navigator && "SyncManager" in window) {
@@ -4256,7 +4277,8 @@ async function syncSingleOfflineSurvey(id, forceAsNew = false) {
     writeOfflineSurveyQueue(queue);
     persistToIdb("nurse_surveys", id, "delete");
     updateOfflineSurveyStatus();
-    if (result) showSurveySubmitted(survey);
+    if (result && survey) showSurveySubmitted(survey);
+    else if (result) result.innerHTML = `<div class="notice ok">${escapeHtml(translateSurveyText("Эта анкета уже сохранена — повторно отправлять не нужно."))}</div>`;
   } catch (err) {
     const isDup = err?.status === 409 || String(err?.message || "").includes("уже существует");
     item.attempts = Number(item.attempts || 0) + 1;

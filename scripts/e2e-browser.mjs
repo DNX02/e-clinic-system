@@ -110,12 +110,36 @@ try {
     await nurse.waitForFunction(() => /FINDRISC/.test(document.querySelector("#surveyResult")?.innerText || ""), null, { timeout: 5000 });
     assert.doesNotMatch(await resultText(), /Направить к врачу/);
   });
-  await step("duplicate patient shows a clear message and is not saved twice", async () => {
+  await step("same nurse resends the same patient the same day: confirmed, not saved twice", async () => {
     await openSurvey();
     await fillSurvey(nurseFields.high);
     await nurse.click('#surveyForm button[type="submit"]');
-    await nurse.waitForFunction(() => /уже существует/.test(document.querySelector("#surveyResult")?.innerText || document.body.innerText), null, { timeout: 5000 });
+    await nurse.waitForFunction(() => /уже сохранена/.test(document.querySelector("#surveyResult")?.innerText || ""), null, { timeout: 5000 });
     assert.equal((await clinic1Patients()).filter((s) => s.patient.lastName === "Рахимов").length, 1);
+  });
+  await step("another nurse with the same patient gets a clear duplicate message", async () => {
+    await openSurvey();
+    await fillSurvey({ ...nurseFields.high, nurseName: "Другая Медсестра" });
+    await nurse.click('#surveyForm button[type="submit"]');
+    await nurse.waitForFunction(() => /уже существует/.test(document.querySelector("#surveyResult")?.innerText || ""), null, { timeout: 5000 });
+    assert.equal((await clinic1Patients()).filter((s) => s.patient.lastName === "Рахимов").length, 1);
+  });
+  await step("taps while the survey is being sent do not send it again", async () => {
+    await openSurvey();
+    await fillSurvey({ ...nurseFields.low, lastName: "Тапова", phone: "+992900333999" });
+    let posted = 0;
+    const count = (r) => { if (r.method() === "POST" && r.url().includes("/api/nurse-surveys")) posted += 1; };
+    nurse.on("request", count);
+    await nurse.route("**/api/nurse-surveys", async (route) => { await new Promise((resolve) => setTimeout(resolve, 800)); await route.continue(); });
+    const button = nurse.locator('#surveyForm button[type="submit"]');
+    await button.click();
+    await button.click({ force: true }).catch(() => {});
+    await button.click({ force: true }).catch(() => {});
+    await nurse.waitForFunction(() => /FINDRISC/.test(document.querySelector("#surveyResult")?.innerText || ""), null, { timeout: 8000 });
+    await nurse.unroute("**/api/nurse-surveys");
+    nurse.off("request", count);
+    assert.equal(posted, 1, `one tap, one request (got ${posted})`);
+    assert.equal((await clinic1Patients()).filter((s) => s.patient.lastName === "Тапова").length, 1);
   });
   await step("offline: survey is queued, then synced after reconnect", async () => {
     await openSurvey();
@@ -136,9 +160,19 @@ try {
     }, null, { timeout: 8000 });
     assert.equal((await clinic1Patients()).filter((s) => s.patient.lastName === "Офлайнов").length, 1);
   });
-  await step("offline duplicate: sync says why it is stuck and stops resending it", async () => {
+  await step("offline copy of the same nurse's patient clears itself on sync", async () => {
     await openSurvey();
-    await fillSurvey(nurseFields.high); // Рахимов is already on the server
+    await fillSurvey(nurseFields.high); // Рахимов was sent by this nurse today
+    await phone.setOffline(true);
+    await nurse.click('#surveyForm button[type="submit"]');
+    await nurse.waitForFunction(() => /сохран|офлайн|очеред|синхрониз/i.test(document.querySelector("#surveyResult")?.innerText || ""), null, { timeout: 5000 });
+    await phone.setOffline(false);
+    await nurse.waitForFunction(() => /Все анкеты отправлены|Ҳама анкетаҳо/.test(document.querySelector("#syncSurveysStatus")?.innerText || ""), null, { timeout: 8000 });
+    assert.equal((await clinic1Patients()).filter((s) => s.patient.lastName === "Рахимов").length, 1);
+  });
+  await step("offline duplicate of another nurse's patient: sync says why it is stuck and stops resending it", async () => {
+    await openSurvey();
+    await fillSurvey({ ...nurseFields.high, nurseName: "Другая Медсестра" }); // Рахимов is already on the server
     await phone.setOffline(true);
     await nurse.click('#surveyForm button[type="submit"]');
     await nurse.waitForFunction(() => /сохран|офлайн|очеред|синхрониз/i.test(document.querySelector("#surveyResult")?.innerText || ""), null, { timeout: 5000 });

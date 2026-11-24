@@ -13,7 +13,7 @@ import PDFDocument from "pdfkit";
 import { buildWeeklyMonitorReportDocx, monitorReportPeriod } from "./weekly-monitor-report.js";
 import { recordDbWrite, recordRequestSource, runtimeSnapshot, startRuntimeMonitor, trackRequest } from "./runtime-monitor.js";
 import { clientIpInfo, deviceLabel } from "./client-info.js";
-import { buildNurseReport } from "./nurse-report.js";
+import { buildNurseReport, dushanbeDate, nurseNameKey } from "./nurse-report.js";
 import { nurseReportPdf } from "./nurse-report-pdf.js";
 import { normalizeImportRow } from "./patient-import.js";
 import { buildDetectionReport } from "./detection-report.js";
@@ -1298,6 +1298,11 @@ function extractBirthYear(dateStr) {
   if (!dateStr) return "";
   const match = String(dateStr).match(/^(\d{4})/);
   return match ? match[1] : "";
+}
+
+function isSameDayResend(existing, input) {
+  const nurse = nurseNameKey(existing.nurse?.fullName);
+  return Boolean(nurse) && nurse === nurseNameKey(input.nurseName) && dushanbeDate(existing.createdAt) === dushanbeDate(new Date().toISOString());
 }
 
 function findDuplicateSurvey(db, input) {
@@ -2708,6 +2713,13 @@ function setWeeklyDocxCache(key, buffer) {
     const body = validateNurseSurveyInput(rawBody);
     if (clientSurveyId && isValidUuid(clientSurveyId)) body.clientSurveyId = clientSurveyId;
     const duplicate = findDuplicateSurvey(db, body);
+    // The same nurse sending the same patient again on the same day is a resend (taps on a slow network,
+    // copies queued by an older app version), not a new screening: confirm it instead of a 409 the nurse
+    // would have to sort out by hand.
+    if (duplicate && isSameDayResend(duplicate, body)) {
+      await ensureDbPersisted();
+      return send(res, 200, { ok: true, alreadySaved: true, id: duplicate.id });
+    }
     if (duplicate) return send(res, 409, { error: "Пациент с такими ФИО, датой рождения и телефоном уже существует в этой поликлинике", duplicateId: duplicate.id, duplicate: true });
     const survey = buildNurseSurvey(body);
     if (clientSurveyId && isValidUuid(clientSurveyId)) {

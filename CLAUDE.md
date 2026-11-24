@@ -81,6 +81,9 @@ TEST_DATABASE_URL=postgresql://user:password@localhost:5432/eclinic_test PGSSLMO
 - **Синхронизация очереди:**
   - Защищена от гонок между вкладками и событиями через мьютекс `syncNurseInFlight` и `navigator.locks.request("eclinic_sync_nurse")`.
   - Идемпотентность: клиент генерирует UUID `clientSurveyId`. Сервер подтверждает повторы ответом `{ ok: true, alreadySaved: true, id }`.
+  - `clientSurveyId` создаётся один раз на заполненную форму и отправляется и онлайн, и из очереди; кнопка
+    отправки блокируется на время запроса. Та же медсестра + тот же пациент (ФИО, дата рождения, телефон,
+    поликлиника) в тот же день (Душанбе) = повтор → `alreadySaved` вместо 409 (24.11.2026: 7 копий одной анкеты).
   - Ошибки 4xx помечаются `requiresEdit: true`, чтобы не крутить бесконечные ретраи.
 - **Правило обновления кэша:**
   - При любых изменениях в `public/app.js` или стилях **обязательно** инкрементировать версию в `public/sw.js` (константа `CACHE_NAME`, например `medical-mobile-v95`) и query-параметр скрипта `app.js?v=...` во всех 7 HTML-файлах (`admin.html`, `doctor.html`, `survey.html`, `investor.html`, `monitor.html`, `nurse-training.html`, `training.html`).

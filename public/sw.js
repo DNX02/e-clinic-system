@@ -1,4 +1,4 @@
-const CACHE_NAME = "medical-mobile-v110";
+const CACHE_NAME = "medical-mobile-v111";
 const SHELL = [
   "/app-1-admin-panel",
   "/app-2-doctor",
@@ -11,9 +11,9 @@ const SHELL = [
   "/nurse-training.html",
   "/investor.html",
   "/monitor.html",
-  "/styles.css?v=20261120login",
+  "/styles.css?v=20261124resend",
   "/admin-modern.css?v=20261117topnav2",
-  "/app.js?v=20261120login",
+  "/app.js?v=20261124resend",
   "/workflow-ui.js?v=20260924workflow",
   "/admin.webmanifest",
   "/doctor.webmanifest",
