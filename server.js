@@ -18,6 +18,7 @@ import { nurseReportPdf } from "./nurse-report-pdf.js";
 import { normalizeImportRow } from "./patient-import.js";
 import { buildDetectionReport } from "./detection-report.js";
 import { detectionReportPdf } from "./detection-report-pdf.js";
+import { buildAggregateReport } from "./aggregate-report.js";
 
 // The request being handled, so the activity log can note who did it (IP, device) without
 // passing req through every function that writes to the log.
@@ -1854,6 +1855,25 @@ async function handleApi(req, res, url) {
   // Load history of the last hour (no patient data): lets us tell from outside why the site hung.
   if (req.method === "GET" && url.pathname === "/api/health/details") {
     return send(res, 200, { ...runtimeSnapshot(), commit: DEPLOYED_COMMIT || null }, { "X-Robots-Tag": "noindex, nofollow" });
+  }
+
+  // Aggregate numbers only (no patient names, phones, dates of birth) for the owner's reporting assistant.
+  // Closed unless REPORT_API_TOKEN (32+ characters) is set in /etc/e-clinic.env; send it as
+  // "Authorization: Bearer <token>". Removing the variable and restarting the service closes it again.
+  if (req.method === "GET" && url.pathname === "/api/reports/aggregate") {
+    const rate = consumeRateLimit(`report_api:${clientIp(req)}`, 30, 60 * 1000);
+    if (!rate.allowed) return send(res, 429, { error: "Слишком много запросов" }, { "Retry-After": String(rate.retryAfter) });
+    const expected = String(process.env.REPORT_API_TOKEN || "");
+    const auth = String(req.headers.authorization || "");
+    const given = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7).trim() : "";
+    const digest = (value) => crypto.createHash("sha256").update(value).digest();
+    if (expected.length < 32 || !given || !crypto.timingSafeEqual(digest(expected), digest(given))) {
+      securityEvent("report_token_rejected", req);
+      return send(res, 401, { error: "Нужен ключ доступа к отчётам" });
+    }
+    const reportDb = await readDb();
+    console.log(JSON.stringify({ timestamp: new Date().toISOString(), level: "info", category: "security", event: "report_api_access", ip: clientIp(req), query: url.search.slice(0, 200) }));
+    return send(res, 200, buildAggregateReport(reportDb, { ...reportFilters(url), isExcludedClinic, patientIdentity: normalizePatientIdentity }), { "X-Robots-Tag": "noindex, nofollow" });
   }
 
   if (req.method === "GET" && url.pathname === "/api/health") {
