@@ -42,6 +42,18 @@ try {
   assert.match(adminCookie, /Max-Age=43200/, "admin session: still 12 hours");
   const workspace = await fetch(`${base}/api/doctor/workspace`, { headers: { Cookie: doctorCookie.split(";")[0] } });
   assert.equal(workspace.status, 200);
+  // Account form: pressing «Сохранить» without changes writes nothing; a login change is logged old -> new.
+  const sid = doctorCookie.split(";")[0];
+  const put = (body) => fetch(`${base}/api/doctor/account`, { method: "PUT", headers: { "Content-Type": "application/json", Cookie: sid }, body: JSON.stringify(body) });
+  const auditEvents = async () => (await (await fetch(`${base}/api/admin/dashboard?tab=audit`, { headers: { Cookie: admin } })).json()).activityEvents.filter((e) => e.type === "doctor_account_updated");
+  const unchanged = await (await put({ login: "saida", currentAccessKey: "1234s", accessKey: "" })).json();
+  assert.equal(unchanged.unchanged, true);
+  assert.equal((await auditEvents()).length, 0, "no log entry when nothing changed");
+  assert.equal((await put({ login: "saida", currentAccessKey: "wrong1", accessKey: "" })).status, 401);
+  assert.equal((await put({ login: "saida2", currentAccessKey: "1234s", accessKey: "" })).status, 200);
+  const [changed] = await auditEvents();
+  assert.match(changed.details, /логин: «saida» → «saida2»/);
+  assert.equal(await login("saida2", "1234s"), 200, "the new login works");
   console.log("Doctor login test passed.");
 } finally {
   server.kill();

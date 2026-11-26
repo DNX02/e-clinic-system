@@ -2851,6 +2851,11 @@ function setWeeklyDocxCache(key, buffer) {
     if (!login) return send(res, 400, { error: "Логин обязателен" });
     const loginTaken = db.doctors.some((item) => item.id !== doctor.id && loginKey(item.login) === loginKey(login));
     if (loginTaken) return send(res, 409, { error: "Такой логин уже используется" });
+    const previousLogin = doctor.login;
+    const loginChanged = login !== previousLogin;
+    // Pressing «Сохранить» without changing anything is not an account change (doctors did this thinking it
+    // saved patients): nothing is written and nothing goes to the log.
+    if (!loginChanged && !accessKey) return send(res, 200, { doctor: publicDoctor(doctor), currentSessionEnded: false, unchanged: true });
     doctor.login = login;
     if (accessKey) {
       const validatedAccessKey = validateNewPassword(accessKey, "Новый пароль");
@@ -2858,7 +2863,11 @@ function setWeeklyDocxCache(key, buffer) {
       doctor.accessKeyHash = hashPassword(validatedAccessKey);
       invalidateUserSessions(db, "doctor", doctor.id);
     }
-    appendActivity(db, { type: "doctor_account_updated", actorRole: "doctor", actorId: doctor.id, actorName: doctor.fullName, clinic: doctor.clinic, details: accessKey ? "Врач изменил логин и пароль; старые сеансы завершены" : "Врач изменил логин" });
+    const changes = [
+      loginChanged ? `логин: «${previousLogin}» → «${login}»` : "",
+      accessKey ? "ключ изменён, старые сеансы завершены" : ""
+    ].filter(Boolean).join("; ");
+    appendActivity(db, { type: "doctor_account_updated", actorRole: "doctor", actorId: doctor.id, actorName: doctor.fullName, clinic: doctor.clinic, details: `Врач изменил аккаунт: ${changes}` });
     await writeDb(db);
     return send(res, 200, { doctor: publicDoctor(doctor), currentSessionEnded: Boolean(accessKey) });
   }

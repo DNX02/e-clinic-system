@@ -251,6 +251,14 @@ const TAJIK_TEXT = {
   "Обычный риск": "Хавфи муқаррарӣ",
   "Сначала к врачу": "Аввал беморони ба духтур",
   "Сменить логин и пароль": "Иваз кардани логин ва парол",
+  "Здесь меняют только свой логин и ключ. Пациентов здесь не вводят — их добавляют в разделе «Пациенты» кнопкой «Добавить пациента».": "Дар ин ҷо танҳо логин ва калиди худро иваз мекунанд. Беморонро дар ин ҷо ворид намекунанд — онҳоро дар бахши «Беморон» бо тугмаи «Илова кардани бемор» илова мекунанд.",
+  "Текущий пароль": "Пароли ҳозира",
+  "Повторите новый ключ": "Калиди навро такрор кунед",
+  "Показать новый ключ": "Калиди навро нишон додан",
+  "Новый ключ и повтор не совпадают.": "Калиди нав ва такрори он мувофиқ нестанд.",
+  "Ваш новый ключ": "Калиди нави шумо",
+  "Запишите его. После сохранения войти можно будет только с этим ключом.": "Онро нависед. Пас аз сабт танҳо бо ҳамин калид ворид шудан мумкин аст.",
+  "Ничего не изменилось: логин и ключ остались прежними.": "Ҳеҷ чиз тағйир наёфт: логин ва калид ҳамон боқӣ монданд.",
   "Новый логин": "Логини нав",
   "Новый пароль / ключ": "Парол / калиди нав",
   "Оставьте пустым, если ключ менять не нужно": "Агар калидро иваз кардан лозим набошад, холӣ гузоред",
@@ -5541,16 +5549,21 @@ function doctorProfilePanel() {
   return html`
     <section class="panel doctor-profile-panel">
       <h2>${escapeHtml(t("Личный кабинет"))}</h2>
-      <form class="form account-form" id="doctorAccountForm">
-        <h3>${escapeHtml(t("Сменить логин и пароль"))}</h3>
-        <section class="grid two">
-          <div class="form-row"><label>${escapeHtml(t("Новый логин"))}</label><input name="login" value="${escapeHtml(state.doctor?.doctor?.login || "")}" required /></div>
-          <div class="form-row"><label>Текущий пароль</label><input name="currentAccessKey" type="password" autocomplete="current-password" required /></div>
-          <div class="form-row"><label>${escapeHtml(t("Новый пароль / ключ"))}</label><input name="accessKey" type="password" autocomplete="new-password" minlength="5" placeholder="${escapeHtml(t("Оставьте пустым, если ключ менять не нужно"))}" /></div>
-        </section>
-        <button>${escapeHtml(t("Сохранить логин и пароль"))}</button>
-        <div id="doctorAccountResult"></div>
-      </form>
+      <details class="account-details">
+        <summary>${escapeHtml(t("Сменить логин и пароль"))}</summary>
+        <div class="notice warn">${escapeHtml(t("Здесь меняют только свой логин и ключ. Пациентов здесь не вводят — их добавляют в разделе «Пациенты» кнопкой «Добавить пациента»."))}</div>
+        <form class="form account-form" id="doctorAccountForm" autocomplete="off">
+          <section class="grid two">
+            <div class="form-row"><label>${escapeHtml(t("Новый логин"))}</label><input name="login" value="${escapeHtml(state.doctor?.doctor?.login || "")}" required autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="off" /></div>
+            <div class="form-row"><label>${escapeHtml(t("Текущий пароль"))}</label><input name="currentAccessKey" type="password" autocomplete="current-password" required /></div>
+            <div class="form-row"><label>${escapeHtml(t("Новый пароль / ключ"))}</label><input name="accessKey" type="password" autocomplete="off" data-lpignore="true" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="${escapeHtml(t("Оставьте пустым, если ключ менять не нужно"))}" /></div>
+            <div class="form-row"><label>${escapeHtml(t("Повторите новый ключ"))}</label><input name="accessKeyRepeat" type="password" autocomplete="off" data-lpignore="true" autocapitalize="none" autocorrect="off" spellcheck="false" /></div>
+          </section>
+          <label class="inline-check"><input type="checkbox" id="showNewDoctorKey" /> ${escapeHtml(t("Показать новый ключ"))}</label>
+          <button>${escapeHtml(t("Сохранить логин и пароль"))}</button>
+          <div id="doctorAccountResult"></div>
+        </form>
+      </details>
       <h3>${escapeHtml(t("Последние осмотры"))}</h3>
       <div class="table-wrap">
         <table>
@@ -6135,21 +6148,33 @@ function bindDoctorVisit() {
 function bindDoctorAccountForm() {
   const form = document.querySelector("#doctorAccountForm");
   if (!form) return;
+  const t = (value) => translateDoctorText(value);
+  const result = (kind, text) => { document.querySelector("#doctorAccountResult").innerHTML = `<div class="notice ${kind}">${escapeHtml(text)}</div>`; };
+  document.querySelector("#showNewDoctorKey")?.addEventListener("change", (event) => {
+    for (const name of ["accessKey", "accessKeyRepeat"]) form.elements[name].type = event.target.checked ? "text" : "password";
+  });
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const data = Object.fromEntries(new FormData(form));
+    const newKey = String(data.accessKey || "").trim();
+    // A key the doctor never typed (browser "create password", a mistyped one) locks her out: ask for it twice
+    // and show it in plain text before saving.
+    if (newKey && newKey !== String(data.accessKeyRepeat || "").trim()) return result("danger", t("Новый ключ и повтор не совпадают."));
+    if (newKey && !window.confirm(`${t("Ваш новый ключ")}: ${newKey}\n\n${t("Запишите его. После сохранения войти можно будет только с этим ключом.")}`)) return;
+    delete data.accessKeyRepeat;
     try {
-      const data = Object.fromEntries(new FormData(form));
-      const result = await api("/api/doctor/account", { method: "PUT", body: JSON.stringify(data) });
-      if (result.currentSessionEnded) {
-        alert(translateDoctorText("Пароль изменён. Для безопасности войдите заново."));
+      const response = await api("/api/doctor/account", { method: "PUT", body: JSON.stringify(data) });
+      if (response.currentSessionEnded) {
+        alert(t("Пароль изменён. Для безопасности войдите заново."));
         window.location.href = DOCTOR_APP_PATH;
         return;
       }
-      state.doctor.doctor = result.doctor;
-      document.querySelector("#doctorAccountResult").innerHTML = `<div class="notice ok">${escapeHtml(translateDoctorText("Логин и пароль обновлены."))}</div>`;
+      state.doctor.doctor = response.doctor;
+      result(response.unchanged ? "warn" : "ok", t(response.unchanged ? "Ничего не изменилось: логин и ключ остались прежними." : "Логин и пароль обновлены."));
       form.elements.accessKey.value = "";
+      form.elements.accessKeyRepeat.value = "";
     } catch (error) {
-      document.querySelector("#doctorAccountResult").innerHTML = `<div class="notice danger">${escapeHtml(error.message)}</div>`;
+      result("danger", error.message);
     }
   });
 }

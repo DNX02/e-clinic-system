@@ -2699,3 +2699,25 @@ th {
 .detection-card.weight {
   border-top: 4px solid #8a5200;
 }
+
+.account-details {
+  margin: 8px 0 18px;
+}
+
+.account-details > summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding: 10px 0;
+}
+
+.inline-check {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.inline-check input {
+  min-height: auto;
+  width: auto;
+}
