@@ -270,6 +270,7 @@ const TAJIK_TEXT = {
   "Уже есть в базе": "Аллакай дар пойгоҳ ҳаст",
   "Откройте «Сохранённые анкеты» и нажмите «✓ Уже в базе» или «➕ Как нового».": "«Анкетаҳои нигоҳдошта»-ро кушоед ва «✓ Аллакай дар пойгоҳ» ё «➕ Ҳамчун нав»-ро пахш кунед.",
   "Сохранённые анкеты": "Анкетаҳои нигоҳдошта",
+  "Фамилия, имя, телефон или дата рождения": "Ному насаб, телефон ё санаи таваллуд",
   "Отправляется…": "Фиристода истодааст…",
   "Эта анкета уже сохранена — повторно отправлять не нужно.": "Ин анкета аллакай нигоҳ дошта шудааст — дубора фиристодан лозим нест.",
   "Ожидают врача": "Интизори духтур",
@@ -1089,6 +1090,13 @@ document.addEventListener("click", async (event) => {
     renderAdmin();
   }
   if (action === "print-patient-card") window.print();
+  if (action === "doctor-jump-to-search") {
+    const input = document.querySelector("#patientSearch");
+    document.querySelector("#doctorPatientSearchBlock")?.scrollIntoView({ block: "start", behavior: "smooth" });
+    input?.focus({ preventScroll: true });
+    return;
+  }
+
   if (action === "nurse-report-period") {
     const today = dushanbeToday();
     const shift = (days) => new Date(Date.parse(`${today}T00:00:00Z`) - days * 86400000).toISOString().slice(0, 10);
@@ -5635,6 +5643,7 @@ function doctorPatientsPanel() {
           <div class="doctor-empty-icon">+</div>
           <h2>${escapeHtml(t("Выберите пациента"))}</h2>
           <p class="muted">${escapeHtml(t("После выбора откроется повторное измерение, направления и препараты."))}</p>
+          <button type="button" class="doctor-search-jump" data-action="doctor-jump-to-search">🔍 ${escapeHtml(t("Поиск пациента"))}</button>
         </section>
       `;
   return html`
@@ -5659,6 +5668,14 @@ function doctorPatientsPanel() {
           <p class="muted">${escapeHtml(t("Пациенты"))}: ${queueCount}</p>
         </div>
       </div>
+      <div class="doctor-patient-search" id="doctorPatientSearchBlock">
+        <label for="patientSearch">🔍 ${escapeHtml(t("Поиск пациента"))}</label>
+        <div class="actions">
+          <input id="patientSearch" type="search" enterkeyhint="search" value="${escapeHtml(state.doctorPatientSearch)}" placeholder="${escapeHtml(t("Фамилия, имя, телефон или дата рождения"))}" autocomplete="off" autocorrect="off" spellcheck="false" />
+          ${state.doctorPatientSearch ? `<button type="button" class="secondary" data-action="clear-doctor-patient-search">${escapeHtml(t("Сбросить"))}</button>` : ""}
+        </div>
+        <small class="muted">${escapeHtml(t("Можно искать по ФИО, телефону, дате рождения или поликлинике"))}</small>
+      </div>
       ${doctorLanguageControl()}
       <div class="actions">
         <button type="button" data-action="add-doctor-patient">${escapeHtml(t("Добавить пациента"))}</button>
@@ -5667,14 +5684,6 @@ function doctorPatientsPanel() {
       </div>
       <div class="muted" id="doctorSyncStatus"></div>
       <div id="doctorSyncResult"></div>
-      <div class="doctor-patient-search">
-        <label for="patientSearch">${escapeHtml(t("Поиск пациента"))}</label>
-        <div class="actions">
-          <input id="patientSearch" type="search" value="${escapeHtml(state.doctorPatientSearch)}" placeholder="${escapeHtml(t("Введите имя или фамилию"))}" autocomplete="off" />
-          ${state.doctorPatientSearch ? `<button type="button" class="secondary" data-action="clear-doctor-patient-search">${escapeHtml(t("Сбросить"))}</button>` : ""}
-        </div>
-        <small class="muted">${escapeHtml(t("Можно искать по ФИО, телефону, дате рождения или поликлинике"))}</small>
-      </div>
       <select id="doctorPatientFilter" aria-label="Фильтр пациентов">
         <option value="all" ${state.doctorPatientFilter === "all" ? "selected" : ""}>${escapeHtml(t("Все пациенты"))}</option>
         <option value="risk" ${state.doctorPatientFilter === "risk" ? "selected" : ""}>${escapeHtml(t("Повышенный риск"))}</option>

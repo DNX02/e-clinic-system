@@ -747,11 +747,27 @@ th {
   margin-bottom: 4px;
 }
 
+/* Doctors could not find the patient search: it was translucent and looked like plain text.
+   Now it is a white field with a thick green border right under the file title. */
 .patient-sidebar input#patientSearch {
-  background: rgba(255, 255, 255, 0.54);
-  border-color: rgba(255, 255, 255, 0.76);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
-  margin-top: 12px;
+  background: #ffffff;
+  border: 2px solid var(--primary);
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(15, 107, 92, 0.12);
+  color: #111;
+  font-size: 17px;
+  margin-top: 0;
+  min-height: 52px;
+  padding: 0 14px;
+}
+
+.patient-sidebar input#patientSearch::placeholder {
+  color: #6b7a78;
+}
+
+.patient-sidebar input#patientSearch:focus {
+  box-shadow: 0 0 0 4px rgba(15, 107, 92, 0.2);
+  outline: none;
 }
 
 .patient-card {
@@ -977,13 +993,26 @@ th {
 }
 
 .doctor-patient-search {
-  margin-top: 12px;
+  background: #eef7f4;
+  border: 1px solid #cfe5de;
+  border-radius: 14px;
+  margin: 12px 0 14px;
+  padding: 12px;
 }
 
 .doctor-patient-search > label {
+  color: var(--primary);
   display: block;
-  font-weight: 700;
-  margin-bottom: 4px;
+  font-size: 17px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.doctor-search-jump {
+  font-size: 17px;
+  margin-top: 14px;
+  min-height: 52px;
+  width: 100%;
 }
 
 .doctor-patient-search input#patientSearch {
