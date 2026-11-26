@@ -73,6 +73,19 @@ try {
 
   const only11 = await (await report(open.base, TOKEN, `?clinic=${encodeURIComponent("Поликлиника №11")}`)).json();
   assert.equal(only11.screening.surveys, 1, "clinic filter");
+
+  // 3. Server health for the assistant: same token, no patient data, failed logins counted.
+  await post("/api/login/doctor", { login: "dr9", accessKey: "wrong-key-1" });
+  assert.equal((await fetch(`${open.base}/api/reports/ops`)).status, 401, "ops needs the token too");
+  const opsResponse = await fetch(`${open.base}/api/reports/ops`, { headers: { Authorization: `Bearer ${TOKEN}` } });
+  assert.equal(opsResponse.status, 200);
+  const opsRaw = await opsResponse.text();
+  const ops = JSON.parse(opsRaw);
+  assert.equal(ops.database.ok, true);
+  assert.ok(ops.uptimeSec >= 0 && ops.startedAt);
+  assert.ok(ops.problems.securityEvents.login_failed >= 1, "failed logins are counted");
+  assert.ok("backup" in ops && "load" in ops);
+  assert.doesNotMatch(opsRaw, /Конфиденциалов|Секрет|1961-07-07|99290055|Тайная|Doctor9999|wrong-key/, "no patient data or keys");
   console.log("Report API test passed.");
 } finally {
   open.server.kill();

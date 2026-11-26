@@ -148,3 +148,58 @@ export function runtimeSnapshot() {
 export function closeMinuteForTest() {
   return closeMinute();
 }
+
+// Server problems of the last 24 hours for the owner's assistant (GET /api/reports/ops): failed requests,
+// failed background jobs, and counts of security events. Messages are scrubbed of anything that could be
+// patient data (numbers, quoted and bracketed values, e-mail addresses) and cut short.
+const PROBLEM_WINDOW_MS = 24 * 60 * 60 * 1000;
+const MAX_PROBLEMS = 200;
+const problems = [];
+const securityCounts = [];
+
+export function scrubMessage(message) {
+  return String(message || "")
+    .replace(/\S+@\S+/g, "…")
+    .replace(/\([^)]*\)/g, "(…)")
+    .replace(/"[^"]*"|«[^»]*»|'[^']*'/g, "«…»")
+    .replace(/\d{3,}/g, "#")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 160);
+}
+
+export function recordProblem(kind, { route = "", error = null, message = "" } = {}) {
+  problems.push({
+    at: new Date().toISOString(),
+    kind,
+    route: route ? routeName(route) : "",
+    error: error?.code || error?.name || "",
+    message: scrubMessage(message || error?.message || "")
+  });
+  if (problems.length > MAX_PROBLEMS) problems.splice(0, problems.length - MAX_PROBLEMS);
+}
+
+export function recordSecurityEvent(event) {
+  const now = Date.now();
+  const hour = Math.floor(now / 3600000) * 3600000;
+  let bucket = securityCounts.at(-1);
+  if (!bucket || bucket.hour !== hour) {
+    bucket = { hour, counts: {} };
+    securityCounts.push(bucket);
+    while (securityCounts.length && securityCounts[0].hour <= now - PROBLEM_WINDOW_MS - 3600000) securityCounts.shift();
+  }
+  bucket.counts[event] = (bucket.counts[event] || 0) + 1;
+}
+
+export function problemsSnapshot() {
+  const since = Date.now() - PROBLEM_WINDOW_MS;
+  const recent = problems.filter((item) => Date.parse(item.at) >= since);
+  const byKind = {};
+  for (const item of recent) byKind[item.kind] = (byKind[item.kind] || 0) + 1;
+  const security = {};
+  for (const bucket of securityCounts) {
+    if (bucket.hour < since - 3600000) continue;
+    for (const [event, count] of Object.entries(bucket.counts)) security[event] = (security[event] || 0) + count;
+  }
+  return { windowHours: 24, total: recent.length, byKind, latest: recent.slice(-50).reverse(), securityEvents: security };
+}

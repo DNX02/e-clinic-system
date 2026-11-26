@@ -11,7 +11,7 @@ import { gzipSync } from "node:zlib";
 import { labHasResult, patientChanges, waitingPatients, verifyBackupRestore } from './care-workflow.js';
 import PDFDocument from "pdfkit";
 import { buildWeeklyMonitorReportDocx, monitorReportPeriod } from "./weekly-monitor-report.js";
-import { recordDbWrite, recordRequestSource, runtimeSnapshot, startRuntimeMonitor, trackRequest } from "./runtime-monitor.js";
+import { problemsSnapshot, recordDbWrite, recordProblem, scrubMessage, recordRequestSource, recordSecurityEvent, runtimeSnapshot, startRuntimeMonitor, trackRequest } from "./runtime-monitor.js";
 import { clientIpInfo, deviceLabel } from "./client-info.js";
 import { buildNurseReport, dushanbeDate, nurseNameKey } from "./nurse-report.js";
 import { nurseReportPdf } from "./nurse-report-pdf.js";
@@ -721,6 +721,7 @@ function startStateSnapshots() {
       await flushStateSnapshot();
     } catch (error) {
       console.error("Background state snapshot failed:", error.message || error);
+      recordProblem("state_snapshot_failed", { error });
     } finally {
       snapshotRunning = false;
     }
@@ -909,6 +910,7 @@ function queueSecurityAlert(req, event, details = {}) {
 }
 
 function securityEvent(event, req, details = {}) {
+  recordSecurityEvent(event === "http_error_response" ? `http_${details.statusCode || "error"}` : event);
   const pathname = String(req.url || "").split("?", 1)[0] || "/";
   console.warn(JSON.stringify({
     timestamp: new Date().toISOString(),
@@ -1860,7 +1862,7 @@ async function handleApi(req, res, url) {
   // Aggregate numbers only (no patient names, phones, dates of birth) for the owner's reporting assistant.
   // Closed unless REPORT_API_TOKEN (32+ characters) is set in /etc/e-clinic.env; send it as
   // "Authorization: Bearer <token>". Removing the variable and restarting the service closes it again.
-  if (req.method === "GET" && url.pathname === "/api/reports/aggregate") {
+  if (req.method === "GET" && (url.pathname === "/api/reports/aggregate" || url.pathname === "/api/reports/ops")) {
     const rate = consumeRateLimit(`report_api:${clientIp(req)}`, 30, 60 * 1000);
     if (!rate.allowed) return send(res, 429, { error: "Слишком много запросов" }, { "Retry-After": String(rate.retryAfter) });
     const expected = String(process.env.REPORT_API_TOKEN || "");
@@ -1870,6 +1872,25 @@ async function handleApi(req, res, url) {
     if (expected.length < 32 || !given || !crypto.timingSafeEqual(digest(expected), digest(given))) {
       securityEvent("report_token_rejected", req);
       return send(res, 401, { error: "Нужен ключ доступа к отчётам" });
+    }
+    if (url.pathname === "/api/reports/ops") {
+      // Server health for the owner's assistant: version, load, errors of the last 24 h, backups. No patient data.
+      const opsDb = await readDb();
+      let database;
+      try { database = await databaseHealth(); } catch (error) { database = { ok: false, error: scrubMessage(error.message) }; }
+      const runtime = runtimeSnapshot();
+      return send(res, 200, {
+        generatedAt: new Date().toISOString(),
+        commit: DEPLOYED_COMMIT || null,
+        node: process.version,
+        startedAt: runtime.startedAt,
+        uptimeSec: runtime.uptimeSec,
+        database,
+        load: { cpuCount: runtime.cpuCount, totalMemMb: runtime.totalMemMb, now: runtime.now, lastHour: runtime.lastHour, slowRequests: runtime.slowRequests },
+        problems: problemsSnapshot(),
+        backup: opsDb.settings?.backupStatus || null,
+        dailyReport: opsDb.settings?.dailyReports ? { lastSentDate: opsDb.settings.dailyReports.lastSentDate || "", lastError: scrubMessage(opsDb.settings.dailyReports.lastError) } : null
+      }, { "X-Robots-Tag": "noindex, nofollow" });
     }
     const reportDb = await readDb();
     console.log(JSON.stringify({ timestamp: new Date().toISOString(), level: "info", category: "security", event: "report_api_access", ip: clientIp(req), query: url.search.slice(0, 200) }));
@@ -4300,6 +4321,7 @@ async function runScheduledMaintenance() {
     }
   } catch (error) {
     console.error("Scheduled maintenance failed:", error.message || error);
+    recordProblem("scheduled_maintenance_failed", { error });
     try {
       const db = await readDb();
       if (db.settings?.dailyReports) {
@@ -4338,6 +4360,7 @@ const server = createServer(async (req, res) => {
   } catch (error) {
     securityEvent("application_error", req, { errorName: error?.name || "Error" });
     console.error(error);
+    if (![400, 413].includes(error.statusCode)) recordProblem(isDatabaseError(error) ? "database_error" : "server_error", { route: req.url, error });
     if ([400, 413].includes(error.statusCode)) {
       return send(res, error.statusCode, { error: error.message });
     }
