@@ -19,6 +19,7 @@ import { normalizeImportRow } from "./patient-import.js";
 import { buildDetectionReport } from "./detection-report.js";
 import { detectionReportPdf } from "./detection-report-pdf.js";
 import { buildAggregateReport } from "./aggregate-report.js";
+import { nurseHistory, searchNurses } from "./nurse-search.js";
 
 // The request being handled, so the activity log can note who did it (IP, device) without
 // passing req through every function that writes to the log.
@@ -2136,6 +2137,13 @@ async function handleApi(req, res, url) {
       }));
     }
     if (tab === "nurses") dashboard.nurseReport = nurseReportFor(viewDb, url);
+    if (tab === "nurseSearch") {
+      // Scoped like every admin tab: a head nurse searches only her clinic (viewDb).
+      const surveys = (viewDb.nurseSurveys || []).filter((survey) => !isExcludedClinic(survey.patient?.clinic || survey.clinic));
+      const query = String(url.searchParams.get("q") || "").trim().slice(0, 100);
+      const nurseKey = String(url.searchParams.get("nurse") || "").trim().slice(0, 200);
+      dashboard.nurseSearch = { query, nurses: searchNurses(surveys, query), history: nurseKey ? nurseHistory(surveys, nurseKey) : null };
+    }
     if (tab === "detection") dashboard.detectionReport = detectionReportFor(viewDb, url);
     if (tab === "operations") {
       dashboard.surveyClinics = [...new Set(viewDb.nurseSurveys.map((survey) => survey.patient?.clinic || survey.clinic).filter(Boolean))];

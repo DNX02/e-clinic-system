@@ -2795,3 +2795,60 @@ th {
   min-height: auto;
   width: auto;
 }
+
+/* Admin: "Поиск медсестры" */
+.nurse-search-results {
+  display: grid;
+  gap: 10px;
+}
+
+.nurse-search-card {
+  align-items: center;
+  border: 1px solid var(--line, #d9e3e1);
+  border-left: 4px solid var(--brand, #0f6b5c);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px 16px;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) auto;
+  padding: 12px 14px;
+}
+
+.nurse-search-card.active {
+  background: rgba(15, 107, 92, 0.06);
+}
+
+.nurse-search-card__numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.nurse-history-day {
+  border-top: 1px solid var(--line, #d9e3e1);
+  padding: 8px 0;
+}
+
+.nurse-history-day summary {
+  cursor: pointer;
+  padding: 6px 0;
+}
+
+@media (max-width: 720px) {
+  .nurse-search-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .nurse-history-table td {
+    grid-template-columns: 6.5em 1fr;
+  }
+
+  .nurse-history-table td[data-label=""] {
+    display: block;
+  }
+
+  .nurse-history-table td[data-label=""]::before {
+    content: none;
+  }
+}

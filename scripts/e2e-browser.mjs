@@ -344,7 +344,7 @@ try {
   });
   await step("admin nav: everyday tabs visible, the rest in the 'Ещё' menu, no duplicate tab", async () => {
     const visible = await adminPage.locator('.nav > button[data-action="admin-tab"]').allInnerTexts();
-    assert.deepEqual(visible, ["Статистика", "Контроль диабета", "Пациенты", "Врачи", "Журнал"]);
+    assert.deepEqual(visible, ["Статистика", "Контроль диабета", "Пациенты", "Поиск медсестры", "Врачи", "Журнал"]);
     assert.equal(await adminPage.locator('[data-tab="control"]').count(), 0, "duplicate 'control' tab must be gone");
   });
   await step("admin sees every tab render without broken values", async () => {
@@ -402,6 +402,26 @@ try {
     const menu = await m.locator(".nav-more__menu").boundingBox();
     assert.ok(menu.y > navAfterScroll.y && menu.x >= 0 && menu.x + menu.width <= 390, "'Ещё' opens below the tabs, fully on screen");
     await m.click('.nav-more__menu [data-tab="doctors"], .nav-more__menu [data-tab="qr"]');
+    // "Поиск медсестры" on the phone: find, open the history, open a patient's card.
+    await m.click('[data-action="admin-tab"][data-tab="nurseSearch"]');
+    await m.fill("#nurseSearchInput", "сестрина");
+    await m.click('#nurseSearchForm button[type="submit"]');
+    await m.waitForSelector(".nurse-search-card");
+    const card = await m.locator(".nurse-search-card").first().innerText();
+    assert.match(card, /Сестрина Мария/);
+    await m.locator(".nurse-search-card").first().getByText("История").click();
+    await m.waitForSelector("#nurseHistory");
+    const historyText = await m.locator("#nurseHistory").innerText();
+    assert.match(historyText, /Рахимов/);
+    assert.match(historyText, /К врачу/);
+    const [sw, cw] = await m.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
+    assert.ok(sw <= cw + 1, "the history fits the phone screen");
+    if (process.env.E2E_SHOT) {
+      await m.locator(".nurse-search-card").first().screenshot({ path: `${process.env.E2E_SHOT}-nurse-card.png` });
+      await m.locator("#nurseHistory").screenshot({ path: `${process.env.E2E_SHOT}-nurse-history.png` });
+    }
+    await m.locator("#nurseHistory").getByText("Карточка").first().click();
+    await m.waitForFunction(() => /Рахимов|Саидова|Офлайнов/.test(document.querySelector(".audit-modal, .modal, [role=dialog]")?.innerText || document.body.innerText));
     await mobile.close();
   });
 

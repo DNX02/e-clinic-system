@@ -1104,6 +1104,17 @@ document.addEventListener("click", async (event) => {
       alert(error.message);
     }
   }
+  if (action === "nurse-search-open") {
+    state.nurseSearchKey = event.target.closest("[data-action]").dataset.key || "";
+    await loadAdmin();
+    setTimeout(() => document.querySelector("#nurseHistory")?.scrollIntoView({ block: "start", behavior: "smooth" }), 0);
+    return;
+  }
+  if (action === "nurse-search-back") {
+    state.nurseSearchKey = "";
+    await loadAdmin();
+    return;
+  }
   if (action === "close-audit-survey") {
     state.auditSurvey = null;
     renderAdmin();
@@ -2227,6 +2238,10 @@ async function loadAdmin() {
       params.set("page", String(state.auditPage || 1));
       params.set("clinic", state.auditClinic || "all");
     }
+    if (state.tab === "nurseSearch") {
+      if (state.nurseSearchQuery) params.set("q", state.nurseSearchQuery);
+      if (state.nurseSearchKey) params.set("nurse", state.nurseSearchKey);
+    }
     if (state.tab === "nurses" || state.tab === "detection") {
       params.set("clinic", state.nurseReportClinic || "all");
       if (state.nurseReportFrom) params.set("from", state.nurseReportFrom);
@@ -2252,17 +2267,18 @@ async function loadAdmin() {
 const ADMIN_TAB_NAMES = {
   stats: "Статистика", center: "Контроль диабета", surveys: "Пациенты", doctors: "Врачи", audit: "Журнал",
   training: "Обучение врачей №4", nurseTraining: "Тесты медсестёр №5", visits: "Назначения", operations: "План и сообщения",
-  headNurses: "Контроль старших", access: "Доступы", qr: "Ссылки и QR", nurses: "Медсёстры", detection: "Выявление СД, АГ, ожирения"
+  headNurses: "Контроль старших", access: "Доступы", qr: "Ссылки и QR", nurses: "Медсёстры", detection: "Выявление СД, АГ, ожирения",
+  nurseSearch: "Поиск медсестры"
 };
 // Everyday sections stay visible; the rest go into the "Ещё" menu.
-const ADMIN_PRIMARY_TABS = ["stats", "center", "surveys", "doctors", "audit"];
+const ADMIN_PRIMARY_TABS = ["stats", "center", "surveys", "nurseSearch", "doctors", "audit"];
 
 function renderAdmin() {
   // "control" was a duplicate tab of "center" (same screen); keep the old value working.
   if (state.tab === "control") state.tab = "center";
   const visibleTabs = state.me?.role === "head_nurse"
-    ? ["stats", "center", "surveys", "audit", "nurses", "detection", "operations"]
-    : ["stats", "center", "surveys", "doctors", "audit", "nurses", "detection", "training", "nurseTraining", "visits", "operations", "access", "qr"];
+    ? ["stats", "center", "surveys", "nurseSearch", "audit", "nurses", "detection", "operations"]
+    : ["stats", "center", "surveys", "nurseSearch", "doctors", "audit", "nurses", "detection", "training", "nurseTraining", "visits", "operations", "access", "qr"];
   if (state.me?.role === "owner") visibleTabs.splice(visibleTabs.indexOf("access"), 0, "headNurses");
   let primary = visibleTabs.filter((tab) => ADMIN_PRIMARY_TABS.includes(tab));
   let extra = visibleTabs.filter((tab) => !ADMIN_PRIMARY_TABS.includes(tab));
@@ -2300,6 +2316,7 @@ function adminTab() {
   if (state.tab === "access") return renderAccessAdmin();
   if (state.tab === "qr") return renderQrAdmin();
   if (state.tab === "nurses") return renderNurseReportAdmin();
+  if (state.tab === "nurseSearch") return renderNurseSearchAdmin();
   if (state.tab === "detection") return renderDetectionReportAdmin();
   return renderStatsAdmin();
 }
@@ -3101,6 +3118,71 @@ function renderDetectionReportAdmin() {
   </section>`;
 }
 
+// "Поиск медсестры": find a nurse by surname, then her patients day by day (newest first).
+function renderNurseSearchAdmin() {
+  const data = state.admin.nurseSearch || { query: "", nurses: [], history: null };
+  const date = (value) => value ? value.split("-").reverse().join(".") : "";
+  const time = (iso) => iso ? new Date(iso).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Dushanbe" }) : "";
+  const spellings = (list) => list.length > 1 ? `<div class="muted nurse-variants">Написания: ${list.map((item) => `${escapeHtml(item.name)} (${item.count})`).join(", ")}</div>` : "";
+  const clinics = (list) => list.map((item) => `${escapeHtml(item.clinic || "-")} (${item.count})`).join(", ");
+  const found = data.nurses.map((nurse) => html`
+    <article class="nurse-search-card${state.nurseSearchKey === nurse.key ? " active" : ""}">
+      <div><strong>${escapeHtml(nurse.name)}</strong>${spellings(nurse.spellings)}<div class="muted">${clinics(nurse.clinics)}</div></div>
+      <div class="nurse-search-card__numbers"><span><strong>${nurse.surveys}</strong> анкет</span><span><strong>${nurse.needsDoctor}</strong> к врачу</span><span>${nurse.activeDays} дн. · ${escapeHtml(date(nurse.firstDate))} — ${escapeHtml(date(nurse.lastDate))}</span></div>
+      <button type="button" data-action="nurse-search-open" data-key="${escapeHtml(nurse.key)}">История</button>
+    </article>`).join("");
+  const history = data.history;
+  let historyBlock = "";
+  if (history) {
+    const byDay = new Map();
+    for (const row of history.rows) {
+      if (!byDay.has(row.day)) byDay.set(row.day, []);
+      byDay.get(row.day).push(row);
+    }
+    const days = [...byDay.entries()].map(([day, rows]) => html`
+      <details class="nurse-history-day" ${byDay.size <= 3 || day === history.rows[0]?.day ? "open" : ""}>
+        <summary><strong>${escapeHtml(date(day) || "Без даты")}</strong> — ${rows.length} пациент(ов)${rows.some((row) => row.needsDoctor) ? `, к врачу: ${rows.filter((row) => row.needsDoctor).length}` : ""}</summary>
+        <div class="table-wrap nurse-report-table nurse-history-table"><table><thead><tr><th>Время</th><th>Пациент</th><th>Поликлиника</th><th>АД / сахар</th><th>Решение</th><th></th></tr></thead><tbody>
+        ${rows.map((row) => html`<tr>
+          <td data-label="Время">${escapeHtml(time(row.createdAt))}</td>
+          <td data-label="Пациент"><strong>${escapeHtml(row.patientName || "-")}</strong><div class="muted">${escapeHtml(row.birthDate ? date(row.birthDate) : "")}</div>${row.nurseNameAsTyped !== history.name ? `<div class="muted">Записала как: ${escapeHtml(row.nurseNameAsTyped)}</div>` : ""}</td>
+          <td data-label="Поликлиника">${escapeHtml(row.clinic || "-")}</td>
+          <td data-label="АД / сахар">${row.systolic || "-"}/${row.diastolic || "-"} · ${row.glucose ? `сахар ${row.glucose}` : "сахар -"}</td>
+          <td data-label="Решение">${row.needsDoctor ? `<span class="pill danger">К врачу</span><div class="muted">${escapeHtml((row.referralReasons || []).join("; "))}</div>` : `<span class="pill ok">Обычный риск</span>`}</td>
+          <td data-label=""><button type="button" class="secondary" data-action="open-audit-survey" data-id="${escapeHtml(row.id)}">Карточка</button></td>
+        </tr>`).join("")}
+        </tbody></table></div>
+      </details>`).join("");
+    historyBlock = html`<section class="panel" id="nurseHistory">
+      <div class="section-title"><div><h2>История: ${escapeHtml(history.name)}</h2><p class="muted">${clinics(history.clinics)}</p>${spellings(history.spellings)}</div>
+        <button type="button" class="secondary" data-action="nurse-search-back">← К результатам</button></div>
+      <section class="grid three">
+        <div class="metric"><span>Добавила пациентов</span><strong>${history.total}</strong></div>
+        <div class="metric"><span>Направила к врачу</span><strong>${history.needsDoctor}</strong></div>
+        <div class="metric"><span>Дней работы</span><strong>${byDay.size}</strong></div>
+      </section>
+      ${days || `<p class="muted">Анкет нет.</p>`}
+      ${history.rows.length < history.total ? `<p class="muted">Показаны последние ${history.rows.length} из ${history.total}.</p>` : ""}
+    </section>`;
+  } else if (state.nurseSearchKey) {
+    historyBlock = `<section class="panel"><p class="muted">Медсестра не найдена.</p></section>`;
+  }
+  return html`<section class="panel">
+    <div class="section-title"><div><h2>Поиск медсестры</h2><p class="muted">Введите фамилию или имя медсестры (можно часть). Разные написания одной медсестры (х/ҳ, с отчеством и без) собраны вместе. Нажмите «История», чтобы увидеть, каких пациентов и когда она добавила.</p></div></div>
+    <form id="nurseSearchForm" class="audit-search-form">
+      <label for="nurseSearchInput">Фамилия или имя медсестры</label>
+      <div class="actions">
+        <input id="nurseSearchInput" name="q" type="search" value="${escapeHtml(state.nurseSearchQuery || "")}" placeholder="Например: Махмадназар" autocomplete="off" />
+        <button type="submit">Найти</button>
+      </div>
+    </form>
+    ${data.query ? `<p class="muted">Найдено медсестёр: ${data.nurses.length}${data.nurses.length >= 50 ? " (показаны первые 50, уточните запрос)" : ""}</p>` : ""}
+    <div class="nurse-search-results">${found || (data.query ? `<p class="muted">Никого не найдено. Попробуйте часть фамилии.</p>` : "")}</div>
+  </section>
+  ${historyBlock}
+  ${renderAuditSurveyModal()}`;
+}
+
 function renderNurseReportAdmin() {
   const report = state.admin.nurseReport;
   if (!report) return `<section class="panel"><p class="muted">Загрузка…</p></section>`;
@@ -3535,6 +3617,13 @@ function renderQrAdmin() {
 
 function bindAdminForms() {
   bindAdminTrainingFilters();
+  document.querySelector("#nurseSearchForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    state.nurseSearchQuery = String(new FormData(event.currentTarget).get("q") || "").trim();
+    state.nurseSearchKey = "";
+    await loadAdmin();
+    document.querySelector("#nurseSearchInput")?.focus();
+  });
   document.querySelector("#surveySearchForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     state.surveySearch = String(new FormData(event.currentTarget).get("query") || "").trim();
