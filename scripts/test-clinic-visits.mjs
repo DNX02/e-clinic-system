@@ -71,6 +71,9 @@ try {
   assert.equal(again.status, 200);
   assert.equal((await again.json()).alreadySaved, true);
   assert.equal((await workspace(endo)).visits.length, 1, "one exam, not two");
+  // The admin finds a nurse's patients by the nurse's name (Пациенты tab search).
+  const found = await (await fetch(`${base}/api/admin/dashboard?tab=surveys&search=${encodeURIComponent("сестрина")}`, { headers: { Cookie: admin } })).json();
+  assert.ok(JSON.stringify(found).includes("Направленов"), "search by nurse name finds her patient");
   console.log("Clinic visits test passed.");
 } finally {
   server.kill();

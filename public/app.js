@@ -2796,7 +2796,7 @@ function renderSurveyTable(surveys) {
   ].join("");
   const rows = (surveys || []).map((survey) => html`
     <tr>
-      <td>${escapeHtml(fullName(survey.patient))}<div class="muted">${escapeHtml(survey.patient?.clinic || "")}</div></td>
+      <td>${escapeHtml(fullName(survey.patient))}<div class="muted">${escapeHtml(survey.patient?.clinic || "")}</div>${survey.nurse?.fullName ? `<div class="muted">Медсестра: ${escapeHtml(survey.nurse.fullName)}</div>` : ""}</td>
       <td>${survey.patient?.birthDate || ""}</td>
       <td>${survey.measurements?.systolic ?? "-"}/${survey.measurements?.diastolic ?? "-"}</td>
       <td>${survey.findrisc?.score ?? "-"} - ${survey.findrisc?.level || ""}</td>
@@ -2831,9 +2831,9 @@ function renderSurveyTable(surveys) {
       <h2>Анкеты медсестры</h2>
       <details class="compact-admin-form"><summary>Объединить дубликаты пациентов</summary><form id="patientMergeForm" class="form grid two"><label>Карточка-дубликат<select name="sourceId">${patientOptions}</select></label><label>Основная карточка<select name="targetId">${patientOptions}</select></label><button>Объединить</button></form></details>
       <form id="surveySearchForm" class="audit-search-form">
-        <label for="surveySearch">Поиск пациента</label>
+        <label for="surveySearch">Поиск пациента или медсестры</label>
         <div class="actions">
-          <input id="surveySearch" name="query" type="search" value="${escapeHtml(state.surveySearch)}" placeholder="Фамилия, имя, телефон или дата рождения" autocomplete="off" />
+          <input id="surveySearch" name="query" type="search" value="${escapeHtml(state.surveySearch)}" placeholder="Пациент (ФИО, телефон, дата рождения) или ФИО медсестры" autocomplete="off" />
           <button>Найти</button>
           ${state.surveySearch ? `<button type="button" class="secondary" data-action="clear-survey-search">Сбросить</button>` : ""}
         </div>

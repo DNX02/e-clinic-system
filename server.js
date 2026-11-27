@@ -2093,7 +2093,8 @@ async function handleApi(req, res, url) {
             patient.birthDate,
             patient.phone,
             patient.address,
-            patient.clinic
+            patient.clinic,
+            survey.nurse?.fullName
           ].some((val) => String(val || "").toLocaleLowerCase("ru-RU").includes(searchQuery));
         })
         .sort((a, b) => {
