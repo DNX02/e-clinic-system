@@ -46,3 +46,4 @@ DEPLOYED_COMMIT
 # Local database (contains password hashes and sessions; never commit)
 data/db.json
 data/*.tmp
+outputs/
