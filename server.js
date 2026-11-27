@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { readFile, writeFile, mkdir, rename, readdir, unlink } from "node:fs/promises";
-import { existsSync, createReadStream, readFileSync } from "node:fs";
+import { existsSync, createReadStream, readFileSync, writeFileSync } from "node:fs";
 import { stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +28,23 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "public");
 const dataDir = process.env.DATA_DIR ? resolve(process.env.DATA_DIR) : join(__dirname, "data");
 const dbPath = join(dataDir, "db.json");
+const lastCrashPath = join(dataDir, "last-crash.json");
+
+// If the service still dies, leave a short note (no patient data) for GET /api/reports/ops, then exit as before
+// so systemd restarts it.
+process.on("uncaughtException", (error, origin) => {
+  try {
+    writeFileSync(lastCrashPath, JSON.stringify({
+      at: new Date().toISOString(),
+      origin,
+      error: error?.code || error?.name || "",
+      message: scrubMessage(error?.message || String(error)),
+      stack: String(error?.stack || "").split("\n").slice(1, 6).map((line) => scrubMessage(line.trim()))
+    }));
+  } catch {}
+  console.error(origin, error);
+  process.exit(1);
+});
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "0.0.0.0";
 const DATABASE_URL = process.env.DATABASE_URL || "";
@@ -444,15 +461,25 @@ function createEmptyDb() {
 
 async function pgPool() {
   if (!pgPoolPromise) {
-    pgPoolPromise = import("pg").then(({ Pool }) => new Pool({
-      connectionString: DATABASE_URL,
-      ssl: process.env.PGSSLMODE === "disable" ? false : { rejectUnauthorized: false },
-      max: Number(process.env.PG_POOL_MAX || 5),
-      connectionTimeoutMillis: PG_TIMEOUT_MS,
-      idleTimeoutMillis: 30000,
-      query_timeout: PG_TIMEOUT_MS,
-      statement_timeout: PG_TIMEOUT_MS
-    }));
+    pgPoolPromise = import("pg").then(({ Pool }) => {
+      const pool = new Pool({
+        connectionString: DATABASE_URL,
+        ssl: process.env.PGSSLMODE === "disable" ? false : { rejectUnauthorized: false },
+        max: Number(process.env.PG_POOL_MAX || 5),
+        connectionTimeoutMillis: PG_TIMEOUT_MS,
+        idleTimeoutMillis: 30000,
+        query_timeout: PG_TIMEOUT_MS,
+        statement_timeout: PG_TIMEOUT_MS
+      });
+      // An idle connection dropped by the database or the network emits "error" on the pool. Without a
+      // listener Node treats it as unhandled and the whole service exits (crash 27.11.2026 06:17 UTC).
+      // The pool already discards the broken client; the next query opens a fresh connection.
+      pool.on("error", (error) => {
+        console.error("PostgreSQL idle connection lost:", error.code || "", error.message || error);
+        recordProblem("database_connection_lost", { error });
+      });
+      return pool;
+    });
   }
   return pgPoolPromise;
 }
@@ -1889,6 +1916,7 @@ async function handleApi(req, res, url) {
         load: { cpuCount: runtime.cpuCount, totalMemMb: runtime.totalMemMb, now: runtime.now, lastHour: runtime.lastHour, slowRequests: runtime.slowRequests },
         problems: problemsSnapshot(),
         backup: opsDb.settings?.backupStatus || null,
+        lastCrash: (() => { try { return JSON.parse(readFileSync(lastCrashPath, "utf8")); } catch { return null; } })(),
         dailyReport: opsDb.settings?.dailyReports ? { lastSentDate: opsDb.settings.dailyReports.lastSentDate || "", lastError: scrubMessage(opsDb.settings.dailyReports.lastError) } : null
       }, { "X-Robots-Tag": "noindex, nofollow" });
     }
