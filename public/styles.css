@@ -793,6 +793,14 @@ th {
   border-left-color: var(--warn);
 }
 
+.patient-card.examined {
+  border-left-color: var(--ok, #15803d);
+}
+
+.examined-pill {
+  white-space: normal;
+}
+
 .patient-card__main {
   display: grid;
   gap: 4px;

@@ -255,6 +255,24 @@ try {
     await doctor.click('#visitForm button:not([type="button"])');
     await doctor.waitForFunction(() => /Осмотр сохранён/.test(document.querySelector("#doctorVisitSavedNotice")?.innerText || ""), null, { timeout: 5000 });
   });
+  await step("examined patient is marked 'Осмотрен' in the card and in the list", async () => {
+    const notice = await doctor.locator(".examined-notice").innerText();
+    assert.match(notice, /уже осмотрен/i);
+    assert.match(notice, /Предиабет/);
+    await doctor.selectOption("#doctorPatientFilter", "examined");
+    const examined = await doctor.locator("#patientList .patient-card").allInnerTexts();
+    assert.equal(examined.length, 1, "only the examined patient");
+    assert.match(examined[0], /Рахимов/);
+    assert.match(examined[0], /Осмотрен/);
+    if (process.env.E2E_SHOT) {
+      await doctor.locator(".examined-notice").screenshot({ path: `${process.env.E2E_SHOT}-notice.png` });
+      await doctor.locator("#patientList .patient-card").first().screenshot({ path: `${process.env.E2E_SHOT}-card.png` });
+    }
+    await doctor.selectOption("#doctorPatientFilter", "waiting");
+    const waiting = (await doctor.locator("#patientList .patient-card").allInnerTexts()).join("\n");
+    assert.doesNotMatch(waiting, /Рахимов/, "an examined patient no longer waits");
+    await doctor.selectOption("#doctorPatientFilter", "all");
+  });
   await step("visit is stored and PDF report downloads", async () => {
     const login = await api("/api/login/doctor", { body: { login: "dr1", accessKey: doctorPassword } });
     const ws = (await api("/api/doctor/workspace", { method: "GET", cookie: login.cookie })).data;

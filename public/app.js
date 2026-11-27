@@ -320,6 +320,11 @@ const TAJIK_TEXT = {
   "Назначенные препараты": "Доруҳои таъйиншуда",
   "Предыдущие осмотры": "Муоинаҳои қаблӣ",
   "Врач": "Духтур",
+  "Осмотрен": "Муоина шуд",
+  "Пациент уже осмотрен врачом": "Бемор аллакай аз ҷониби духтур муоина шудааст",
+  "Последний осмотр": "Муоинаи охирин",
+  "Ждут осмотра врача": "Интизори муоинаи духтур",
+  "Уже осмотрены": "Аллакай муоина шудаанд",
   "Пациент": "Бемор",
   "Дата": "Сана",
   "Назначения": "Таъйинот",
@@ -5382,10 +5387,43 @@ function doctorPatientNameBySurveyId(surveyId) {
 }
 
 // The patient's file shows every exam of the clinic, not only this doctor's own (see /api/doctor/workspace).
+// Grouped once per workspace load: the patient list checks every patient for an exam.
+let doctorVisitIndex = { own: null, clinic: null, bySurvey: new Map() };
 function doctorVisitsForSurvey(surveyId) {
-  return [...(state.doctor?.visits || []), ...(state.doctor?.clinicVisits || [])]
-    .filter((visit) => visit.surveyId === surveyId)
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const own = state.doctor?.visits || [];
+  const clinic = state.doctor?.clinicVisits || [];
+  if (doctorVisitIndex.own !== own || doctorVisitIndex.clinic !== clinic) {
+    const bySurvey = new Map();
+    for (const visit of [...own, ...clinic]) {
+      if (!bySurvey.has(visit.surveyId)) bySurvey.set(visit.surveyId, []);
+      bySurvey.get(visit.surveyId).push(visit);
+    }
+    for (const list of bySurvey.values()) list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    doctorVisitIndex = { own, clinic, bySurvey };
+  }
+  return doctorVisitIndex.bySurvey.get(surveyId) || [];
+}
+
+// The latest exam of this patient by any doctor of the clinic, with the doctor's name (own exams carry none).
+function doctorLastVisit(surveyId) {
+  const visit = doctorVisitsForSurvey(surveyId)[0];
+  if (!visit) return null;
+  return { ...visit, doctorName: visit.doctorName || state.doctor?.doctor?.fullName || "" };
+}
+
+function doctorExaminedPill(surveyId) {
+  const visit = doctorLastVisit(surveyId);
+  if (!visit) return "";
+  const t = (value) => translateDoctorText(value);
+  return `<span class="pill ok examined-pill">✓ ${escapeHtml(t("Осмотрен"))} ${escapeHtml(new Date(visit.createdAt).toLocaleDateString("ru-RU"))}${visit.doctorName ? ` · ${escapeHtml(visit.doctorName)}` : ""}</span>`;
+}
+
+function doctorExaminedNotice(surveyId) {
+  const visit = doctorLastVisit(surveyId);
+  if (!visit) return "";
+  const t = (value) => translateDoctorText(value);
+  const count = doctorVisitsForSurvey(surveyId).length;
+  return `<div class="notice ok examined-notice"><strong>✓ ${escapeHtml(t("Пациент уже осмотрен врачом"))}</strong><div>${escapeHtml(t("Последний осмотр"))}: ${escapeHtml(new Date(visit.createdAt).toLocaleString("ru-RU"))}${visit.doctorName ? ` · ${escapeHtml(t("Врач"))}: ${escapeHtml(visit.doctorName)}` : ""}</div><div>${escapeHtml(t("Диагноз"))}: ${visit.diagnosis ? escapeHtml(t(visit.diagnosis)) : "-"} · ${escapeHtml(t("Всего осмотров"))}: ${count}</div></div>`;
 }
 
 function glucoseTypeLabel(type) {
@@ -5689,6 +5727,8 @@ function doctorPatientsPanel() {
       <select id="doctorPatientFilter" aria-label="Фильтр пациентов">
         <option value="all" ${state.doctorPatientFilter === "all" ? "selected" : ""}>${escapeHtml(t("Все пациенты"))}</option>
         <option value="risk" ${state.doctorPatientFilter === "risk" ? "selected" : ""}>${escapeHtml(t("Повышенный риск"))}</option>
+        <option value="waiting" ${state.doctorPatientFilter === "waiting" ? "selected" : ""}>${escapeHtml(t("Ждут осмотра врача"))}</option>
+        <option value="examined" ${state.doctorPatientFilter === "examined" ? "selected" : ""}>${escapeHtml(t("Уже осмотрены"))}</option>
         <option value="pressure" ${state.doctorPatientFilter === "pressure" ? "selected" : ""}>${escapeHtml(t("Высокое давление"))}</option>
         <option value="glucose" ${state.doctorPatientFilter === "glucose" ? "selected" : ""}>${escapeHtml(t("Высокий сахар"))}</option>
         <option value="overdue" ${state.doctorPatientFilter === "overdue" ? "selected" : ""}>${escapeHtml(t("Просрочен повторный визит"))}</option>
@@ -5789,6 +5829,8 @@ function doctorFilteredSurveys(query = state.doctorPatientSearch || "") {
     if (terms.length && !terms.every((term) => haystack.includes(term))) return false;
     const measurements = survey.measurements || {};
     if (state.doctorPatientFilter === "risk" && !survey.needsDoctor) return false;
+    if (state.doctorPatientFilter === "waiting" && (!survey.needsDoctor || doctorLastVisit(survey.id))) return false;
+    if (state.doctorPatientFilter === "examined" && !doctorLastVisit(survey.id)) return false;
     if (state.doctorPatientFilter === "pressure" && Number(measurements.systolic || 0) < 140) return false;
     if (state.doctorPatientFilter === "glucose" && Number(measurements.glucoseLevel || 0) < 6.1) return false;
     if (state.doctorPatientFilter === "overdue" && !openOverdueSurveyIds.has(survey.id)) return false;
@@ -5820,7 +5862,7 @@ function doctorPaginatedSurveyList(surveys) {
 function doctorSurveyList(surveys) {
   const t = (value) => translateDoctorText(value);
   return surveys.map((survey) => html`
-    <div class="patient-card ${survey.needsDoctor ? "needs-care" : ""}">
+    <div class="patient-card ${doctorLastVisit(survey.id) ? "examined" : survey.needsDoctor ? "needs-care" : ""}">
       <div class="patient-card__main">
         <strong>${escapeHtml(fullName(survey.patient))}</strong>
         <span>${escapeHtml(survey.patient?.clinic || "")}</span>
@@ -5832,7 +5874,7 @@ function doctorSurveyList(surveys) {
         <span>${new Date(survey.createdAt).toLocaleDateString("ru-RU")}</span>
       </div>
       <div class="patient-card__footer">
-        ${survey.needsDoctor ? `<span class="pill warn">${escapeHtml(t("К врачу"))}</span>` : `<span class="pill ok">${escapeHtml(t("Обычный риск"))}</span>`}
+        ${doctorExaminedPill(survey.id) || (survey.needsDoctor ? `<span class="pill warn">${escapeHtml(t("К врачу"))}</span>` : `<span class="pill ok">${escapeHtml(t("Обычный риск"))}</span>`)}
         <button data-action="select-survey" data-id="${survey.id}">${escapeHtml(t("Открыть"))}</button>
         <a href="/api/doctor/patients/${survey.id}/report.pdf"><button type="button" class="secondary">PDF</button></a>
       </div>
@@ -5926,6 +5968,7 @@ function doctorVisitForm(survey) {
   return html`
     <section class="doctor-patient-detail">
       <h2>${escapeHtml(fullName(survey.patient))}</h2>
+      ${doctorExaminedNotice(survey.id)}
       ${state.doctorVisitNotice ? `<div class="notice ok" id="doctorVisitSavedNotice">${escapeHtml(translateDoctorText(state.doctorVisitNotice))}</div>` : ""}
       ${doctorSurveySummary(survey)}
       ${doctorTrendChart(survey)}
