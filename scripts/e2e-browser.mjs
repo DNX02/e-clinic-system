@@ -273,10 +273,52 @@ try {
     assert.doesNotMatch(waiting, /Рахимов/, "an examined patient no longer waits");
     await doctor.selectOption("#doctorPatientFilter", "all");
   });
+  await step("doctor sees clinic statistics: hero numbers, 'waiting' shortcut, statistics tab", async () => {
+    await doctor.locator(".doctor-hero").scrollIntoViewIfNeeded();
+    const hero = await doctor.locator(".doctor-hero-metrics").innerText();
+    assert.match(hero, /Направлены к врачу/);
+    assert.match(hero, /Осмотрены врачами\s*$|Осмотрены врачами/);
+    if (process.env.E2E_SHOT) await doctor.locator(".doctor-hero").screenshot({ path: `${process.env.E2E_SHOT}-hero.png` });
+    await doctor.click('[data-action="doctor-show-waiting"]');
+    assert.equal(await doctor.locator("#doctorPatientFilter").inputValue(), "waiting");
+    const waiting = (await doctor.locator("#patientList .patient-card").allInnerTexts()).join("\n");
+    assert.doesNotMatch(waiting, /Рахимов/, "examined patient is not waiting");
+    await doctor.click('[data-action="doctor-tab"][data-tab="stats"]');
+    const stats = await doctor.locator(".doctor-stats-panel").innerText();
+    assert.match(stats, /статистика поликлиники/);
+    assert.match(stats, /Осмотры по врачам поликлиники[\s\S]*Тестовый Врач\s+1/);
+    if (process.env.E2E_SHOT) await doctor.locator(".doctor-stats-panel").screenshot({ path: `${process.env.E2E_SHOT}-stats.png` });
+    await doctor.click('[data-action="doctor-tab"][data-tab="patients"]');
+    await doctor.selectOption("#doctorPatientFilter", "all");
+  });
+  await step("exam saved while the server fails waits on the phone and is sent automatically", async () => {
+    await doctor.selectOption("#doctorPatientFilter", "all");
+    await doctor.locator(".patient-card").filter({ hasText: "Рахимов" }).first().getByText("Открыть").click();
+    await doctor.waitForSelector("#visitForm");
+    await doctor.route("**/api/doctor/visits", (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "База данных временно недоступна" }) }));
+    await doctor.fill('#visitForm [name="weight"]', "92");
+    await doctor.fill('#visitForm [name="height"]', "170");
+    await doctor.fill('#visitForm [name="systolic"]', "138");
+    await doctor.fill('#visitForm [name="diastolic"]', "88");
+    await doctor.fill('#visitForm [name="diagnosis"]', "АГ 1 ст., контроль");
+    await doctor.click('#visitForm button:not([type="button"])');
+    await doctor.waitForFunction(() => /сохранена на этом устройстве|дар ҳамин дастгоҳ/.test(document.querySelector("#visitResult")?.innerText || ""), null, { timeout: 5000 });
+    await doctor.unroute("**/api/doctor/visits");
+    // Coming back to the app (focus / visibility) sends the queue without any button.
+    await doctor.evaluate(() => window.dispatchEvent(new Event("focus")));
+    const login = await api("/api/login/doctor", { body: { login: "dr1", accessKey: doctorPassword } });
+    let count = 0;
+    for (let i = 0; i < 40 && count < 2; i += 1) {
+      count = (await api("/api/doctor/workspace", { method: "GET", cookie: login.cookie })).data.visits.length;
+      if (count < 2) await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    assert.equal(count, 2, "the queued exam reached the server");
+    assert.equal(await doctor.evaluate(() => JSON.parse(localStorage.getItem("medical-offline-doctor-actions") || "[]").length).catch(() => 0), 0);
+  });
   await step("visit is stored and PDF report downloads", async () => {
     const login = await api("/api/login/doctor", { body: { login: "dr1", accessKey: doctorPassword } });
     const ws = (await api("/api/doctor/workspace", { method: "GET", cookie: login.cookie })).data;
-    assert.equal(ws.visits.length, 1);
+    assert.equal(ws.visits.length, 2);
     const patientId = ws.visits[0].surveyId;
     const pdf = await fetch(`${base}/api/doctor/patients/${patientId}/report.pdf`, { headers: { Cookie: login.cookie } });
     assert.equal(pdf.status, 200);

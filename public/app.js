@@ -325,6 +325,19 @@ const TAJIK_TEXT = {
   "Последний осмотр": "Муоинаи охирин",
   "Ждут осмотра врача": "Интизори муоинаи духтур",
   "Уже осмотрены": "Аллакай муоина шудаанд",
+  "Направлены к врачу": "Ба духтур фиристода шудаанд",
+  "Осмотрены врачами": "Аз ҷониби духтурон муоина шудаанд",
+  "Мои осмотры: сегодня / всего": "Муоинаҳои ман: имрӯз / ҳамагӣ",
+  "Не отправлено с телефона": "Аз телефон фиристода нашуд",
+  "Осмотр сохранён на телефоне, но ещё не отправлен": "Муоина дар телефон нигоҳ дошта шуд, вале ҳанӯз фиристода нашудааст",
+  "Отправить сейчас": "Ҳозир фиристодан",
+  "статистика поликлиники": "омори дармонгоҳ",
+  "Анкет сегодня": "Саволномаҳо имрӯз",
+  "Осмотров сегодня (все врачи)": "Муоинаҳо имрӯз (ҳамаи духтурон)",
+  "Мои осмотры сегодня": "Муоинаҳои ман имрӯз",
+  "Осмотры по врачам поликлиники": "Муоинаҳо аз рӯи духтурони дармонгоҳ",
+  "Осмотры поликлиники по дням": "Муоинаҳои дармонгоҳ аз рӯи рӯзҳо",
+  "Мои осмотры по дням": "Муоинаҳои ман аз рӯи рӯзҳо",
   "Пациент": "Бемор",
   "Дата": "Сана",
   "Назначения": "Таъйинот",
@@ -1096,6 +1109,20 @@ document.addEventListener("click", async (event) => {
     renderAdmin();
   }
   if (action === "print-patient-card") window.print();
+  if (action === "doctor-sync-now") {
+    await syncOfflineDoctorActions();
+    renderDoctor();
+    return;
+  }
+  if (action === "doctor-show-waiting") {
+    state.doctorSection = "patients";
+    state.doctorPatientFilter = "waiting";
+    state.doctorPatientSearch = "";
+    state.doctorPatientPage = 1;
+    renderDoctor();
+    setTimeout(() => document.querySelector("#patientList")?.scrollIntoView({ block: "start", behavior: "smooth" }), 0);
+    return;
+  }
   if (action === "doctor-jump-to-search") {
     const input = document.querySelector("#patientSearch");
     document.querySelector("#doctorPatientSearchBlock")?.scrollIntoView({ block: "start", behavior: "smooth" });
@@ -4332,6 +4359,14 @@ function bindOfflineSurveySync() {
       if (!isVisible) renderOfflineSurveysDrawer();
     });
   }
+  bindAutoSync();
+  updateOfflineSurveyStatus();
+}
+
+// Sends what waits on this phone (nurse surveys, doctor exams) when the phone is online, the page is opened
+// again, or every minute. The doctor page needs it too: exams saved on the phone while the server was slow
+// used to wait there until the doctor found the sync button (27.11.2026: "exams are missing from statistics").
+function bindAutoSync() {
   if (!offlineSurveyOnlineListenerBound) {
     const triggerSyncOnEvent = () => {
       if (typeof navigator !== "undefined" && navigator.onLine) {
@@ -4359,7 +4394,6 @@ function bindOfflineSurveySync() {
     }, 60000);
     offlineSurveyOnlineListenerBound = true;
   }
-  updateOfflineSurveyStatus();
 }
 
 let syncNurseInFlight = false;
@@ -4593,12 +4627,18 @@ async function doSyncOfflineDoctorActions() {
         ? `<div class="notice warn">${escapeHtml(translateDoctorText("Отправлено"))}: ${sent}. ${escapeHtml(translateDoctorText("Осталось без синхронизации"))}: ${deduped.length}. ${escapeHtml(translateDoctorText("Попробуйте еще раз, когда интернет будет стабильным."))}</div>`
         : `<div class="notice ok">${escapeHtml(translateDoctorText("Синхронизация завершена. Отправлено записей"))}: ${sent}.</div>`;
     }
+    // Automatic sync runs in the background: never redraw over a form the doctor is filling in.
+    const typing = document.activeElement?.closest?.("#visitForm, #doctorPatientSurveyForm, #doctorAccountForm");
+    if (!sent || typing) {
+      updateOfflineDoctorStatus();
+      return;
+    }
     try {
       state.doctor = await api("/api/doctor/workspace");
       state.selectedSurvey = state.selectedSurvey && !String(state.selectedSurvey.id).startsWith("local-")
         ? state.doctor.surveys.find((survey) => survey.id === state.selectedSurvey.id) || state.selectedSurvey
         : null;
-      if (!deduped.length) state.doctorMode = "list";
+      if (!deduped.length && String(state.selectedSurvey?.id || "").startsWith("local-")) state.doctorMode = "list";
       renderDoctor();
     } catch {
       updateOfflineDoctorStatus();
@@ -5379,6 +5419,8 @@ async function loadDoctor() {
   state.doctor = await api("/api/doctor/workspace");
   renderDoctor();
   showDoctorLanguagePrompt(renderDoctor);
+  bindAutoSync();
+  if (offlineDoctorQueue().length && (typeof navigator === "undefined" || navigator.onLine)) syncOfflineDoctorActions();
 }
 
 function doctorPatientNameBySurveyId(surveyId) {
@@ -5424,6 +5466,15 @@ function doctorExaminedNotice(surveyId) {
   const t = (value) => translateDoctorText(value);
   const count = doctorVisitsForSurvey(surveyId).length;
   return `<div class="notice ok examined-notice"><strong>✓ ${escapeHtml(t("Пациент уже осмотрен врачом"))}</strong><div>${escapeHtml(t("Последний осмотр"))}: ${escapeHtml(new Date(visit.createdAt).toLocaleString("ru-RU"))}${visit.doctorName ? ` · ${escapeHtml(t("Врач"))}: ${escapeHtml(visit.doctorName)}` : ""}</div><div>${escapeHtml(t("Диагноз"))}: ${visit.diagnosis ? escapeHtml(t(visit.diagnosis)) : "-"} · ${escapeHtml(t("Всего осмотров"))}: ${count}</div></div>`;
+}
+
+// An exam that waits on this phone is not yet in the statistics: say so in the patient's file.
+function doctorUnsentNotice(surveyId) {
+  const waiting = offlineDoctorQueue().filter((item) => item.type === "visit" && item.data?.surveyId === surveyId);
+  if (!waiting.length) return "";
+  const t = (value) => translateDoctorText(value);
+  const error = waiting.find((item) => item.lastError)?.lastError;
+  return `<div class="notice warn unsent-notice"><strong>⏳ ${escapeHtml(t("Осмотр сохранён на телефоне, но ещё не отправлен"))}: ${waiting.length}</strong>${error ? `<div>${escapeHtml(t("Ошибка"))}: ${escapeHtml(error)}</div>` : ""}<button type="button" data-action="doctor-sync-now">${escapeHtml(t("Отправить сейчас"))}</button></div>`;
 }
 
 function glucoseTypeLabel(type) {
@@ -5630,34 +5681,71 @@ function doctorSimpleRows(data) {
     .join("");
 }
 
+// Counts for the doctor's hero block and the "Статистика" tab: the clinic as a whole and the doctor's own work.
+// Days are the phone's local days (Dushanbe).
+function doctorClinicStats() {
+  const surveys = state.doctor?.surveys || [];
+  const own = state.doctor?.visits || [];
+  const allVisits = [...own, ...(state.doctor?.clinicVisits || [])];
+  const dayOf = (iso) => (iso ? new Date(iso).toLocaleDateString("sv-SE") : "");
+  const today = dayOf(new Date().toISOString());
+  const examined = new Set(allVisits.map((visit) => visit.surveyId));
+  const referred = surveys.filter((survey) => survey.needsDoctor);
+  return {
+    patients: surveys.length,
+    referred: referred.length,
+    waiting: referred.filter((survey) => !examined.has(survey.id)).length,
+    examinedPatients: surveys.filter((survey) => examined.has(survey.id)).length,
+    clinicVisits: allVisits.length,
+    clinicVisitsToday: allVisits.filter((visit) => dayOf(visit.createdAt) === today).length,
+    myVisits: own.length,
+    myVisitsToday: own.filter((visit) => dayOf(visit.createdAt) === today).length,
+    myPatients: new Set(own.map((visit) => visit.surveyId)).size,
+    screenedToday: surveys.filter((survey) => dayOf(survey.createdAt) === today).length,
+    dayOf,
+    allVisits
+  };
+}
+
 function doctorStatsPanel() {
   const t = (value) => translateDoctorText(value);
+  const st = doctorClinicStats();
   const visits = state.doctor?.visits || [];
-  const patientCount = new Set(visits.map((visit) => visit.surveyId)).size;
-  const byDate = countBy(visits, (visit) => visit.createdAt ? new Date(visit.createdAt).toISOString().slice(0, 10) : "Не указано");
+  const myName = state.doctor?.doctor?.fullName || t("Я");
+  const byDoctor = countBy(st.allVisits, (visit) => visit.doctorName || myName);
+  const lastDays = (list) => {
+    const counts = countBy(list, (visit) => st.dayOf(visit.createdAt));
+    return Object.entries(counts).sort(([a], [b]) => b.localeCompare(a)).slice(0, 14)
+      .map(([day, count]) => `<tr><td>${escapeHtml(day.split("-").reverse().join("."))}</td><td>${count}</td></tr>`).join("");
+  };
   const byDiagnosis = countBy(visits, (visit) => visit.diagnosis || "Без диагноза");
   const byDrug = countBy(visits.flatMap((visit) => [...(visit.diabetesDrugs || []), ...(visit.hypertensionDrugs || [])]), (item) => item);
+  const metric = (label, value, kind = "") => `<div class="metric ${kind}"><span>${escapeHtml(t(label))}</span><strong>${value}</strong></div>`;
+  const table = (title, rows, empty = "Пока нет осмотров") => `<div class="card"><h3>${escapeHtml(t(title))}</h3><div class="table-wrap"><table><tbody>${rows || `<tr><td>${escapeHtml(t(empty))}</td><td>0</td></tr>`}</tbody></table></div></div>`;
+  const doctorRows = Object.entries(byDoctor).sort(([, a], [, b]) => b - a).map(([name, count]) => `<tr><td>${escapeHtml(name)}</td><td>${count}</td></tr>`).join("");
   return html`
     <section class="panel doctor-stats-panel">
-      <h2>${escapeHtml(t("Статистика врача"))}</h2>
-      <section class="grid three">
-        <div class="metric"><span>${escapeHtml(t("Всего осмотров"))}</span><strong>${visits.length}</strong></div>
-        <div class="metric"><span>${escapeHtml(t("Пациентов"))}</span><strong>${patientCount}</strong></div>
-        <div class="metric"><span>${escapeHtml(t("Назначенные препараты"))}</span><strong>${Object.values(byDrug).reduce((sum, value) => sum + value, 0)}</strong></div>
+      <h2>${escapeHtml(state.doctor?.doctor?.clinic || "")}: ${escapeHtml(t("статистика поликлиники"))}</h2>
+      <section class="grid three doctor-stats-metrics">
+        ${metric("Все пациенты поликлиники", st.patients)}
+        ${metric("Анкет сегодня", st.screenedToday)}
+        ${metric("Направлены к врачу", st.referred)}
+        ${metric("Ждут осмотра врача", st.waiting, "warn")}
+        ${metric("Осмотрены врачами", st.examinedPatients, "ok")}
+        ${metric("Осмотров сегодня (все врачи)", st.clinicVisitsToday)}
+      </section>
+      <h2>${escapeHtml(t("Статистика врача"))}: ${escapeHtml(myName)}</h2>
+      <section class="grid three doctor-stats-metrics">
+        ${metric("Мои осмотры сегодня", st.myVisitsToday)}
+        ${metric("Всего осмотров", st.myVisits)}
+        ${metric("Пациентов", st.myPatients)}
       </section>
       <section class="grid three stat-tables">
-        <div class="card">
-          <h3>${escapeHtml(t("Осмотры по дням"))}</h3>
-          <div class="table-wrap"><table><tbody>${doctorSimpleRows(byDate) || `<tr><td>${escapeHtml(t("Пока нет осмотров"))}</td><td>0</td></tr>`}</tbody></table></div>
-        </div>
-        <div class="card">
-          <h3>${escapeHtml(t("Диагнозы"))}</h3>
-          <div class="table-wrap"><table><tbody>${doctorSimpleRows(byDiagnosis) || `<tr><td>${escapeHtml(t("Пока нет осмотров"))}</td><td>0</td></tr>`}</tbody></table></div>
-        </div>
-        <div class="card">
-          <h3>${escapeHtml(t("Назначенные препараты"))}</h3>
-          <div class="table-wrap"><table><tbody>${doctorSimpleRows(byDrug) || `<tr><td>-</td><td>0</td></tr>`}</tbody></table></div>
-        </div>
+        ${table("Осмотры по врачам поликлиники", doctorRows)}
+        ${table("Осмотры поликлиники по дням", lastDays(st.allVisits))}
+        ${table("Мои осмотры по дням", lastDays(visits))}
+        ${table("Диагнозы", doctorSimpleRows(byDiagnosis))}
+        ${table("Назначенные препараты", doctorSimpleRows(byDrug), "-")}
       </section>
     </section>
   `;
@@ -5668,6 +5756,7 @@ function doctorPatientsPanel() {
   const visits = state.doctor?.visits || [];
   const patientCount = new Set(visits.map((visit) => visit.surveyId)).size;
   const queueCount = state.doctor?.surveys?.length || 0;
+  const stats = doctorClinicStats();
   const doctorId = state.doctor?.doctor?.id;
   const today = new Date().toDateString();
   const addedTodayCount = (state.doctor?.surveys || []).filter((survey) => {
@@ -5695,9 +5784,12 @@ function doctorPatientsPanel() {
       </div>
       <div class="doctor-hero-metrics">
         <div><strong>${queueCount}</strong><span>${escapeHtml(t("Все пациенты поликлиники"))}</span></div>
+        <div><strong>${stats.referred}</strong><span>${escapeHtml(t("Направлены к врачу"))}</span></div>
+        <button type="button" class="hero-metric-waiting" data-action="doctor-show-waiting"><strong>${stats.waiting}</strong><span>${escapeHtml(t("Ждут осмотра врача"))}</span></button>
+        <div><strong>${stats.examinedPatients}</strong><span>${escapeHtml(t("Осмотрены врачами"))}</span></div>
+        <div><strong>${stats.myVisitsToday} / ${visits.length}</strong><span>${escapeHtml(t("Мои осмотры: сегодня / всего"))}</span></div>
         <div><strong>${addedTodayCount}</strong><span>${escapeHtml(t("Добавлено мной сегодня"))}</span></div>
-        <div><strong>${visits.length}</strong><span>${escapeHtml(t("Мои сохранённые осмотры"))}</span></div>
-        <div><strong>${patientCount}</strong><span>${escapeHtml(t("Осмотренные пациенты"))}</span></div>
+        ${offlineDoctorQueue().length ? `<div class="hero-metric-unsent"><strong>${offlineDoctorQueue().length}</strong><span>${escapeHtml(t("Не отправлено с телефона"))}</span></div>` : ""}
       </div>
     </section>
     <section class="panel doctor-primary-panel" id="doctorPrimaryPanel">${primaryPanel}</section>
@@ -5969,6 +6061,7 @@ function doctorVisitForm(survey) {
     <section class="doctor-patient-detail">
       <h2>${escapeHtml(fullName(survey.patient))}</h2>
       ${doctorExaminedNotice(survey.id)}
+      ${doctorUnsentNotice(survey.id)}
       ${state.doctorVisitNotice ? `<div class="notice ok" id="doctorVisitSavedNotice">${escapeHtml(translateDoctorText(state.doctorVisitNotice))}</div>` : ""}
       ${doctorSurveySummary(survey)}
       ${doctorTrendChart(survey)}
@@ -6170,6 +6263,9 @@ function bindDoctorVisit() {
     const submitButton = form.querySelector('button:not([type="button"])');
     if (submitButton) submitButton.disabled = true;
     const data = Object.fromEntries(new FormData(form));
+    // One id per filled-in exam, sent online and from the phone queue: a resend after a timeout is not a second exam.
+    form.dataset.clientVisitId ||= crypto.randomUUID();
+    data.clientVisitId = form.dataset.clientVisitId;
     data.referrals = new FormData(form).getAll("referrals");
     data.diabetesDrugs = new FormData(form).getAll("diabetesDrugs");
     data.hypertensionDrugs = new FormData(form).getAll("hypertensionDrugs");
@@ -6180,6 +6276,7 @@ function bindDoctorVisit() {
       state.doctor.visits = [result.visit, ...(state.doctor.visits || [])];
       if (result.task) state.doctor.tasks = [...(state.doctor.tasks || []), result.task];
       form.reset();
+      delete form.dataset.clientVisitId;
       state.lastSavedDoctorVisitId = result.visit.id;
       state.doctorVisitNotice = "Осмотр сохранён. Лекарства и анализы показаны ниже в разделе «Предыдущие осмотры».";
       renderDoctor();
@@ -6192,6 +6289,7 @@ function bindDoctorVisit() {
         return;
       }
       saveOfflineDoctorAction({ type: "visit", data });
+      delete form.dataset.clientVisitId;
       document.querySelector("#visitResult").innerHTML = `<div class="notice warn">${escapeHtml(translateDoctorText("Интернет недоступен или сервер не ответил. Запись сохранена на этом устройстве и будет отправлена через синхронизацию."))}</div>`;
       form.reset();
       updateLifestyleRecommendationPanels();

@@ -1495,6 +1495,7 @@ function validateVisitInput(body) {
   if (laboratoryTests.length > 20) invalidInput("Лабораторные анализы: слишком много значений");
   const input = {
     surveyId: cleanText(body.surveyId, "Пациент", { required: true, max: 100 }),
+    clientVisitId: cleanText(body.clientVisitId, "Идентификатор осмотра", { max: 100 }),
     weight: cleanNumber(body.weight, "Вес", { min: 0, max: 500 }),
     height: cleanNumber(body.height, "Рост", { min: 0, max: 250 }),
     bmi: cleanNumber(body.bmi, "Индекс массы тела", { min: 0, max: 100 }),
@@ -2997,12 +2998,16 @@ function setWeeklyDocxCache(key, buffer) {
     const survey = db.nurseSurveys.find((item) => item.id === body.surveyId);
     if (!survey) return send(res, 404, { error: "Пациент не найден" });
     if (!doctorCanAccessSurvey(doctor, survey)) return send(res, 403, { error: "Нет доступа к пациенту другой поликлиники" });
+    // The same exam sent again (timeout, then the phone queue): confirm instead of saving it twice.
+    const already = body.clientVisitId && db.doctorVisits.find((item) => item.clientVisitId === body.clientVisitId && item.doctorId === session.userId);
+    if (already) return send(res, 200, { visit: already, task: null, alreadySaved: true });
     const weight = Number(body.weight || 0);
     const height = Number(body.height || 0);
     const heightM = height / 100;
     const bmi = Number(body.bmi || 0) || (weight > 0 && heightM > 0 ? Number((weight / (heightM * heightM)).toFixed(1)) : 0);
     const visit = {
       id: crypto.randomUUID(),
+      ...(body.clientVisitId ? { clientVisitId: body.clientVisitId } : {}),
       surveyId: body.surveyId,
       doctorId: session.userId,
       weight,

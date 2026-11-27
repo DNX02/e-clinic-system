@@ -676,7 +676,8 @@ th {
   z-index: 1;
 }
 
-.doctor-hero-metrics div {
+.doctor-hero-metrics div,
+.doctor-hero-metrics button {
   backdrop-filter: blur(16px) saturate(140%);
   background: rgba(255, 255, 255, 0.18);
   border: 1px solid rgba(255, 255, 255, 0.34);
@@ -688,6 +689,34 @@ th {
 .doctor-hero-metrics strong {
   display: block;
   font-size: 28px;
+}
+
+.doctor-hero-metrics button {
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.doctor-hero-metrics .hero-metric-waiting {
+  background: rgba(245, 158, 11, 0.32);
+  border-color: rgba(253, 230, 138, 0.8);
+}
+
+.doctor-hero-metrics .hero-metric-unsent {
+  background: rgba(220, 38, 38, 0.35);
+}
+
+.doctor-stats-panel h2 + .doctor-stats-metrics {
+  margin-bottom: 18px;
+}
+
+.doctor-stats-metrics .metric.warn strong {
+  color: var(--warn);
+}
+
+.doctor-stats-metrics .metric.ok strong {
+  color: var(--ok);
 }
 
 .doctor-primary-panel {
@@ -1777,13 +1806,21 @@ th {
   }
 
   .doctor-hero-metrics {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
   }
 
-  .doctor-hero-metrics div {
-    align-items: center;
-    display: flex;
-    justify-content: space-between;
+  .doctor-hero-metrics div,
+  .doctor-hero-metrics button {
+    padding: 10px 12px;
+  }
+
+  .doctor-hero-metrics strong {
+    font-size: 24px;
+  }
+
+  .doctor-hero-metrics span {
+    font-size: 13px;
+    line-height: 1.25;
   }
 
   .doctor-layout .nav {

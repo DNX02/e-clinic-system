@@ -63,6 +63,14 @@ try {
   const otherLab = await fetch(`${base}/api/doctor/lab-result`, { method: "PUT", headers: { "Content-Type": "application/json", Cookie: other },
     body: JSON.stringify({ visitId, index: 0, result: "1%", resultDate: "2026-11-27" }) });
   assert.equal(otherLab.status, 403);
+  // The same exam sent twice (timeout, then the phone queue) is saved once.
+  const exam = { surveyId, clientVisitId: "c0ffee00-1111-4222-8333-444455556666", weight: 90, height: 170, systolic: 140, diastolic: 90, diagnosis: "АГ 1 ст.",
+    referrals: [], diabetesDrugs: [], hypertensionDrugs: [], lifestyleRecommendations: [], laboratoryTests: [] };
+  assert.equal((await post("/api/doctor/visits", exam, endo)).status, 201);
+  const again = await post("/api/doctor/visits", exam, endo);
+  assert.equal(again.status, 200);
+  assert.equal((await again.json()).alreadySaved, true);
+  assert.equal((await workspace(endo)).visits.length, 1, "one exam, not two");
   console.log("Clinic visits test passed.");
 } finally {
   server.kill();
