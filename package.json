@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test:product": "node scripts/test-product-improvements.mjs && node scripts/test-runtime-monitor.mjs && node scripts/test-staff-ip.mjs && node scripts/test-nurse-report.mjs && node scripts/test-patient-import.mjs && node scripts/test-detection-report.mjs && node scripts/test-doctor-login.mjs && node scripts/test-nurse-resend.mjs && node scripts/test-report-api.mjs",
+    "test:product": "node scripts/test-product-improvements.mjs && node scripts/test-runtime-monitor.mjs && node scripts/test-staff-ip.mjs && node scripts/test-nurse-report.mjs && node scripts/test-patient-import.mjs && node scripts/test-detection-report.mjs && node scripts/test-doctor-login.mjs && node scripts/test-nurse-resend.mjs && node scripts/test-report-api.mjs && node scripts/test-clinic-visits.mjs",
     "test:ui": "node scripts/check-ui-contract.mjs",
     "test:pg": "node scripts/test-postgres-sync.mjs && node scripts/test-pg-connection-drop.mjs",
     "test:e2e": "node scripts/e2e-browser.mjs",

@@ -319,6 +319,7 @@ const TAJIK_TEXT = {
   "Диагнозы": "Ташхисҳо",
   "Назначенные препараты": "Доруҳои таъйиншуда",
   "Предыдущие осмотры": "Муоинаҳои қаблӣ",
+  "Врач": "Духтур",
   "Пациент": "Бемор",
   "Дата": "Сана",
   "Назначения": "Таъйинот",
@@ -5380,8 +5381,9 @@ function doctorPatientNameBySurveyId(surveyId) {
   return fullName(survey?.patient) || "Пациент";
 }
 
+// The patient's file shows every exam of the clinic, not only this doctor's own (see /api/doctor/workspace).
 function doctorVisitsForSurvey(surveyId) {
-  return (state.doctor?.visits || [])
+  return [...(state.doctor?.visits || []), ...(state.doctor?.clinicVisits || [])]
     .filter((visit) => visit.surveyId === surveyId)
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
@@ -5422,7 +5424,7 @@ function doctorVisitDetails(visit) {
   const drugs = [diabetesDrugs, hypertensionDrugs].filter(Boolean).join("; ") || "-";
   return html`
     <details class="answer-details visit-details"${visit.id === state.lastSavedDoctorVisitId ? " open" : ""}>
-      <summary>${new Date(visit.createdAt).toLocaleString("ru-RU")} - ${escapeHtml(t("Диагноз"))}: ${visit.diagnosis ? escapeHtml(t(visit.diagnosis)) : "-"}</summary>
+      <summary>${new Date(visit.createdAt).toLocaleString("ru-RU")} - ${escapeHtml(t("Диагноз"))}: ${visit.diagnosis ? escapeHtml(t(visit.diagnosis)) : "-"}${visit.doctorName ? ` · ${escapeHtml(t("Врач"))}: ${escapeHtml(visit.doctorName)}` : ""}</summary>
       <div class="grid two">
         <div>
           <div class="muted">${escapeHtml(t("Индекс массы тела"))}: ${visit.bmi || "-"}</div>
@@ -6058,7 +6060,7 @@ function collectDoctorLabs() {
 }
 
 function doctorPendingLabs(surveyId) {
-  const items = (state.doctor.visits || []).filter(visit => visit.surveyId === surveyId).flatMap(visit =>
+  const items = doctorVisitsForSurvey(surveyId).flatMap(visit =>
     (visit.laboratoryTests || []).map((lab, index) => ({ lab, visitId: visit.id, index })).filter(({lab}) => lab.status === 'ordered'));
   if (!items.length) return '';
   return `<section><h3>Ожидаемые результаты анализов</h3>${items.map(({ lab, visitId, index }) => `<div class="card pending-lab"><strong>${escapeHtml(lab.test)}</strong><p>Назначен: ${escapeHtml(lab.orderedDate || 'дата не указана')}</p><label>Результат<input data-lab-result maxlength="200"/></label><label>Дата результата<input type="date" data-lab-date /></label><button type="button" data-save-lab="${escapeHtml(visitId)}" data-index="${index}">Сохранить результат</button><span role="status" data-lab-message></span></div>`).join('')}</section>`;
@@ -6116,6 +6118,7 @@ function bindDoctorVisit() {
       const { visit } = await api('/api/doctor/lab-result', { method: 'PUT', body: JSON.stringify({ visitId: button.dataset.saveLab, index: Number(button.dataset.index),
         result: card.querySelector('[data-lab-result]').value, resultDate: card.querySelector('[data-lab-date]').value }) });
       state.doctor.visits = state.doctor.visits.map(item => item.id === visit.id ? visit : item);
+      state.doctor.clinicVisits = (state.doctor.clinicVisits || []).map(item => item.id === visit.id ? { ...visit, doctorName: item.doctorName } : item);
       card.querySelector('[data-lab-message]').textContent = 'Результат сохранён';
     } catch (error) { card.querySelector('[data-lab-message]').textContent = error.message; button.disabled = false; }
   }));

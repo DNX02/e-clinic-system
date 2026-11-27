@@ -2833,11 +2833,19 @@ function setWeeklyDocxCache(key, buffer) {
       resultSurveys = clinicSurveys.slice(start, start + limit);
       pagination = { page, limit, total, totalPages };
     }
+    // Exams of the other doctors of this clinic (a therapist refers to the endocrinologist, who must see the
+    // first exam in the patient's file). "visits" stays the doctor's own: counters and statistics are personal.
+    const clinicSurveyIds = new Set(clinicSurveys.map((survey) => survey.id));
+    const doctorNames = new Map(db.doctors.map((item) => [item.id, item.fullName || ""]));
+    const clinicVisits = db.doctorVisits
+      .filter((visit) => visit.doctorId !== session.userId && clinicSurveyIds.has(visit.surveyId))
+      .map((visit) => ({ ...visit, doctorName: doctorNames.get(visit.doctorId) || "Другой врач" }));
     return send(res, 200, {
       doctor: doctor ? publicDoctor(doctor) : null,
       surveys: resultSurveys,
       ...(pagination ? { pagination } : {}),
       visits: db.doctorVisits.filter((visit) => visit.doctorId === session.userId),
+      clinicVisits,
       tasks: (db.patientTasks || []).filter((task) => task.doctorId === session.userId),
       appointments: (db.appointments || []).filter((item) => item.doctorId === session.userId),
       dictionaries: { diabetesDrugs, hypertensionDrugs }
