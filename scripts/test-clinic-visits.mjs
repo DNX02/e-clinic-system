@@ -74,6 +74,16 @@ try {
   // The admin finds a nurse's patients by the nurse's name (Пациенты tab search).
   const found = await (await fetch(`${base}/api/admin/dashboard?tab=surveys&search=${encodeURIComponent("сестрина")}`, { headers: { Cookie: admin } })).json();
   assert.ok(JSON.stringify(found).includes("Направленов"), "search by nurse name finds her patient");
+  // A head nurse searches the same way, by patient or nurse surname, only inside her clinic.
+  assert.equal((await post("/api/admin/admins", { name: "Старшая Одиннадцатая", username: "head11", password: "HeadNurse12345", role: "head_nurse", clinic: "Поликлиника №11" }, admin)).status, 201);
+  assert.equal((await post("/api/admin/admins", { name: "Старшая Девятая", username: "head9", password: "HeadNurse12345", role: "head_nurse", clinic: "Поликлиника №9" }, admin)).status, 201);
+  const headSearch = async (login, query) => {
+    const cookie = cookieOf(await post("/api/login/admin", { username: login, password: "HeadNurse12345" }));
+    return JSON.stringify(await (await fetch(`${base}/api/admin/dashboard?tab=surveys&search=${encodeURIComponent(query)}`, { headers: { Cookie: cookie } })).json());
+  };
+  assert.ok((await headSearch("head11", "сестрина")).includes("Направленов"), "head nurse: by nurse surname");
+  assert.ok((await headSearch("head11", "направленов")).includes("Направленов"), "head nurse: by patient surname");
+  assert.ok(!(await headSearch("head9", "сестрина")).includes("Направленов"), "another clinic's head nurse finds nothing");
   console.log("Clinic visits test passed.");
 } finally {
   server.kill();
