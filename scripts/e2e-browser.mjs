@@ -298,6 +298,8 @@ try {
     await doctor.selectOption("#doctorPatientFilter", "all");
   });
   await step("doctor sees clinic statistics: hero numbers, 'waiting' shortcut, statistics tab", async () => {
+    assert.equal(await doctor.locator(".doctor-hero-metrics").isVisible(), false, "the big numbers step aside while a patient file is open");
+    await doctor.locator(".patient-file-bar").getByText("Список").click();
     await doctor.locator(".doctor-hero").scrollIntoViewIfNeeded();
     const hero = await doctor.locator(".doctor-hero-metrics").innerText();
     assert.match(hero, /Направлены к врачу/);
@@ -338,6 +340,32 @@ try {
     }
     assert.equal(count, 2, "the queued exam reached the server");
     assert.equal(await doctor.evaluate(() => JSON.parse(localStorage.getItem("medical-offline-doctor-actions") || "[]").length).catch(() => 0), 0);
+  });
+  await step("patient file on a phone: the file alone, key numbers on top, '← Список' brings the list back", async () => {
+    const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
+    await phone.addCookies((await doctor.context().cookies()).filter((c) => c.name === "sid"));
+    const p = await phone.newPage();
+    watch(p, "doctor-phone");
+    await p.goto(`${base}/app-2-doctor`);
+    await p.locator("[data-doctor-lang-choice=ru]").click({ timeout: 3000 }).catch(() => {});
+    await p.waitForSelector(".patient-card");
+    await p.locator(".patient-card").filter({ hasText: "Саидова" }).first().getByText("Открыть").click();
+    await p.waitForSelector("#visitForm");
+    assert.equal(await p.locator(".patient-sidebar").isVisible(), false, "the list is hidden while a patient is open");
+    assert.match(await p.locator(".patient-file-bar").innerText(), /Саидова/);
+    assert.match(await p.locator(".doctor-key-facts").innerText(), /Давление[\s\S]*115\/75/);
+    const formTop = await p.evaluate(() => document.querySelector("#visitForm").getBoundingClientRect().top + window.scrollY);
+    assert.ok(formTop < 2000, `the exam form is near the top, at ${formTop}px`);
+    const order = await p.evaluate(() => {
+      const form = document.querySelector("#visitForm");
+      const tasks = document.querySelector("[data-doctor-task-form]");
+      return form.compareDocumentPosition(tasks) & Node.DOCUMENT_POSITION_FOLLOWING;
+    });
+    assert.ok(order, "tasks come after the exam form, not before it");
+    await p.locator(".patient-file-bar").getByText("Список").click();
+    await p.waitForSelector(".patient-sidebar", { state: "visible" });
+    assert.equal(await p.locator("#visitForm").count(), 0);
+    await phone.close();
   });
   await step("visit is stored and PDF report downloads", async () => {
     const login = await api("/api/login/doctor", { body: { login: "dr1", accessKey: doctorPassword } });

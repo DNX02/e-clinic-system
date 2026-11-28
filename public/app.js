@@ -329,6 +329,17 @@ const TAJIK_TEXT = {
   "Осмотрены врачами": "Аз ҷониби духтурон муоина шудаанд",
   "Мои осмотры: сегодня / всего": "Муоинаҳои ман: имрӯз / ҳамагӣ",
   "Не отправлено с телефона": "Аз телефон фиристода нашуд",
+  "Новый осмотр": "Муоинаи нав",
+  "Заполните и нажмите «Сохранить осмотр» внизу формы.": "Пур кунед ва тугмаи «Нигоҳ доштани муоина»-ро дар поёни шакл пахш кунед.",
+  "Анкета медсестры полностью": "Саволномаи пурраи ҳамшираи тиббӣ",
+  "Задачи и повторные визиты": "Вазифаҳо ва ташрифҳои такрорӣ",
+  "К списку пациентов": "Ба рӯйхати беморон",
+  "Список": "Рӯйхат",
+  "лет": "сола",
+  "Скрининг медсестры": "Скрининги ҳамшираи тиббӣ",
+  "Давление": "Фишор",
+  "Сахар": "Қанд",
+  "ИМТ": "ИМБ",
   "Осмотр сохранён на телефоне, но ещё не отправлен": "Муоина дар телефон нигоҳ дошта шуд, вале ҳанӯз фиристода нашудааст",
   "Отправить сейчас": "Ҳозир фиристодан",
   "статистика поликлиники": "омори дармонгоҳ",
@@ -1035,6 +1046,10 @@ function setPage(content) {
         collectLabs: id === 'visitForm' ? collectDoctorLabs : undefined,
         restoreLabs: id === 'visitForm' ? labs => { document.querySelector('#doctorLabList').innerHTML = labs.map(lab => doctorLabRow(lab.test, { ...lab.fields, ...lab })).join(''); bindDoctorLabControls(); } : undefined });
     }
+    // The draft note goes under the exam form's title, not above it.
+    const visitHint = document.querySelector('#visitForm .doctor-visit-form__hint');
+    const visitDraftNote = document.querySelector('#visitForm > .draft-notice');
+    if (visitHint && visitDraftNote) visitHint.after(visitDraftNote);
     document.querySelectorAll('[data-help-language]').forEach(select => select.addEventListener('change', () => {
       const video = select.closest('details').querySelector('video');
       video.src = `/help/${video.dataset.helpRole}-${select.value}.mp4`;
@@ -1358,6 +1373,18 @@ document.addEventListener("click", async (event) => {
     if (!confirm("Удалить доступ администратора?")) return;
     await api(`/api/admin/admins/${event.target.dataset.id}`, { method: "DELETE", body: "{}" });
     await loadAdmin();
+  }
+  if (action === "doctor-back-to-list") {
+    const id = state.selectedSurvey?.id;
+    state.selectedSurvey = null;
+    state.doctorVisitNotice = "";
+    state.doctorMode = "list";
+    renderDoctor();
+    setTimeout(() => {
+      const card = id && document.querySelector(`#patientList [data-action="select-survey"][data-id="${CSS.escape(id)}"]`)?.closest(".patient-card");
+      (card || document.querySelector("#doctorPatientSearchBlock") || document.querySelector("#patientList"))?.scrollIntoView({ block: "center" });
+    }, 0);
+    return;
   }
   if (action === "select-survey") {
     state.selectedSurvey = state.doctor.surveys.find((item) => item.id === event.target.dataset.id);
@@ -5975,7 +6002,7 @@ function doctorPatientsPanel() {
         </section>
       `;
   return html`
-    <section class="doctor-hero">
+    <section class="doctor-hero${state.selectedSurvey || state.doctorMode === "add" ? " doctor-hero--compact" : ""}">
       <div>
         <span>${escapeHtml(state.doctor.doctor?.clinic || "")}</span>
         <h1>${escapeHtml(t("Кабинет врача"))}</h1>
@@ -5992,7 +6019,7 @@ function doctorPatientsPanel() {
       </div>
     </section>
     <section class="panel doctor-primary-panel" id="doctorPrimaryPanel">${primaryPanel}</section>
-    <section class="panel patient-sidebar">
+    <section class="panel patient-sidebar${state.selectedSurvey || state.doctorMode === "add" ? " patient-sidebar--behind" : ""}">
       <div class="sidebar-title">
         <div>
           <h2>${escapeHtml(t("Картотека больных"))}</h2>
@@ -6220,6 +6247,50 @@ function doctorPatientSurveyForm() {
   `;
 }
 
+// The top of an open patient file: back to the list, who it is, and whether a doctor is still needed.
+function doctorPatientFileBar(survey) {
+  const t = (value) => translateDoctorText(value);
+  const patient = survey.patient || {};
+  const m = survey.measurements || {};
+  const status = doctorExaminedPill(survey.id)
+    || (survey.needsDoctor ? `<span class="pill warn">${escapeHtml(t("К врачу"))}</span>` : `<span class="pill ok">${escapeHtml(t("Обычный риск"))}</span>`);
+  return html`
+    <div class="patient-file-bar">
+      <button type="button" class="secondary patient-file-bar__back" data-action="doctor-back-to-list">← ${escapeHtml(t("Список"))}</button>
+      <div class="patient-file-bar__who">
+        <h2>${escapeHtml(fullName(patient))}</h2>
+        <span class="muted">${[m.age ? `${m.age} ${t("лет")}` : "", t(patient.sex === "male" ? "Мужской" : "Женский"), patient.birthDate ? patient.birthDate.split("-").reverse().join(".") : "", patient.phone || ""].filter(Boolean).map(escapeHtml).join(" · ")}</span>
+      </div>
+      <div class="patient-file-bar__status">${status}</div>
+    </div>`;
+}
+
+// What the doctor needs at a glance (the nurse's full survey is folded below).
+function doctorKeyFacts(survey) {
+  const t = (value) => translateDoctorText(value);
+  const m = survey.measurements || {};
+  const highBp = Number(m.systolic) >= 140 || Number(m.diastolic) >= 90;
+  const glucose = Number(m.glucoseLevel || 0);
+  const fact = (label, value, alert) => `<div class="key-fact${alert ? " alert" : ""}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`;
+  const reasons = (survey.referralReasons || []).map((reason) => `<li>${escapeHtml(translateDoctorDynamicText(reason))}</li>`).join("");
+  return html`
+    <section class="doctor-key-facts">
+      <h3>${escapeHtml(t("Скрининг медсестры"))} · ${escapeHtml(new Date(survey.createdAt).toLocaleDateString("ru-RU"))}</h3>
+      <div class="key-facts-grid">
+        ${fact(t("Давление"), `${m.systolic || "-"}/${m.diastolic || "-"}`, highBp)}
+        ${fact(t("Сахар"), glucose ? glucose : "-", glucose >= 6.1)}
+        ${fact(t("ИМТ"), m.bmi || "-", Number(m.bmi) >= 30)}
+        ${fact("FINDRISC", survey.findrisc?.score ?? "-", Number(survey.findrisc?.score) >= 14)}
+      </div>
+      ${survey.needsDoctor && reasons ? `<div class="notice warn"><strong>${escapeHtml(t("Причины направления"))}</strong><ul>${reasons}</ul></div>` : ""}
+    </section>`;
+}
+
+function doctorFileSection(title, body, id = "") {
+  if (!body) return "";
+  return `<details class="patient-file-section"${id ? ` id="${id}"` : ""}><summary>${escapeHtml(title)}</summary><div class="patient-file-section__body">${body}</div></details>`;
+}
+
 function doctorSurveySummary(survey) {
   const t = (value) => translateDoctorText(value);
   const patient = survey.patient || {};
@@ -6249,7 +6320,6 @@ function doctorSurveySummary(survey) {
           <div class="muted">${escapeHtml(t("Уровень сахара в крови, ммоль/л"))}: ${measurements.glucoseLevel || "-"}</div>
         </div>
       </div>
-      ${survey.needsDoctor ? `<div class="notice warn"><strong>${escapeHtml(t("Причины направления"))}</strong><ul>${reasons}</ul></div>` : ""}
     </section>
   `;
 }
@@ -6258,18 +6328,17 @@ function doctorVisitForm(survey) {
   const t = (value) => translateDoctorText(value);
   return html`
     <section class="doctor-patient-detail">
-      <h2>${escapeHtml(fullName(survey.patient))}</h2>
+      ${doctorPatientFileBar(survey)}
       ${doctorExaminedNotice(survey.id)}
       ${doctorUnsentNotice(survey.id)}
       ${state.doctorVisitNotice ? `<div class="notice ok" id="doctorVisitSavedNotice">${escapeHtml(translateDoctorText(state.doctorVisitNotice))}</div>` : ""}
-      ${doctorSurveySummary(survey)}
-      ${doctorTrendChart(survey)}
-      ${doctorVisitHistory(survey.id)}
-      ${historyPanel(survey.changeHistory || [])}
+      ${doctorKeyFacts(survey)}
+      ${doctorFileSection(t("Анкета медсестры полностью"), doctorSurveySummary(survey))}
+      ${doctorVisitsForSurvey(survey.id).length ? doctorFileSection(`${t("Предыдущие осмотры")} (${doctorVisitsForSurvey(survey.id).length})`, doctorVisitHistory(survey.id) + doctorTrendChart(survey), "doctor-previous-visits") : ""}
       ${doctorPendingLabs(survey.id)}
-      ${doctorPatientTasks(survey.id)}
-      <form class="form" id="visitForm">
-        <h3>${escapeHtml(t("Повторный осмотр"))}</h3>
+      <form class="form doctor-visit-form" id="visitForm">
+        <h3 class="doctor-visit-form__title">✍️ ${escapeHtml(t("Новый осмотр"))}</h3>
+        <p class="muted doctor-visit-form__hint">${escapeHtml(t("Заполните и нажмите «Сохранить осмотр» внизу формы."))}</p>
         <input type="hidden" name="surveyId" value="${survey.id}" />
         <section class="grid two">
           ${input(t("Вес по весам, кг"), "weight", true, "number")}
@@ -6311,9 +6380,12 @@ function doctorVisitForm(survey) {
           <ul>${lifestyleRecommendations.physicalActivity.map((item) => `<li>${escapeHtml(t(item))}</li>`).join("")}</ul>
         </div>
       </div>
-      <button>${escapeHtml(t("Сохранить осмотр"))}</button>
+      <button class="doctor-save-visit">${escapeHtml(t("Сохранить осмотр"))}</button>
       <div id="visitResult"></div>
     </form>
+    ${doctorFileSection(t("Задачи и повторные визиты"), doctorPatientTasks(survey.id))}
+    ${historyPanel(survey.changeHistory || [])}
+    <button type="button" class="secondary doctor-back-bottom" data-action="doctor-back-to-list">← ${escapeHtml(t("К списку пациентов"))}</button>
   </section>
   `;
 }
