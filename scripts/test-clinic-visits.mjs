@@ -84,6 +84,12 @@ try {
   assert.ok((await headSearch("head11", "сестрина")).includes("Направленов"), "head nurse: by nurse surname");
   assert.ok((await headSearch("head11", "направленов")).includes("Направленов"), "head nurse: by patient surname");
   assert.ok(!(await headSearch("head9", "сестрина")).includes("Направленов"), "another clinic's head nurse finds nothing");
+  // "15,9" and "15.9" are the same number (exams and surveys).
+  const comma = await post("/api/doctor/visits", { ...exam, clientVisitId: undefined, glucose: "15,9", weight: "80,5", systolic: "130", diastolic: "90" }, endo);
+  assert.equal(comma.status, 201);
+  const commaVisit = (await comma.json()).visit;
+  assert.equal(commaVisit.glucose, 15.9);
+  assert.equal(commaVisit.weight, 80.5);
   console.log("Clinic visits test passed.");
 } finally {
   server.kill();

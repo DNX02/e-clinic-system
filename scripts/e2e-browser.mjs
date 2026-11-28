@@ -27,7 +27,7 @@ const results = [];
 const pageProblems = [];
 async function step(name, fn) {
   try { await fn(); results.push([true, name]); console.log(`  ok   ${name}`); }
-  catch (error) { results.push([false, name, error]); console.log(`  FAIL ${name}\n       ${String(error.message).split("\n")[0]}`); }
+  catch (error) { results.push([false, name, error]); console.log(`  FAIL ${name}\n       ${String(error.message).split("\n").slice(0, process.env.E2E_VERBOSE ? 12 : 1).join("\n       ")}`); }
 }
 const api = async (path, { method = "POST", body, cookie } = {}) => {
   const response = await fetch(base + path, { method, headers: { "Content-Type": "application/json", ...(cookie ? { Cookie: cookie } : {}) }, body: body ? JSON.stringify(body) : undefined });
@@ -93,6 +93,7 @@ try {
     await nurse.click('#surveyForm button[type="submit"]');
     await nurse.waitForTimeout(400);
     assert.equal(posted, 0);
+    assert.ok(await nurse.locator("#surveyForm .field-invalid").count() > 3, "empty required fields are outlined in red");
   });
   await step("high-risk patient is referred to a doctor", async () => {
     await openSurvey();
@@ -109,6 +110,29 @@ try {
     await nurse.click('#surveyForm button[type="submit"]');
     await nurse.waitForFunction(() => /FINDRISC/.test(document.querySelector("#surveyResult")?.innerText || ""), null, { timeout: 5000 });
     assert.doesNotMatch(await resultText(), /Направить к врачу/);
+  });
+  await step("a wrong number is outlined in red; a comma works like a dot", async () => {
+    await openSurvey();
+    let posted = 0;
+    const count = (r) => { if (r.method() === "POST" && r.url().includes("/api/nurse-surveys")) posted += 1; };
+    nurse.on("request", count);
+    await fillSurvey({ ...nurseFields.low, lastName: "Запятова", phone: "+992900777888", weight: "70..5", systolic: "75", diastolic: "80" });
+    await nurse.click('#surveyForm button[type="submit"]');
+    await nurse.waitForTimeout(300);
+    assert.equal(posted, 0, "nothing is sent while a field is wrong");
+    assert.deepEqual(await nurse.locator("#surveyForm .field-invalid").evaluateAll((els) => els.map((el) => el.name)), ["weight", "systolic"], "every wrong field at once");
+    const notes = (await nurse.locator("#surveyForm .field-error-text").allInnerTexts()).join(" | ");
+    assert.match(notes, /Введите число/);
+    assert.match(notes, /Верхнее давление/);
+    if (process.env.E2E_SHOT) await nurse.locator('#surveyForm [name="weight"]').locator("xpath=..").screenshot({ path: `${process.env.E2E_SHOT}-red.png` }).catch(() => {});
+    await nurse.fill('#surveyForm [name="weight"]', "70,5");
+    await nurse.fill('#surveyForm [name="systolic"]', "118");
+    assert.equal(await nurse.locator("#surveyForm .field-invalid").count(), 0, "the outline goes away once corrected");
+    await nurse.click('#surveyForm button[type="submit"]');
+    await nurse.waitForFunction(() => /FINDRISC/.test(document.querySelector("#surveyResult")?.innerText || ""), null, { timeout: 5000 });
+    nurse.off("request", count);
+    const saved = (await clinic1Patients()).find((s) => s.patient.lastName === "Запятова");
+    assert.equal(saved.measurements.weight, 70.5);
   });
   await step("same nurse resends the same patient the same day: confirmed, not saved twice", async () => {
     await openSurvey();
@@ -247,7 +271,7 @@ try {
     await doctor.waitForSelector("#visitForm");
     await doctor.fill('#visitForm [name="weight"]', "93");
     await doctor.fill('#visitForm [name="height"]', "170");
-    await doctor.fill('#visitForm [name="glucose"]', "6.4");
+    await doctor.fill('#visitForm [name="glucose"]', "6,4");
     await doctor.fill('#visitForm [name="systolic"]', "145");
     await doctor.fill('#visitForm [name="diastolic"]', "92");
     await doctor.fill('#visitForm [name="followUpDays"]', "14");

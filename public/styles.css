@@ -2852,3 +2852,19 @@ th {
     content: none;
   }
 }
+
+/* A wrong field in the nurse survey / doctor's forms: red outline and the reason under it. */
+input.field-invalid,
+select.field-invalid,
+textarea.field-invalid {
+  background: #fef2f2 !important;
+  border-color: #dc2626 !important;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18) !important;
+}
+
+.field-error-text {
+  color: #b91c1c;
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: 4px;
+}

@@ -404,6 +404,12 @@ const TAJIK_TEXT = {
   "Выберите ответ": "Ҷавобро интихоб кунед",
   "Выберите поликлинику": "Поликлиникаро интихоб кунед",
   "Не заполнено обязательное поле": "Майдони ҳатмӣ пур нашудааст",
+  "Исправьте поле, выделенное красным": "Майдони сурхро ислоҳ кунед",
+  "Заполните это поле": "Ин майдонро пур кунед",
+  "Введите число, например 5,6": "Рақам ворид кунед, масалан 5,6",
+  "Допустимо от": "Иҷозат аст аз",
+  "до": "то",
+  "Верхнее давление должно быть больше нижнего": "Фишори боло бояд аз фишори поён зиёд бошад",
   "Заполните это поле и снова нажмите «Отправить анкету».": "Ин майдонро пур кунед ва боз «Фиристодани анкета»-ро пахш кунед.",
   "Да": "Ҳа",
   "Нет": "Не",
@@ -3878,6 +3884,10 @@ function surveyRabitoFields(t) {
 }
 
 function validateNurseSurveyForm(form, t) {
+  if (!checkFormFields(form, t)) {
+    document.querySelector("#surveyResult").innerHTML = html`<div class="notice danger"><strong>${escapeHtml(t("Исправьте поле, выделенное красным"))}.</strong></div>`;
+    return false;
+  }
   const invalidField = Array.from(form.elements).find((field) => field.willValidate && !field.validity.valid);
   if (!invalidField) return true;
   const label = invalidField.closest(".form-row")?.querySelector("label")?.textContent?.trim()
@@ -3956,6 +3966,7 @@ function renderNurseSurvey() {
   bindOfflineSurveySync(form);
   showSurveyLanguagePrompt(renderNurseSurvey);
   form.noValidate = true;
+  bindFieldChecks(form, t);
   const submitButton = form.querySelector('button[type="submit"]');
   // One id per filled-in form, sent every time: a resend after a lost answer is confirmed by the server
   // instead of becoming a second patient. Taps while a send is running are ignored.
@@ -3965,7 +3976,7 @@ function renderNurseSurvey() {
     if (form.dataset.sending === "1") return;
     if (!validateNurseSurveyForm(form, t)) return;
     form.dataset.clientSurveyId ||= crypto.randomUUID();
-    const data = { ...Object.fromEntries(new FormData(form)), clientSurveyId: form.dataset.clientSurveyId };
+    const data = normalizeDecimalFields({ ...Object.fromEntries(new FormData(form)), clientSurveyId: form.dataset.clientSurveyId });
     form.dataset.sending = "1";
     const buttonText = submitButton?.textContent;
     if (submitButton) { submitButton.disabled = true; submitButton.textContent = t("Отправляется…"); }
@@ -5491,6 +5502,105 @@ async function renderNurseTest(participantId, type) {
   });
 }
 
+// Number fields of the nurse survey and the doctor's forms. Comma or dot both work ("15,9" = "15.9"); a wrong
+// value is outlined in red with the reason under the field, before anything is sent (28.11.2026: nurses typed
+// "15.9"/"15,9" and the whole survey was rejected with a message at the bottom of the page).
+// Ranges are the server's (validateSurveyInput / validateVisitInput / validateBloodPressure).
+const NUMBER_FIELDS = {
+  weight: { min: 1, max: 500 }, height: { min: 1, max: 250 }, rabitoWaist: { min: 1, max: 300 }, waist: { min: 1, max: 300 },
+  arm: { min: 1, max: 200 }, calf: { min: 1, max: 200 }, systolic: { min: 70, max: 260, integer: true },
+  diastolic: { min: 40, max: 160, integer: true }, glucoseLevel: { min: 1.5, max: 35 }, glucose: { min: 1.5, max: 35 },
+  followUpDays: { min: 0, max: 3650, integer: true }
+};
+
+function parseDecimal(value) {
+  const text = String(value ?? "").trim().replace(/\s+/g, "");
+  if (!text) return null;
+  if (!/^\d+([.,]\d+)?$/.test(text)) return NaN;
+  return Number(text.replace(",", "."));
+}
+
+// The data sent to the server always uses a dot.
+function normalizeDecimalFields(data) {
+  for (const name of Object.keys(NUMBER_FIELDS)) {
+    if (typeof data[name] === "string") data[name] = data[name].trim().replace(/\s+/g, "").replace(",", ".");
+  }
+  return data;
+}
+
+function setFieldError(field, message) {
+  const row = field.closest(".form-row, label") || field.parentElement;
+  let note = row?.querySelector(":scope > .field-error-text");
+  if (!message) {
+    field.classList.remove("field-invalid");
+    field.removeAttribute("aria-invalid");
+    note?.remove();
+    return;
+  }
+  field.classList.add("field-invalid");
+  field.setAttribute("aria-invalid", "true");
+  if (!note && row) {
+    note = document.createElement("div");
+    note.className = "field-error-text";
+    row.appendChild(note);
+  }
+  if (note) note.textContent = message;
+}
+
+function numberFieldProblem(field, t) {
+  const rule = NUMBER_FIELDS[field.name];
+  if (!rule || field.readOnly || field.disabled) return "";
+  const number = parseDecimal(field.value);
+  if (number === null) return "";
+  if (Number.isNaN(number) || (rule.integer && !Number.isInteger(number))) return t("Введите число, например 5,6");
+  if (number < rule.min || number > rule.max) return `${t("Допустимо от")} ${String(rule.min).replace(".", ",")} ${t("до")} ${rule.max}`;
+  return "";
+}
+
+// Checks every field, outlines the wrong ones and scrolls to the first. Returns true when all is right.
+function checkFormFields(form, t) {
+  let first = null;
+  for (const field of Array.from(form.elements)) {
+    if (!field.name || field.type === "hidden" || field.type === "checkbox" || field.type === "radio") continue;
+    let problem = numberFieldProblem(field, t);
+    if (!problem && field.willValidate && field.required && !String(field.value || "").trim()) problem = t("Заполните это поле");
+    setFieldError(field, problem);
+    if (problem && !first) first = field;
+  }
+  const systolic = form.elements.systolic;
+  const diastolic = form.elements.diastolic;
+  if (systolic && diastolic && !systolic.classList.contains("field-invalid") && !diastolic.classList.contains("field-invalid")) {
+    const top = parseDecimal(systolic.value);
+    const bottom = parseDecimal(diastolic.value);
+    if (top && bottom && top <= bottom) {
+      setFieldError(systolic, t("Верхнее давление должно быть больше нижнего"));
+      first ||= systolic;
+    }
+  }
+  if (first) {
+    first.scrollIntoView({ behavior: "smooth", block: "center" });
+    first.focus({ preventScroll: true });
+  }
+  return !first;
+}
+
+// Clear the red outline as soon as the field is corrected.
+function bindFieldChecks(form, t) {
+  if (!form || form.dataset.fieldChecks) return;
+  form.dataset.fieldChecks = "1";
+  const recheck = (event) => {
+    const field = event.target;
+    if (!field?.name || !field.classList?.contains("field-invalid")) return;
+    const problem = numberFieldProblem(field, t) || (field.required && !String(field.value || "").trim() ? t("Заполните это поле") : "");
+    setFieldError(field, problem);
+  };
+  form.addEventListener("input", recheck);
+  form.addEventListener("change", recheck);
+  form.addEventListener("focusout", (event) => {
+    if (NUMBER_FIELDS[event.target?.name]) setFieldError(event.target, numberFieldProblem(event.target, t));
+  });
+}
+
 function input(label, name, required = false, type = "text") {
   const isPhone = type === "tel" || name === "phone";
   const numeric = type === "number";
@@ -6347,11 +6457,18 @@ function bindDoctorVisit() {
       card.querySelector('[data-lab-message]').textContent = 'Результат сохранён';
     } catch (error) { card.querySelector('[data-lab-message]').textContent = error.message; button.disabled = false; }
   }));
+  const tDoctor = (value) => translateDoctorText(value);
+  form.noValidate = true;
+  bindFieldChecks(form, tDoctor);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!checkFormFields(form, tDoctor)) {
+      document.querySelector("#visitResult").innerHTML = `<div class="notice danger"><strong>${escapeHtml(tDoctor("Исправьте поле, выделенное красным"))}.</strong></div>`;
+      return;
+    }
     const submitButton = form.querySelector('button:not([type="button"])');
     if (submitButton) submitButton.disabled = true;
-    const data = Object.fromEntries(new FormData(form));
+    const data = normalizeDecimalFields(Object.fromEntries(new FormData(form)));
     // One id per filled-in exam, sent online and from the phone queue: a resend after a timeout is not a second exam.
     form.dataset.clientVisitId ||= crypto.randomUUID();
     data.clientVisitId = form.dataset.clientVisitId;
@@ -6445,9 +6562,17 @@ function bindDoctorPatientSurvey() {
   if (!form) return;
   bindNurseSurveyCalculations(form);
   bindBirthDateAge(form);
+  const tDoctor = (value) => translateDoctorText(value);
+  form.noValidate = true;
+  bindFieldChecks(form, tDoctor);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const data = Object.fromEntries(new FormData(form));
+    if (!checkFormFields(form, tDoctor)) {
+      const resultEl = document.querySelector("#doctorPatientSurveyResult");
+      if (resultEl) resultEl.innerHTML = `<div class="notice danger"><strong>${escapeHtml(tDoctor("Исправьте поле, выделенное красным"))}.</strong></div>`;
+      return;
+    }
+    const data = normalizeDecimalFields(Object.fromEntries(new FormData(form)));
     try {
       const { survey } = await api("/api/doctor/surveys", { method: "POST", body: JSON.stringify(data) });
       clearDraft(form);

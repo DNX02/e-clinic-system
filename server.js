@@ -1276,6 +1276,8 @@ function cleanText(value, label, { required = false, max = 200 } = {}) {
 }
 
 function cleanNumber(value, label, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  // Nurses and doctors type "15,9" as often as "15.9" (28.11.2026): both are the same number.
+  if (typeof value === "string") value = value.trim().replace(",", ".");
   if (value === "" || value === null || value === undefined) return 0;
   const number = Number(value);
   if (!Number.isFinite(number) || number < min || number > max) invalidInput(`${label}: недопустимое значение`);
