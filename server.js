@@ -11,7 +11,7 @@ import { gzipSync } from "node:zlib";
 import { labHasResult, patientChanges, waitingPatients, verifyBackupRestore } from './care-workflow.js';
 import PDFDocument from "pdfkit";
 import { buildWeeklyMonitorReportDocx, monitorReportPeriod } from "./weekly-monitor-report.js";
-import { problemsSnapshot, recordDbWrite, recordProblem, scrubMessage, recordRequestSource, recordSecurityEvent, runtimeSnapshot, startRuntimeMonitor, trackRequest } from "./runtime-monitor.js";
+import { problemsSnapshot, recordDbWrite, recordProblem, recordRejection, scrubMessage, recordRequestSource, recordSecurityEvent, runtimeSnapshot, startRuntimeMonitor, trackRequest } from "./runtime-monitor.js";
 import { clientIpInfo, deviceLabel } from "./client-info.js";
 import { buildNurseReport, dushanbeDate, nurseNameKey } from "./nurse-report.js";
 import { nurseReportPdf } from "./nurse-report-pdf.js";
@@ -4413,6 +4413,7 @@ const server = createServer(async (req, res) => {
     securityEvent("application_error", req, { errorName: error?.name || "Error" });
     console.error(error);
     if (![400, 413].includes(error.statusCode)) recordProblem(isDatabaseError(error) ? "database_error" : "server_error", { route: req.url, error });
+    if (error.statusCode === 400) recordRejection(req.url, error.message);
     if ([400, 413].includes(error.statusCode)) {
       return send(res, error.statusCode, { error: error.message });
     }

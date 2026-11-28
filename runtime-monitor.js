@@ -191,6 +191,32 @@ export function recordSecurityEvent(event) {
   bucket.counts[event] = (bucket.counts[event] || 0) + 1;
 }
 
+// Why surveys and exams were refused (HTTP 400): the server's own messages ("Вес: недопустимое значение"),
+// which name the field and the rule, never the typed value. Counted per hour for 24 hours.
+const rejectionCounts = [];
+export function recordRejection(route, message) {
+  const now = Date.now();
+  const hour = Math.floor(now / 3600000) * 3600000;
+  let bucket = rejectionCounts.at(-1);
+  if (!bucket || bucket.hour !== hour) {
+    bucket = { hour, counts: new Map() };
+    rejectionCounts.push(bucket);
+    while (rejectionCounts.length && rejectionCounts[0].hour <= now - PROBLEM_WINDOW_MS - 3600000) rejectionCounts.shift();
+  }
+  const key = `${routeName(route)}|${String(message || "").replace(/\s+/g, " ").trim().slice(0, 160)}`;
+  bucket.counts.set(key, (bucket.counts.get(key) || 0) + 1);
+}
+
+function rejectionsSnapshot(since) {
+  const totals = new Map();
+  for (const bucket of rejectionCounts) {
+    if (bucket.hour < since - 3600000) continue;
+    for (const [key, count] of bucket.counts) totals.set(key, (totals.get(key) || 0) + count);
+  }
+  return [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 50)
+    .map(([key, count]) => { const [route, message] = key.split("|"); return { route, message, count }; });
+}
+
 export function problemsSnapshot() {
   const since = Date.now() - PROBLEM_WINDOW_MS;
   const recent = problems.filter((item) => Date.parse(item.at) >= since);
@@ -201,5 +227,5 @@ export function problemsSnapshot() {
     if (bucket.hour < since - 3600000) continue;
     for (const [event, count] of Object.entries(bucket.counts)) security[event] = (security[event] || 0) + count;
   }
-  return { windowHours: 24, total: recent.length, byKind, latest: recent.slice(-50).reverse(), securityEvents: security };
+  return { windowHours: 24, total: recent.length, byKind, latest: recent.slice(-50).reverse(), securityEvents: security, rejections: rejectionsSnapshot(since) };
 }

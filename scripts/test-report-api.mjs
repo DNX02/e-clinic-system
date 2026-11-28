@@ -76,6 +76,7 @@ try {
 
   // 3. Server health for the assistant: same token, no patient data, failed logins counted.
   await post("/api/login/doctor", { login: "dr9", accessKey: "wrong-key-1" });
+  assert.equal((await post("/api/nurse-surveys", patient(0, { lastName: "Отказов", phone: "+992900559999", weight: "70..5", systolic: 150, diastolic: 95 }))).status, 400);
   assert.equal((await fetch(`${open.base}/api/reports/ops`)).status, 401, "ops needs the token too");
   const opsResponse = await fetch(`${open.base}/api/reports/ops`, { headers: { Authorization: `Bearer ${TOKEN}` } });
   assert.equal(opsResponse.status, 200);
@@ -85,6 +86,8 @@ try {
   assert.ok(ops.uptimeSec >= 0 && ops.startedAt);
   assert.ok(ops.problems.securityEvents.login_failed >= 1, "failed logins are counted");
   assert.ok("backup" in ops && "load" in ops);
+  assert.deepEqual(ops.problems.rejections.map(({ route, message }) => [route, message]), [["/api/nurse-surveys", "Вес: недопустимое значение"]], "why a survey was refused");
+  assert.doesNotMatch(JSON.stringify(ops.problems.rejections), /Отказов|70\.\.5/, "never the typed values");
   assert.doesNotMatch(opsRaw, /Конфиденциалов|Секрет|1961-07-07|99290055|Тайная|Doctor9999|wrong-key/, "no patient data or keys");
   console.log("Report API test passed.");
 } finally {
