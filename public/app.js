@@ -1882,7 +1882,7 @@ async function loadMonitorDashboard(resetTimer = true) {
   renderMonitorDashboard();
   if (resetTimer) {
     clearInterval(monitorRefreshTimer);
-    monitorRefreshTimer = setInterval(() => loadMonitorDashboard(false).catch(() => {}), 15000);
+    monitorRefreshTimer = setInterval(() => loadMonitorDashboard(false).catch(() => {}), 60000);
   }
 }
 
@@ -2184,7 +2184,7 @@ function renderMonitorDashboard() {
         <div class="monitor-live-card">
           <span>Обновлено</span>
           <strong>${new Date(data.generatedAt).toLocaleTimeString("ru-RU")}</strong>
-          <small>Автообновление каждые 15 секунд</small>
+          <small>Автообновление каждую минуту</small>
           <button type="button" class="secondary" data-action="logout">Выйти</button>
         </div>
       </section>
