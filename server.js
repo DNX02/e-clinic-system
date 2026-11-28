@@ -709,16 +709,29 @@ async function readDb() {
   return dbLoadPromise;
 }
 
-const STATE_SNAPSHOT_INTERVAL_MS = Number(process.env.STATE_SNAPSHOT_INTERVAL_MS || 5 * 60 * 1000);
+// Every 6 hours: the snapshot is not what backups use (nightly file copy + off-site pg_dump), and at 35 000+
+// surveys a 5-minute snapshot kept timing out (28.11.2026: 31 "Query read timeout" in a night).
+const STATE_SNAPSHOT_INTERVAL_MS = Number(process.env.STATE_SNAPSHOT_INTERVAL_MS || 6 * 60 * 60 * 1000);
+const STATE_SNAPSHOT_TIMEOUT_MS = Number(process.env.STATE_SNAPSHOT_TIMEOUT_MS || 120000);
 let lastStateSnapshotAt = 0;
 
 // app_state holds a full legacy snapshot used only for restore checks and migration.
 // Rewriting the whole database into it on every request is O(N), so it is throttled.
 async function writeStateSnapshot(client, db) {
-  await client.query(
-    "insert into app_state (id, data, updated_at) values ($1, $2::jsonb, now()) on conflict (id) do update set data = excluded.data, updated_at = now()",
-    ["main", JSON.stringify(db)]
-  );
+  // One big row: give it its own, longer timeout instead of the 8 s meant for user requests.
+  await client.query("begin");
+  try {
+    await client.query(`set local statement_timeout = ${Math.round(STATE_SNAPSHOT_TIMEOUT_MS)}`);
+    await client.query({
+      text: "insert into app_state (id, data, updated_at) values ($1, $2::jsonb, now()) on conflict (id) do update set data = excluded.data, updated_at = now()",
+      values: ["main", JSON.stringify(db)],
+      query_timeout: STATE_SNAPSHOT_TIMEOUT_MS
+    });
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback").catch(() => {});
+    throw error;
+  }
 }
 
 async function flushStateSnapshot() {
